@@ -1,0 +1,98 @@
+/* Manage Batches Styles */
+.container {
+    width: 100%;
+}
+
+.header {
+    margin-bottom: 1.5rem;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 0;
+    text-align: center;
+}
+
+.batchList {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.batchItem {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.batchItem:hover {
+    border-color: rgba(217, 42, 99, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.batchGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto auto;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.batchDateTime {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #fff;
+    margin: 0;
+}
+
+.batchStatus {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #fff;
+    margin: 0;
+}
+
+.button {
+    background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(217, 42, 99, 0.3);
+}
+
+.button:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(217, 42, 99, 0.4);
+}
+
+.createSection {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: center;
+}
+
+/* Responsive */
+@media (max-width: 991px) {
+    .batchGrid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .button {
+        width: 100%;
+    }
+}

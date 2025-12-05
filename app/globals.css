@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 26, 26, 46;
+  --background-end-rgb: 233, 30, 99;
+}
+
+/* Critical CSS - Prevent FOUC */
+html {
+  visibility: visible;
+  opacity: 1;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  background: #0A0A1A;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+  min-height: 100vh;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 20px;
+  }
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .section-spacing {
+    @apply py-16 md:py-24;
+  }
+
+  .section-spacing-bottom {
+    @apply pb-16 md:pb-24;
+  }
+
+  .container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+}
+
+/* Typography improvements */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+h1 {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+h2 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+p {
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+}
+
+button,
+a {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Marquee Animation - Right to Left */
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+  will-change: transform;
+}
+
+/* Apply to marquee container */
+.footer-contact-marquee {
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+}
+
+.footer-contact-marquee-items {
+  display: flex;
+  gap: 1rem;
+  width: max-content;
+  animation: marquee 30s linear infinite;
+  will-change: transform;
+}
+
+.footer-contact-marquee-item {
+  flex-shrink: 0;
+}
+
+/* Circular Rotation Animation */
+@keyframes rotate-circle {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-rotate {
+  animation: rotate-circle 20s linear infinite;
+}

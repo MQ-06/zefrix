@@ -1,0 +1,56 @@
+/* Input Styles */
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.fullWidth {
+    width: 100%;
+}
+
+.label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.input {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 0.875rem;
+    font-family: inherit;
+    transition: all 0.3s;
+}
+
+.input:focus {
+    outline: none;
+    border-color: #D92A63;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.input.error {
+    border-color: #ff4444;
+}
+
+.input.error:focus {
+    border-color: #ff4444;
+}
+
+.errorText {
+    font-size: 0.75rem;
+    color: #ff4444;
+}
+
+.helperText {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+}
