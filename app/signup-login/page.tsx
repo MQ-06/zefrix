@@ -153,13 +153,13 @@ export default function SignupLoginPage() {
       import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
       
       const firebaseConfig = {
-        apiKey: "AIzaSyA7GQMjPkJZoePTYUieX6icsCNvIxHsdGw",
-        authDomain: "zefrix-a92a0.firebaseapp.com",
-        projectId: "zefrix-a92a0",
-        storageBucket: "zefrix-a92a0.appspot.com",
-        messagingSenderId: "316642308627",
-        appId: "1:316642308627:web:ae7ff0b5a8d94d81a505e6",
-        measurementId: "G-MKKLHPT3KE"
+        apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+        authDomain: "zefrix-custom.firebaseapp.com",
+        projectId: "zefrix-custom",
+        storageBucket: "zefrix-custom.firebasestorage.app",
+        messagingSenderId: "50732408558",
+        appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+        measurementId: "G-27HS1SWB5X"
       };
       
       const app = initializeApp(firebaseConfig);
@@ -425,9 +425,9 @@ export default function SignupLoginPage() {
                 </a>
               </div>
               <span style={{ color: '#666' }}>or use your email for registration</span>
-              <input type="text" id="signup-name" placeholder="Name" required />
-              <input type="email" id="signup-email" placeholder="Email" required />
-              <input type="password" id="signup-password" placeholder="Password" required />
+              <input type="text" id="signup-name" placeholder="Name" required autoComplete="name" />
+              <input type="email" id="signup-email" placeholder="Email" required autoComplete="email" />
+              <input type="password" id="signup-password" placeholder="Password" required autoComplete="new-password" />
               <button type="submit" id="emailSignUpBtn">Sign Up</button>
             </form>
           </div>
@@ -442,8 +442,8 @@ export default function SignupLoginPage() {
                 </a>
               </div>
               <span style={{ color: '#666' }}>or use your email password</span>
-              <input type="email" id="login-email" placeholder="Email" required />
-              <input type="password" id="login-password" placeholder="Password" required />
+              <input type="email" id="login-email" placeholder="Email" required autoComplete="email" />
+              <input type="password" id="login-password" placeholder="Password" required autoComplete="current-password" />
               <button type="submit" id="emailLoginBtn">Sign In</button>
             </form>
           </div>
