@@ -2,97 +2,120 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-
-declare global {
-  interface Window {
-    firebaseAuth: any;
-    firebaseDb: any;
-    createUserWithEmailAndPassword: any;
-    signInWithEmailAndPassword: any;
-    updateProfile: any;
-    GoogleAuthProvider: any;
-    signInWithPopup: any;
-    doc: any;
-    setDoc: any;
-    getDoc: any;
-    updateDoc: any;
-    serverTimestamp: any;
-  }
-}
+import { useAuth } from '@/contexts/AuthContext';
+import { useNotification } from '@/contexts/NotificationContext';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 
 export default function SignupLoginPage() {
   const [isActive, setIsActive] = useState(false);
   const router = useRouter();
+  const { signUp, signIn, signInWithGoogle, user, loading } = useAuth();
+  const { showSuccess, showError, showInfo } = useNotification();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!loading && user) {
+      if (user.role === 'admin') {
+        router.push('/admin-dashboard');
+      } else if (user.role === 'creator') {
+        router.push('/creator-dashboard');
+      } else {
+        router.push('/student-dashboard');
+      }
+    }
+  }, [user, loading, router]);
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!window.firebaseAuth || !window.firebaseDb) {
-      alert('Firebase not initialized. Please wait...');
-      return;
-    }
 
     const form = e.currentTarget;
     const name = (form.querySelector('#signup-name') as HTMLInputElement)?.value.trim();
     const email = (form.querySelector('#signup-email') as HTMLInputElement)?.value.trim();
     const password = (form.querySelector('#signup-password') as HTMLInputElement)?.value;
 
-    try {
-      const cred = await window.createUserWithEmailAndPassword(window.firebaseAuth, email, password);
-      await window.updateProfile(cred.user, { displayName: name });
-      
-      const role = email.toLowerCase() === 'kartik@zefrix.com' ? 'admin' : 'student';
-      
-      await window.setDoc(window.doc(window.firebaseDb, 'users', cred.user.uid), {
-        uid: cred.user.uid,
-        email,
-        name,
-        photoURL: '',
-        role,
-        isProfileComplete: false,
-        createdAt: window.serverTimestamp(),
-        lastLogin: window.serverTimestamp(),
-      });
+    // Validation
+    if (!name || !email || !password) {
+      showError('Please fill in all fields');
+      return;
+    }
 
-      alert('Account created!');
-      if (role === 'admin') router.push('/admin-dashboard');
-      else router.push('/student-dashboard');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showError('Please enter a valid email address');
+      return;
+    }
+
+    if (password.length < 6) {
+      showError('Password must be at least 6 characters long');
+      return;
+    }
+
+    try {
+      await signUp(email, password, name);
+      showSuccess('Account created successfully! Redirecting...');
+      // Navigation will be handled by useEffect when user state updates
     } catch (err: any) {
-      alert(err.message);
+      let errorMessage = 'Signup failed. ';
+      
+      if (err.code === 'auth/email-already-in-use') {
+        errorMessage += 'This email is already registered. Please use a different email or try logging in.';
+      } else if (err.code === 'auth/invalid-email') {
+        errorMessage += 'Invalid email address. Please check your email format.';
+      } else if (err.code === 'auth/weak-password') {
+        errorMessage += 'Password is too weak. Please use a stronger password (at least 6 characters).';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        errorMessage += 'Email/password accounts are not enabled. Please contact support.';
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Please try again or contact support.';
+      }
+      
+      showError(errorMessage);
+      console.error('Signup error:', err);
     }
   };
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!window.firebaseAuth || !window.firebaseDb) {
-      alert('Firebase not initialized. Please wait...');
-      return;
-    }
 
     const form = e.currentTarget;
     const email = (form.querySelector('#login-email') as HTMLInputElement)?.value.trim();
     const password = (form.querySelector('#login-password') as HTMLInputElement)?.value;
 
-    try {
-      const cred = await window.signInWithEmailAndPassword(window.firebaseAuth, email, password);
-      const snap = await window.getDoc(window.doc(window.firebaseDb, 'users', cred.user.uid));
-      const role = snap.exists() ? snap.data().role : 'student';
+    if (!email || !password) {
+      showError('Please fill in all fields');
+      return;
+    }
 
-      alert('Login successful!');
-      if (role === 'admin') router.push('/admin-dashboard');
-      else if (role === 'creator') router.push('/creator-dashboard');
-      else router.push('/student-dashboard');
+    try {
+      await signIn(email, password);
+      showSuccess('Login successful! Redirecting...');
+      // Navigation will be handled by useEffect when user state updates
     } catch (err: any) {
-      alert(err.message);
+      let errorMessage = 'Login failed. ';
+      
+      if (err.code === 'auth/user-not-found') {
+        errorMessage += 'No account found with this email. Please sign up first.';
+      } else if (err.code === 'auth/wrong-password') {
+        errorMessage += 'Incorrect password. Please try again.';
+      } else if (err.code === 'auth/invalid-email') {
+        errorMessage += 'Invalid email address.';
+      } else if (err.code === 'auth/user-disabled') {
+        errorMessage += 'This account has been disabled. Please contact support.';
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Please try again or contact support.';
+      }
+      
+      showError(errorMessage);
+      console.error('Login error:', err);
     }
   };
 
   const handleGoogleAuth = async () => {
-    if (!window.firebaseAuth || !window.firebaseDb) {
-      alert('Firebase not initialized. Please wait...');
-      return;
-    }
-
-    const googleProvider = new window.GoogleAuthProvider();
     const googleSignInBtn = document.getElementById('googleSignIn');
     const googleSignUpBtn = document.getElementById('googleSignUp');
 
@@ -100,35 +123,18 @@ export default function SignupLoginPage() {
     if (googleSignUpBtn) googleSignUpBtn.setAttribute('disabled', 'true');
 
     try {
-      const cred = await window.signInWithPopup(window.firebaseAuth, googleProvider);
-      const user = cred.user;
-      const userRef = window.doc(window.firebaseDb, 'users', user.uid);
-      const snap = await window.getDoc(userRef);
-
-      let role = 'student';
-      if (!snap.exists()) {
-        role = user.email?.toLowerCase() === 'kartik@zefrix.com' ? 'admin' : 'student';
-        await window.setDoc(userRef, {
-          uid: user.uid,
-          email: user.email,
-          name: user.displayName || user.email?.split('@')[0],
-          photoURL: user.photoURL || '',
-          role,
-          isProfileComplete: false,
-          createdAt: window.serverTimestamp(),
-          lastLogin: window.serverTimestamp(),
-        });
-      } else {
-        role = snap.data().role;
-        await window.updateDoc(userRef, { lastLogin: window.serverTimestamp() });
-      }
-
-      if (role === 'admin') router.push('/admin-dashboard');
-      else if (role === 'creator') router.push('/creator-dashboard');
-      else router.push('/student-dashboard');
+      await signInWithGoogle();
+      showSuccess('Google authentication successful! Redirecting...');
+      // Navigation will be handled by useEffect when user state updates
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {
-        alert(err.message);
+        let errorMessage = 'Google authentication failed. ';
+        if (err.message) {
+          errorMessage += err.message;
+        } else {
+          errorMessage += 'Please try again.';
+        }
+        showError(errorMessage);
       }
     } finally {
       if (googleSignInBtn) googleSignInBtn.removeAttribute('disabled');
@@ -136,56 +142,34 @@ export default function SignupLoginPage() {
     }
   };
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    // Check if Firebase is already initialized
-    if (window.firebaseAuth && window.firebaseDb) {
-      return;
-    }
-
-    // Load Firebase initialization script
-    const initScript = document.createElement('script');
-    initScript.type = 'module';
-    initScript.textContent = `
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-      import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-      import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-      
-      const firebaseConfig = {
-        apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-        authDomain: "zefrix-custom.firebaseapp.com",
-        projectId: "zefrix-custom",
-        storageBucket: "zefrix-custom.firebasestorage.app",
-        messagingSenderId: "50732408558",
-        appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-        measurementId: "G-27HS1SWB5X"
-      };
-      
-      const app = initializeApp(firebaseConfig);
-      window.firebaseAuth = getAuth(app);
-      window.firebaseDb = getFirestore(app);
-      window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
-      window.signInWithEmailAndPassword = signInWithEmailAndPassword;
-      window.updateProfile = updateProfile;
-      window.GoogleAuthProvider = GoogleAuthProvider;
-      window.signInWithPopup = signInWithPopup;
-      window.doc = doc;
-      window.setDoc = setDoc;
-      window.getDoc = getDoc;
-      window.updateDoc = updateDoc;
-      window.serverTimestamp = serverTimestamp;
-    `;
-    document.head.appendChild(initScript);
-  }, []);
 
   return (
     <>
+      <Header />
+      <div className="login-page-section">
+        <style jsx>{`
+          .login-page-section {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 120px 20px 40px;
+            background: #0A0A1A;
+            position: relative;
+            overflow: hidden;
+          }
 
-      <div className="min-h-screen flex items-center justify-center p-4" style={{
-        background: 'linear-gradient(to right, #0b0d3e, #4e54c8, #d81b60)',
-        fontFamily: "'Montserrat', sans-serif"
-      }}>
+          .login-page-section::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 20% 50%, rgba(78, 84, 200, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(216, 27, 96, 0.1) 0%, transparent 50%);
+            top: 0;
+            left: 0;
+          }
+        `}</style>
         <style jsx>{`
           * {
             margin: 0;
@@ -202,6 +186,7 @@ export default function SignupLoginPage() {
             width: 768px;
             max-width: 90%;
             min-height: 480px;
+            z-index: 1;
           }
 
           .container p {
@@ -234,7 +219,7 @@ export default function SignupLoginPage() {
             text-transform: uppercase;
             margin-top: 10px;
             cursor: pointer;
-            font-family: 'Montserrat', sans-serif;
+            font-family: 'Poppins', sans-serif;
           }
 
           .container button.hidden {
@@ -278,7 +263,7 @@ export default function SignupLoginPage() {
             width: 100%;
             outline: none;
             color: #000;
-            font-family: 'Montserrat', sans-serif;
+            font-family: 'Poppins', sans-serif;
           }
 
           .form-container {
@@ -412,7 +397,6 @@ export default function SignupLoginPage() {
         `}</style>
 
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
-        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
         <div className={`container ${isActive ? 'active' : ''}`} id="container">
           {/* SIGN UP PANEL */}
@@ -465,6 +449,7 @@ export default function SignupLoginPage() {
           </div>
         </div>
       </div>
+      <Footer />
     </>
   );
 }

@@ -12,7 +12,6 @@ export default function Home() {
   return (
     <>
       <HeroSection />
-      <ClientLogosSection />
       <CategorySection />
       <VideoSection />
       <StatsSection />

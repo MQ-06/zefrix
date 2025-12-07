@@ -43,16 +43,6 @@ export default function CategoriesPage() {
               transition={{ duration: 1, delay: 0.5 }}
             />
             
-            {/* Decorative X marks */}
-            <div className="absolute top-16 left-8 w-3 h-3 opacity-20">
-              <div className="text-green-400 text-lg font-bold">×</div>
-            </div>
-            <div className="absolute top-24 right-16 w-3 h-3 opacity-20">
-              <div className="text-green-400 text-lg font-bold">×</div>
-            </div>
-            <div className="absolute bottom-16 left-16 w-3 h-3 opacity-20">
-              <div className="text-green-400 text-lg font-bold">×</div>
-            </div>
           </div>
         </div>
       </section>

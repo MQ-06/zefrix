@@ -3,23 +3,60 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/contexts/CartContext';
+import { useNotification } from '@/contexts/NotificationContext';
 import { Trash2, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 
 declare global {
     interface Window {
         Razorpay: any;
+        firebaseAuth: any;
+        firebaseDb: any;
+        collection: any;
+        addDoc: any;
+        serverTimestamp: any;
     }
 }
 
 export default function CheckoutPage() {
     const router = useRouter();
     const { cart, removeFromCart, clearCart, cartTotal } = useCart();
+    const { showError, showSuccess } = useNotification();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [userEmail, setUserEmail] = useState('');
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Load Firebase - ensure addDoc is available
+        if (typeof window !== 'undefined' && (!window.firebaseAuth || !window.addDoc)) {
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.innerHTML = `
+                import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+                import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+                import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+                
+                const firebaseConfig = {
+                    apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+                    authDomain: "zefrix-custom.firebaseapp.com",
+                    projectId: "zefrix-custom",
+                    storageBucket: "zefrix-custom.firebasestorage.app",
+                    messagingSenderId: "50732408558",
+                    appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+                    measurementId: "G-27HS1SWB5X"
+                };
+
+                // Check if app already exists
+                const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+                window.firebaseAuth = getAuth(app);
+                window.firebaseDb = getFirestore(app);
+                window.collection = collection;
+                window.addDoc = addDoc;
+                console.log('✅ Firebase initialized in checkout with addDoc');
+            `;
+            document.body.appendChild(script);
+        }
+
         // Check authentication
         const checkAuth = async () => {
             try {
@@ -30,12 +67,10 @@ export default function CheckoutPage() {
                         setIsAuthenticated(true);
                         setUserEmail(user.email || '');
                     } else {
-                        // Redirect to login
                         router.push('/signup-login?redirect=/checkout');
                         return;
                     }
                 } else {
-                    // Wait for Firebase to load
                     setTimeout(checkAuth, 500);
                     return;
                 }
@@ -51,52 +86,69 @@ export default function CheckoutPage() {
 
     const handlePayment = async () => {
         if (cart.length === 0) {
-            alert('Your cart is empty!');
+            showError('Your cart is empty!');
             return;
         }
 
-        // Load Razorpay script
-        const script = document.createElement('script');
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        script.async = true;
-        document.body.appendChild(script);
+        try {
+            // Get current user
+            const currentUser = window.firebaseAuth?.currentUser;
+            if (!currentUser) {
+                showError('User not found. Please login again.');
+                router.push('/signup-login?redirect=/checkout');
+                return;
+            }
 
-        script.onload = () => {
-            const options = {
-                key: 'rzp_test_RbORWjnwK5rV3J', // Razorpay test key
-                amount: cartTotal * 100, // Amount in paise
-                currency: 'USD',
-                name: 'Zefrix',
-                description: 'Course Purchase',
-                image: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/69111edc833f0aade04d058d_6907f6cf8f1c1a9c8e68ea5c_logo.png',
-                handler: function (response: any) {
-                    // Payment successful
-                    alert('Payment successful! Payment ID: ' + response.razorpay_payment_id);
+            // Generate a mock payment ID
+            const mockPaymentId = `PAY_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-                    // Here you would typically:
-                    // 1. Send payment details to your backend
-                    // 2. Enroll user in courses
-                    // 3. Send confirmation email
+            // Process each item in cart
+            const enrollmentPromises = cart.map(async (item) => {
+                // Create enrollment in Firestore directly (bypass payment)
+                console.log('🔍 Firebase check:', {
+                    firebaseDb: !!window.firebaseDb,
+                    collection: !!window.collection,
+                    addDoc: !!window.addDoc
+                });
 
-                    clearCart();
-                    router.push('/student-dashboard');
-                },
-                prefill: {
-                    email: userEmail,
-                },
-                theme: {
-                    color: '#D92A63',
-                },
-                modal: {
-                    ondismiss: function () {
-                        console.log('Payment cancelled');
-                    }
+                if (window.firebaseDb && window.collection && window.addDoc) {
+                    console.log('📝 Creating enrollment for:', item.title);
+                    const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+                    const docRef = await window.addDoc(enrollmentsRef, {
+                        studentId: currentUser.uid,
+                        studentEmail: currentUser.email,
+                        studentName: currentUser.displayName || currentUser.email?.split('@')[0],
+                        classId: item.id,
+                        className: item.title,
+                        classPrice: item.price,
+                        paymentId: mockPaymentId,
+                        orderId: 'DIRECT_ENROLLMENT',
+                        paymentStatus: 'completed',
+                        enrolledAt: new Date(),
+                        classType: 'one-time',
+                        numberOfSessions: 1,
+                        attended: 0,
+                        status: 'active'
+                    });
+                    console.log('✅ Enrollment created with ID:', docRef.id);
+                } else {
+                    console.error('❌ Firebase not initialized properly!');
                 }
-            };
+            });
 
-            const razorpay = new window.Razorpay(options);
-            razorpay.open();
-        };
+            await Promise.all(enrollmentPromises);
+            console.log('✅ All enrollments processed successfully');
+
+            // Small delay to ensure Firestore writes complete
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Clear cart and redirect to thank you page
+            clearCart();
+            router.push(`/thank-you?payment_id=${mockPaymentId}&status=success`);
+        } catch (error) {
+            console.error('Error processing enrollment:', error);
+            showError('Enrollment failed. Please try again.');
+        }
     };
 
     if (loading) {

@@ -8,6 +8,16 @@ import Link from 'next/link';
 import Footer from '@/components/Footer';
 import { useCart } from '@/contexts/CartContext';
 
+declare global {
+  interface Window {
+    firebaseAuth: any;
+    firebaseDb: any;
+    collection: any;
+    doc: any;
+    getDoc: any;
+  }
+}
+
 interface PageProps {
   params: {
     slug: string;
@@ -15,11 +25,91 @@ interface PageProps {
 }
 
 export default function ProductPage({ params }: PageProps) {
-  const course = courses.find((c) => c.slug === params.slug);
+  const staticCourse = courses.find((c) => c.slug === params.slug);
+  const [course, setCourse] = useState<any>(staticCourse || null);
+  const [loading, setLoading] = useState(!staticCourse);
   const [activeTab, setActiveTab] = useState('overview');
   const { addToCart, cart } = useCart();
   const router = useRouter();
   const [isInCart, setIsInCart] = useState(false);
+  const [relatedCourses, setRelatedCourses] = useState<any[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState(true);
+
+  useEffect(() => {
+    // Load Firebase if not already loaded
+    if (typeof window !== 'undefined' && !window.firebaseDb) {
+      const script = document.createElement('script');
+      script.type = 'module';
+      script.innerHTML = `
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        
+        const firebaseConfig = {
+          apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+          authDomain: "zefrix-custom.firebaseapp.com",
+          projectId: "zefrix-custom",
+          storageBucket: "zefrix-custom.firebasestorage.app",
+          messagingSenderId: "50732408558",
+          appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+          measurementId: "G-27HS1SWB5X"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        window.firebaseAuth = getAuth(app);
+        window.firebaseDb = getFirestore(app);
+        window.doc = doc;
+        window.getDoc = getDoc;
+        window.collection = collection;
+        window.query = query;
+        window.where = where;
+        window.getDocs = getDocs;
+      `;
+      document.body.appendChild(script);
+    }
+
+    const fetchCourse = async () => {
+      if (staticCourse) {
+        setLoading(false);
+        return;
+      }
+
+      // Wait for Firebase to load
+      if (!window.firebaseDb || !window.doc || !window.getDoc) {
+        setTimeout(fetchCourse, 500);
+        return;
+      }
+
+      try {
+        const docRef = window.doc(window.firebaseDb, 'classes', params.slug);
+        const docSnap = await window.getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setCourse({
+            id: docSnap.id,
+            slug: docSnap.id,
+            title: data.title || 'Untitled Class',
+            price: data.price || 0,
+            image: data.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
+            instructor: data.creatorName || 'Instructor',
+            instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.creatorName || 'I')}&background=D92A63&color=fff`,
+            description: data.description || 'No description available.',
+            sections: data.numberSessions || 1,
+            duration: data.duration || 1,
+            students: 0,
+            originalPrice: data.price || 0,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching class:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourse();
+  }, [params.slug, staticCourse]);
 
   useEffect(() => {
     if (course) {
@@ -27,11 +117,63 @@ export default function ProductPage({ params }: PageProps) {
     }
   }, [cart, course]);
 
+  // Fetch related courses from Firestore
+  useEffect(() => {
+    const fetchRelatedCourses = async () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        setTimeout(fetchRelatedCourses, 500);
+        return;
+      }
+
+      try {
+        const classesRef = window.collection(window.firebaseDb, 'classes');
+        const q = window.query(classesRef, window.where('status', '==', 'approved'));
+        const querySnapshot = await window.getDocs(q);
+
+        const classes: any[] = [];
+        querySnapshot.forEach((doc: any) => {
+          // Exclude the current class
+          if (doc.id !== params.slug) {
+            const data = doc.data();
+            classes.push({
+              id: doc.id,
+              slug: doc.id,
+              title: data.title || 'Untitled Class',
+              price: data.price || 0,
+              image: data.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
+              instructor: data.creatorName || 'Instructor',
+              instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.creatorName || 'I')}&background=D92A63&color=fff`,
+              sections: data.numberSessions || 1,
+              duration: data.duration || 1,
+              students: 0,
+              originalPrice: data.price || 0,
+            });
+          }
+        });
+
+        // Take only first 3
+        setRelatedCourses(classes.slice(0, 3));
+      } catch (error) {
+        console.error('Error fetching related courses:', error);
+      } finally {
+        setLoadingRelated(false);
+      }
+    };
+
+    fetchRelatedCourses();
+  }, [params.slug]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#1A1A2E] to-[#0F3460] flex items-center justify-center">
+        <div className="text-white text-xl">Loading class...</div>
+      </div>
+    );
+  }
+
   if (!course) {
     notFound();
   }
-
-  const relatedCourses = courses.filter((c) => c.slug !== params.slug).slice(0, 3);
 
   const handleAddToCart = () => {
     // Check if user is authenticated
@@ -295,8 +437,8 @@ export default function ProductPage({ params }: PageProps) {
                   onClick={handleAddToCart}
                   disabled={isInCart}
                   className={`w-full px-8 py-4 rounded-lg text-white font-semibold transition-opacity duration-200 shadow-lg ${isInCart
-                      ? 'bg-gray-600 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30'
+                    ? 'bg-gray-600 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30'
                     }`}
                 >
                   {isInCart ? 'Already in Cart' : 'Add to Cart'}
@@ -365,11 +507,11 @@ export default function ProductPage({ params }: PageProps) {
 
                   <div className="flex items-center gap-3">
                     <h4 className="text-2xl font-bold text-white">
-                      ${relatedCourse.price.toFixed(2)} USD
+                      ₹{relatedCourse.price.toFixed(2)}
                     </h4>
                     {relatedCourse.originalPrice !== relatedCourse.price && (
                       <span className="text-gray-500 line-through">
-                        ${relatedCourse.originalPrice.toFixed(2)} USD
+                        ₹{relatedCourse.originalPrice.toFixed(2)}
                       </span>
                     )}
                   </div>

@@ -1,9 +1,20 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNotification } from '@/contexts/NotificationContext';
+
+declare global {
+  interface Window {
+    firebaseDb: any;
+    collection: any;
+    addDoc: any;
+    serverTimestamp: any;
+  }
+}
 
 export default function ContactUsPage() {
+  const { showError, showSuccess, showInfo } = useNotification();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -11,11 +22,85 @@ export default function ContactUsPage() {
     subject: '',
     message: '',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    // Load Firebase if not already loaded
+    if (typeof window !== 'undefined' && !window.firebaseDb) {
+      const script = document.createElement('script');
+      script.type = 'module';
+      script.textContent = `
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        
+        const firebaseConfig = {
+          apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+          authDomain: "zefrix-custom.firebaseapp.com",
+          projectId: "zefrix-custom",
+          storageBucket: "zefrix-custom.firebasestorage.app",
+          messagingSenderId: "50732408558",
+          appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+          measurementId: "G-27HS1SWB5X"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        window.firebaseDb = getFirestore(app);
+        window.collection = collection;
+        window.addDoc = addDoc;
+        window.serverTimestamp = serverTimestamp;
+      `;
+      document.head.appendChild(script);
+    }
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission here
-    console.log('Form submitted:', formData);
+
+    if (!window.firebaseDb || !window.collection || !window.addDoc) {
+      showInfo('Please wait a moment and try again...');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitMessage(null);
+
+    try {
+      // Save to Firestore
+      const contactsRef = window.collection(window.firebaseDb, 'contacts');
+      await window.addDoc(contactsRef, {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone || '',
+        subject: formData.subject,
+        message: formData.message,
+        status: 'new',
+        createdAt: window.serverTimestamp(),
+        read: false
+      });
+
+      setSubmitMessage({
+        type: 'success',
+        text: 'Thank you! Your message has been sent successfully. We\'ll get back to you soon!'
+      });
+
+      // Reset form
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        subject: '',
+        message: '',
+      });
+    } catch (error: any) {
+      console.error('Error submitting contact form:', error);
+      setSubmitMessage({
+        type: 'error',
+        text: 'Sorry, there was an error sending your message. Please try again.'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -31,14 +116,14 @@ export default function ContactUsPage() {
       <section className="hero-inner pt-24 pb-16 md:pt-32 md:pb-20 relative overflow-hidden">
         {/* Background Gradient */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A2E] via-[#2D1B3D] to-[#E91E63]"></div>
-        
+
         <div className="container relative z-10">
           <div className="text-center position-relative">
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="text-3xl md:text-4xl lg:text-5xl font-bold text-[#2D2D44] mb-4 relative"
+              className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 relative"
             >
               <span className="relative">
                 We're here to help!
@@ -140,11 +225,24 @@ export default function ContactUsPage() {
                       onChange={handleChange}
                     />
                   </div>
+
+                  {submitMessage && (
+                    <div
+                      className={`p-4 rounded-lg ${submitMessage.type === 'success'
+                          ? 'bg-green-100 text-green-800 border border-green-300'
+                          : 'bg-red-100 text-red-800 border border-red-300'
+                        }`}
+                    >
+                      {submitMessage.text}
+                    </div>
+                  )}
+
                   <input
                     type="submit"
+                    disabled={isSubmitting}
                     data-wait="Please wait..."
-                    className="button-primary-1 button-full w-button w-full bg-gradient-to-r from-[#E91E63] to-[#FF6B9D] text-white px-8 py-4 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300 cursor-pointer"
-                    value="Send Message"
+                    className="button-primary-1 button-full w-button w-full bg-gradient-to-r from-[#E91E63] to-[#FF6B9D] text-white px-8 py-4 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    value={isSubmitting ? 'Sending...' : 'Send Message'}
                   />
                 </form>
               </div>

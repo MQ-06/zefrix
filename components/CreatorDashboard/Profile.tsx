@@ -1,9 +1,13 @@
 'use client';
 
+import { useNotification } from '@/contexts/NotificationContext';
+
 export default function CreatorProfile() {
+  const { showSuccess } = useNotification();
+  
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    alert('Profile updated successfully!');
+    showSuccess('Profile updated successfully!');
   };
 
   return (

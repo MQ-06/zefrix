@@ -1,0 +1,116 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users collection
+    match /users/{userId} {
+      // Users can read and write their own document
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Admins can read all users
+      allow read: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Classes collection
+    match /classes/{classId} {
+      // Anyone can read approved classes
+      allow read: if resource.data.status == 'approved';
+      
+      // Creators can read their own classes (any status)
+      allow read: if request.auth != null && 
+                     request.auth.uid == resource.data.creatorId;
+      
+      // Creators can create classes
+      allow create: if request.auth != null && 
+                       request.auth.uid == request.resource.data.creatorId &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'creator';
+      
+      // Creators can update their own classes (only if not approved)
+      allow update: if request.auth != null && 
+                       request.auth.uid == resource.data.creatorId &&
+                       resource.data.status != 'approved';
+      
+      // Creators can delete their own classes (only if not approved)
+      allow delete: if request.auth != null && 
+                       request.auth.uid == resource.data.creatorId &&
+                       resource.data.status != 'approved';
+      
+      // Admins can do everything
+      allow read, write: if request.auth != null && 
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Batches collection
+    match /batches/{batchId} {
+      // Anyone can read batches for approved classes
+      allow read: if request.auth != null;
+      
+      // Creators can create batches for their own classes
+      allow create: if request.auth != null && 
+                       request.auth.uid == request.resource.data.creatorId &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'creator';
+      
+      // Creators can update their own batches
+      allow update: if request.auth != null && 
+                       request.auth.uid == resource.data.creatorId;
+      
+      // Creators can delete their own batches
+      allow delete: if request.auth != null && 
+                       request.auth.uid == resource.data.creatorId;
+      
+      // Admins can do everything
+      allow read, write: if request.auth != null && 
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Enrollments collection
+    match /enrollments/{enrollmentId} {
+      // Students can read their own enrollments
+      allow read: if request.auth != null && 
+                     request.auth.uid == resource.data.studentId;
+      
+      // Creators can read enrollments for their classes
+      allow read: if request.auth != null && 
+                     exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
+                     get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.creatorId == request.auth.uid;
+      
+      // Students can create enrollments for themselves
+      allow create: if request.auth != null && 
+                       request.auth.uid == request.resource.data.studentId;
+      
+      // Students can update their own enrollments
+      allow update: if request.auth != null && 
+                       request.auth.uid == resource.data.studentId;
+      
+      // Admins can do everything
+      allow read, write: if request.auth != null && 
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Payments collection (if you have one)
+    match /payments/{paymentId} {
+      // Users can read their own payments
+      allow read: if request.auth != null && 
+                     request.auth.uid == resource.data.userId;
+      
+      // Creators can read payments for their classes
+      allow read: if request.auth != null && 
+                     exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
+                     get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.creatorId == request.auth.uid;
+      
+      // Users can create payments
+      allow create: if request.auth != null && 
+                       request.auth.uid == request.resource.data.userId;
+      
+      // Admins can do everything
+      allow read, write: if request.auth != null && 
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

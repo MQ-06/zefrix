@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useNotification } from '@/contexts/NotificationContext';
 import CreatorSidebar from '@/components/CreatorDashboard/Sidebar';
 import CreatorCourseCard from '@/components/CreatorDashboard/CreatorCourseCard';
 import CreateClassForm from '@/components/CreatorDashboard/CreateClassForm';
+import EditClassForm from '@/components/CreatorDashboard/EditClassForm';
 import ManageClasses from '@/components/CreatorDashboard/ManageClasses';
 import ManageBatches from '@/components/CreatorDashboard/ManageBatches';
+import ViewClass from '@/components/CreatorDashboard/ViewClass';
 import ClassDetails from '@/components/CreatorDashboard/ClassDetails';
 import LiveClass from '@/components/CreatorDashboard/LiveClass';
 import CreatorProfile from '@/components/CreatorDashboard/Profile';
@@ -18,6 +21,8 @@ declare global {
     logout: any;
     doc: any;
     getDoc: any;
+    addDoc: any;
+    Timestamp: any;
   }
 }
 
@@ -103,24 +108,59 @@ const mockCourses = [
   },
 ];
 
+interface ApprovedClass {
+  classId: string;
+  title: string;
+  subtitle?: string;
+  category: string;
+  subCategory: string;
+  price: number;
+  scheduleType: 'one-time' | 'recurring';
+  numberSessions: number;
+  videoLink?: string;
+  createdAt: any;
+  [key: string]: any;
+}
+
 export default function CreatorDashboard() {
+  const { showError } = useNotification();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [user, setUser] = useState<any>(null);
+  const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [viewingClassId, setViewingClassId] = useState<string | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     // Load Firebase SDKs dynamically
     const loadFirebaseScripts = () => {
+      // Check if already loaded with ALL required dependencies
+      if (window.firebaseAuth && window.firebaseDb && window.serverTimestamp &&
+        window.collection && window.query && window.where && window.getDocs &&
+        window.doc && window.deleteDoc && window.updateDoc) {
+        console.log('✅ Firebase and all dependencies already initialized');
+        window.dispatchEvent(new CustomEvent('firebaseReady'));
+        return;
+      }
+
+      console.log('🔄 Loading Firebase scripts...');
       const firebaseAppScript = document.createElement('script');
       firebaseAppScript.src = "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
       firebaseAppScript.type = "module";
+      firebaseAppScript.onerror = () => {
+        console.error('❌ Failed to load Firebase app script');
+      };
       firebaseAppScript.onload = () => {
+        console.log('✅ Firebase app script loaded');
         const firebaseAuthConfig = document.createElement('script');
         firebaseAuthConfig.type = "module";
         firebaseAuthConfig.innerHTML = `
-          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+          import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, addDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -132,9 +172,40 @@ export default function CreatorDashboard() {
             measurementId: "G-27HS1SWB5X"
           };
 
-          const app = initializeApp(firebaseConfig);
+          const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
           window.firebaseAuth = getAuth(app);
           window.firebaseDb = getFirestore(app);
+          window.doc = doc;
+          window.getDoc = getDoc;
+          window.setDoc = setDoc;
+          window.updateDoc = updateDoc;
+          window.deleteDoc = deleteDoc;
+          window.serverTimestamp = serverTimestamp;
+          window.collection = collection;
+          window.query = query;
+          window.where = where;
+          window.getDocs = getDocs;
+          window.addDoc = addDoc;
+          window.Timestamp = Timestamp;
+
+          console.log('✅ Firebase initialized - serverTimestamp available:', typeof window.serverTimestamp);
+          console.log('✅ Firebase objects:', {
+            firebaseAuth: !!window.firebaseAuth,
+            firebaseDb: !!window.firebaseDb,
+            doc: !!window.doc,
+            setDoc: !!window.setDoc,
+            serverTimestamp: typeof window.serverTimestamp
+          });
+
+          // Dispatch event when Firebase is ready
+          window.dispatchEvent(new CustomEvent('firebaseReady', { 
+            detail: { 
+              firebaseAuth: window.firebaseAuth,
+              firebaseDb: window.firebaseDb,
+              serverTimestamp: window.serverTimestamp 
+            } 
+          }));
+          console.log('📢 firebaseReady event dispatched');
 
           window.logout = async () => {
             try {
@@ -142,35 +213,36 @@ export default function CreatorDashboard() {
               location.replace('/signup-login');
             } catch (error) {
               console.error('Logout failed:', error);
-              alert('Logout failed, please try again.');
+              showError('Logout failed, please try again.');
             }
           };
 
           onAuthStateChanged(window.firebaseAuth, async (user) => {
-            // Temporarily disabled for testing
-            // if (!user) {
-            //   location.replace('/signup-login');
-            //   return;
-            // }
+            if (!user) {
+              location.replace('/signup-login');
+              return;
+            }
             
-            // try {
-            //   const userRef = doc(window.firebaseDb, 'users', user.uid);
-            //   const snap = await getDoc(userRef);
-            //   const role = snap.exists() ? snap.data().role : 'student';
+            try {
+              const userRef = doc(window.firebaseDb, 'users', user.uid);
+              const snap = await getDoc(userRef);
+              const role = snap.exists() ? snap.data().role : 'student';
               
-            //   if (role !== 'creator') {
-            //     if (role === 'admin') {
-            //       location.replace('/admin-dashboard');
-            //     } else {
-            //       location.replace('/student-dashboard');
-            //     }
-            //     return;
-            //   }
+              if (role !== 'creator') {
+                if (role === 'admin') {
+                  location.replace('/admin-dashboard');
+                } else {
+                  location.replace('/student-dashboard');
+                }
+                return;
+              }
               
-            //   window.dispatchEvent(new CustomEvent('userLoaded', { detail: { user, role } }));
-            // } catch (err) {
-            //   console.error('Auth check error:', err);
-            // }
+              window.dispatchEvent(new CustomEvent('userLoaded', { detail: { user, role } }));
+            } catch (err) {
+              console.error('Auth check error:', err);
+              // Still dispatch user event even if role check fails
+              window.dispatchEvent(new CustomEvent('userLoaded', { detail: { user, role: 'creator' } }));
+            }
           });
         `;
         document.body.appendChild(firebaseAuthConfig);
@@ -182,12 +254,25 @@ export default function CreatorDashboard() {
 
     // Listen for user loaded event
     const handleUserLoaded = (e: any) => {
+      console.log('User loaded event received:', e.detail);
       setUser(e.detail.user);
     };
     window.addEventListener('userLoaded', handleUserLoaded as EventListener);
 
+    // Also check for current user immediately if Firebase is already loaded
+    const checkCurrentUser = () => {
+      if (window.firebaseAuth && window.firebaseAuth.currentUser) {
+        setUser(window.firebaseAuth.currentUser);
+      }
+    };
+
+    // Check immediately and also set up interval
+    checkCurrentUser();
+    const userCheckInterval = setInterval(checkCurrentUser, 1000);
+
     return () => {
       window.removeEventListener('userLoaded', handleUserLoaded as EventListener);
+      clearInterval(userCheckInterval);
     };
   }, []);
 
@@ -204,9 +289,88 @@ export default function CreatorDashboard() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeSection]);
 
+  // Fetch approved classes for dashboard
+  useEffect(() => {
+    const fetchApprovedClasses = async () => {
+      // Wait for Firebase with retry logic
+      let retries = 0;
+      while (retries < 10) {
+        const currentUser = user || (window.firebaseAuth?.currentUser);
+
+        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs && currentUser) {
+          // Firebase is ready!
+          console.log('✅ Firebase ready, fetching classes for creator:', currentUser.uid);
+          break;
+        }
+
+        console.log(`⏳ Waiting for Firebase... (attempt ${retries + 1}/10)`, {
+          firebaseDb: !!window.firebaseDb,
+          collection: !!window.collection,
+          query: !!window.query,
+          where: !!window.where,
+          getDocs: !!window.getDocs,
+          user: !!currentUser
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+        retries++;
+      }
+
+      // Final check after retries
+      const currentUser = user || (window.firebaseAuth?.currentUser);
+
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !currentUser) {
+        console.error('❌ Firebase not ready after retries:', {
+          firebaseDb: !!window.firebaseDb,
+          collection: !!window.collection,
+          query: !!window.query,
+          where: !!window.where,
+          getDocs: !!window.getDocs,
+          user: !!currentUser
+        });
+        return;
+      }
+
+      setLoadingClasses(true);
+      try {
+        console.log('📦 Fetching approved classes for creator:', currentUser.uid);
+        const classesRef = window.collection(window.firebaseDb, 'classes');
+        const q = window.query(
+          classesRef,
+          window.where('creatorId', '==', currentUser.uid),
+          window.where('status', '==', 'approved')
+        );
+        const querySnapshot = await window.getDocs(q);
+
+        const classes: ApprovedClass[] = [];
+        querySnapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
+
+        console.log(`✅ Found ${classes.length} approved classes for creator`);
+
+        // Sort by creation date (newest first)
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setApprovedClasses(classes);
+      } catch (error) {
+        console.error('❌ Error fetching approved classes:', error);
+      } finally {
+        setLoadingClasses(false);
+      }
+    };
+
+    if (activeSection === 'dashboard') {
+      fetchApprovedClasses();
+    }
+  }, [activeSection, user]);
+
   return (
     <>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
       <style jsx global>{`
         * {
           margin: 0;
@@ -215,7 +379,7 @@ export default function CreatorDashboard() {
         }
 
         body {
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-family: 'Poppins', sans-serif;
           background: linear-gradient(180deg, #1a0f2e 0%, #2d1b4e 30%, #4a2c5e 60%, #6b3d6e 100%);
           min-height: 100vh;
           color: #fff;
@@ -633,7 +797,6 @@ export default function CreatorDashboard() {
         }
 
         .creator-form-input,
-        .creator-select,
         .creator-textarea {
           width: 100%;
           padding: 8px 12px;
@@ -646,12 +809,29 @@ export default function CreatorDashboard() {
           transition: all 0.3s;
         }
 
+        .creator-select {
+          width: 100%;
+          padding: 8px 12px;
+          background: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 6px;
+          color: #000;
+          font-size: 0.875rem;
+          font-family: inherit;
+          transition: all 0.3s;
+        }
+
         .creator-form-input:focus,
-        .creator-select:focus,
         .creator-textarea:focus {
           outline: none;
           border-color: #D92A63;
           background: rgba(255, 255, 255, 0.15);
+        }
+
+        .creator-select:focus {
+          outline: none;
+          border-color: #D92A63;
+          background: #fff;
         }
 
         .creator-form-input::placeholder,
@@ -661,11 +841,17 @@ export default function CreatorDashboard() {
 
         .creator-select {
           appearance: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.762L10.825 4z'/%3E%3C/svg%3E");
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23000' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.762L10.825 4z'/%3E%3C/svg%3E");
           background-repeat: no-repeat;
           background-position: right 16px center;
           background-size: 12px;
           padding-right: 40px;
+        }
+
+        .creator-select option {
+          background: #fff;
+          color: #000;
+          padding: 8px;
         }
 
         .creator-textarea {
@@ -1294,7 +1480,7 @@ export default function CreatorDashboard() {
             {/* Dashboard Header */}
             <div className="creator-dashboard-header">
               <div className="creator-welcome-section">
-                <h2>Welcome back, Teacher!</h2>
+                <h2>Welcome back, {user?.displayName || user?.email?.split('@')[0] || 'Creator'}!</h2>
                 <p>Continue your teaching journey</p>
               </div>
               <div className="creator-notification-icon">
@@ -1305,26 +1491,35 @@ export default function CreatorDashboard() {
             {/* Dashboard Section */}
             {activeSection === 'dashboard' && (
               <div id="dashboard" className="creator-section">
-                <h2 className="creator-section-title">Total Classes Created</h2>
-                <div className="creator-course-grid">
-                  {mockCourses.map((course) => (
-                    <CreatorCourseCard key={course.id} course={course} />
-                  ))}
-                </div>
-
-                <h2 className="creator-section-title">Total Students Enrolled</h2>
-                <div className="creator-course-grid">
-                  {mockCourses.slice(0, 3).map((course) => (
-                    <CreatorCourseCard key={course.id} course={course} />
-                  ))}
-                </div>
-
-                <h2 className="creator-section-title">Total Batches</h2>
-                <div className="creator-course-grid">
-                  {mockCourses.slice(0, 3).map((course) => (
-                    <CreatorCourseCard key={course.id} course={course} />
-                  ))}
-                </div>
+                <h2 className="creator-section-title">My Approved Classes</h2>
+                {loadingClasses ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    Loading classes...
+                  </div>
+                ) : approvedClasses.length > 0 ? (
+                  <div className="creator-course-grid">
+                    {approvedClasses.map((classItem) => {
+                      const course = {
+                        id: classItem.classId,
+                        slug: classItem.classId,
+                        title: classItem.title,
+                        instructor: classItem.creatorName || 'Creator',
+                        instructorImage: '',
+                        image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b861_course-12.jpg',
+                        price: classItem.price,
+                        originalPrice: classItem.price,
+                        sections: classItem.numberSessions,
+                        duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
+                        students: 0,
+                      };
+                      return <CreatorCourseCard key={classItem.classId} course={course} />;
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    No approved classes yet. Create a class and wait for admin approval.
+                  </div>
+                )}
               </div>
             )}
 
@@ -1341,7 +1536,43 @@ export default function CreatorDashboard() {
             {/* Manage Classes Section */}
             {activeSection === 'manage-classes' && (
               <div id="manage-classes" className="creator-section">
-                <ManageClasses />
+                {viewingClassId ? (
+                  <ViewClass
+                    classId={viewingClassId}
+                    onBack={() => setViewingClassId(null)}
+                    onEdit={() => {
+                      setEditingClassId(viewingClassId);
+                      setViewingClassId(null);
+                    }}
+                  />
+                ) : editingClassId ? (
+                  <EditClassForm
+                    classId={editingClassId}
+                    onCancel={() => setEditingClassId(null)}
+                    onSuccess={() => {
+                      setEditingClassId(null);
+                      // Optionally refresh the class list
+                    }}
+                  />
+                ) : selectedClassId ? (
+                  <ManageBatches
+                    classId={selectedClassId}
+                    className={selectedClassName || undefined}
+                    onBack={() => {
+                      setSelectedClassId(null);
+                      setSelectedClassName(null);
+                    }}
+                  />
+                ) : (
+                  <ManageClasses
+                    onEditClass={(classId) => setEditingClassId(classId)}
+                    onViewClass={(classId) => setViewingClassId(classId)}
+                    onManageBatches={(classId, className) => {
+                      setSelectedClassId(classId);
+                      setSelectedClassName(className);
+                    }}
+                  />
+                )}
               </div>
             )}
 

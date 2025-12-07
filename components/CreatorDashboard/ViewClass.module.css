@@ -1,4 +1,4 @@
-/* Class Details Styles */
+/* View Class Styles */
 .container {
     width: 100%;
 }
@@ -25,6 +25,17 @@
     border-color: rgba(255, 255, 255, 0.3);
 }
 
+.headerContent {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.titleSection {
+    flex: 1;
+}
+
 .title {
     font-size: 1.75rem;
     font-weight: 700;
@@ -36,6 +47,15 @@
     font-size: 1rem;
     color: rgba(255, 255, 255, 0.7);
     margin: 0;
+}
+
+.statusBadge {
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: white;
+    white-space: nowrap;
 }
 
 /* Tabs */
@@ -134,52 +154,50 @@
     white-space: pre-wrap;
 }
 
-.emptyText {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.875rem;
-    margin: 0;
+.videoPreview {
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
 }
 
-/* Stats Grid */
-.statsGrid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
+.videoImage {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 8px;
 }
 
-.statItem {
-    text-align: center;
+/* Batches Content */
+.batchesContent {
+    width: 100%;
 }
 
-.statValue {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 0.5rem;
-}
-
-.statLabel {
-    font-size: 0.8125rem;
-    color: rgba(255, 255, 255, 0.7);
-    font-weight: 500;
-}
-
-/* Batch List */
 .batchList {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 1rem;
 }
 
-.batchItem {
+.batchCard {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s;
+}
+
+.batchCard:hover {
+    border-color: rgba(217, 42, 99, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.batchHeader {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     gap: 1rem;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    margin-bottom: 0.75rem;
 }
 
 .batchInfo {
@@ -190,7 +208,7 @@
     font-size: 0.9375rem;
     font-weight: 600;
     color: #fff;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
 }
 
 .batchMeta {
@@ -198,96 +216,25 @@
     color: rgba(255, 255, 255, 0.7);
 }
 
-.startButton {
-    background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s;
-    white-space: nowrap;
-}
-
-.startButton:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
-}
-
-/* Analytics Grid */
-.analyticsGrid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-}
-
-.analyticsStats {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-}
-
-.analyticItem {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
-}
-
-.analyticLabel {
-    font-size: 0.875rem;
-    color: rgba(255, 255, 255, 0.7);
-    font-weight: 500;
-}
-
-.analyticValue {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #fff;
-}
-
-/* Batch Performance */
-.batchPerformanceList {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.performanceItem {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.performanceInfo {
-    flex: 1;
-}
-
-.performanceDate {
-    font-size: 0.9375rem;
-    font-weight: 600;
-    color: #fff;
-    margin-bottom: 0.25rem;
-}
-
-.performanceMeta {
-    font-size: 0.8125rem;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.performanceStatus {
+.batchStatus {
     font-size: 0.875rem;
     font-weight: 600;
     white-space: nowrap;
+}
+
+.batchLink {
+    font-size: 0.8125rem;
+}
+
+.batchLink a {
+    color: #4FC3F7;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.batchLink a:hover {
+    color: #81D4FA;
+    text-decoration: underline;
 }
 
 /* Students Content */
@@ -305,7 +252,7 @@
 
 .tableHeader {
     display: grid;
-    grid-template-columns: 1fr 1.5fr 1fr 0.75fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 1rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
@@ -320,7 +267,7 @@
 
 .tableRow {
     display: grid;
-    grid-template-columns: 1fr 1.5fr 1fr 0.75fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 1rem;
     padding: 1rem 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -368,6 +315,8 @@
     cursor: pointer;
     transition: all 0.3s;
     box-shadow: 0 2px 8px rgba(217, 42, 99, 0.3);
+    text-decoration: none;
+    display: inline-block;
 }
 
 .actionButton:hover {
@@ -394,14 +343,12 @@
 
 /* Responsive */
 @media (max-width: 991px) {
-
-    .overviewGrid,
-    .analyticsGrid {
+    .overviewGrid {
         grid-template-columns: 1fr;
     }
 
-    .statsGrid {
-        grid-template-columns: 1fr;
+    .headerContent {
+        flex-direction: column;
     }
 
     .tabs {
@@ -413,14 +360,8 @@
         white-space: nowrap;
     }
 
-    .batchItem,
-    .performanceItem {
+    .batchHeader {
         flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .startButton {
-        width: 100%;
     }
 
     .tableHeader,
@@ -454,9 +395,5 @@
 
     .card {
         padding: 1rem;
-    }
-
-    .statValue {
-        font-size: 1.5rem;
     }
 }

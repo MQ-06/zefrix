@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useNotification } from '@/contexts/NotificationContext';
 import Link from 'next/link';
 import { courses } from '@/lib/data';
 
@@ -10,13 +11,45 @@ declare global {
     firebaseAuth: any;
     firebaseDb: any;
     logout: any;
+    collection: any;
+    query: any;
+    where: any;
+    getDocs: any;
   }
 }
 
+interface ApprovedClass {
+  classId: string;
+  title: string;
+  subtitle?: string;
+  category: string;
+  subCategory: string;
+  creatorName: string;
+  price: number;
+  scheduleType: 'one-time' | 'recurring';
+  numberSessions: number;
+  videoLink?: string;
+  createdAt: any;
+  [key: string]: any;
+}
+
 export default function StudentDashboard() {
+  const { showError } = useNotification();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [activeSection, setActiveSection] = useState('student-panel-top');
+  const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+  const [loadingEnrollments, setLoadingEnrollments] = useState(false);
+
+  // Profile state
+  const [profileName, setProfileName] = useState('');
+  const [profileInterests, setProfileInterests] = useState('');
+  const [profileImage, setProfileImage] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileMessage, setProfileMessage] = useState('');
+
   const router = useRouter();
 
   useEffect(() => {
@@ -31,7 +64,7 @@ export default function StudentDashboard() {
         firebaseAuthConfig.innerHTML = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -46,6 +79,13 @@ export default function StudentDashboard() {
           const app = initializeApp(firebaseConfig);
           window.firebaseAuth = getAuth(app);
           window.firebaseDb = getFirestore(app);
+          window.doc = doc;
+          window.getDoc = getDoc;
+          window.setDoc = setDoc;
+          window.collection = collection;
+          window.query = query;
+          window.where = where;
+          window.getDocs = getDocs;
 
           window.logout = async () => {
             try {
@@ -53,7 +93,7 @@ export default function StudentDashboard() {
               location.replace('/signup-login');
             } catch (error) {
               console.error('Logout failed:', error);
-              alert('Logout failed, please try again.');
+              showError('Logout failed, please try again.');
             }
           };
 
@@ -122,6 +162,75 @@ export default function StudentDashboard() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Fetch enrollments from Firestore
+  useEffect(() => {
+    const fetchEnrollments = async () => {
+      if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        return;
+      }
+
+      setLoadingEnrollments(true);
+      try {
+        const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+        const q = window.query(enrollmentsRef, window.where('studentId', '==', user.uid));
+        const querySnapshot = await window.getDocs(q);
+
+        const fetchedEnrollments: any[] = [];
+        querySnapshot.forEach((doc: any) => {
+          fetchedEnrollments.push({ id: doc.id, ...doc.data() });
+        });
+
+        // Sort by enrollment date (newest first)
+        fetchedEnrollments.sort((a, b) => {
+          const aTime = a.enrolledAt?.toMillis?.() || 0;
+          const bTime = b.enrolledAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setEnrollments(fetchedEnrollments);
+      } catch (error) {
+        console.error('Error fetching enrollments:', error);
+      } finally {
+        setLoadingEnrollments(false);
+      }
+    };
+
+    if (user) {
+      fetchEnrollments();
+    }
+  }, [user]);
+
+  // Load user profile data
+  useEffect(() => {
+    const loadProfileData = async () => {
+      if (!user || !window.firebaseDb || !window.doc || !window.getDoc) {
+        return;
+      }
+
+      try {
+        const userRef = window.doc(window.firebaseDb, 'users', user.uid);
+        const userSnap = await window.getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          setProfileName(userData.displayName || user.displayName || '');
+          setProfileInterests(userData.interests || '');
+          setProfileImage(userData.photoURL || '');
+        } else {
+          // Set defaults from Firebase Auth
+          setProfileName(user.displayName || '');
+          setProfileImage(user.photoURL || '');
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      }
+    };
+
+    if (user) {
+      loadProfileData();
+    }
+  }, [user]);
+
   const handleLogout = () => {
     if (confirm('Log out of Zefrix?')) {
       if (window.logout) {
@@ -140,9 +249,48 @@ export default function StudentDashboard() {
   };
 
   const enrolledCourses = courses.slice(0, 3);
-  const upcomingCourses = courses.slice(0, 3);
+  // Use real approved classes instead of dummy data
+  const upcomingCourses = approvedClasses.slice(0, 3);
   const completedCourses = courses.slice(0, 3);
-  const browseCourses = courses;
+
+  // Fetch approved classes from Firestore
+  useEffect(() => {
+    const fetchApprovedClasses = async () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        setTimeout(fetchApprovedClasses, 500);
+        return;
+      }
+
+      setLoadingClasses(true);
+      try {
+        const classesRef = window.collection(window.firebaseDb, 'classes');
+        const q = window.query(classesRef, window.where('status', '==', 'approved'));
+        const querySnapshot = await window.getDocs(q);
+
+        const classes: ApprovedClass[] = [];
+        querySnapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
+
+        // Sort by creation date (newest first)
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setApprovedClasses(classes);
+      } catch (error) {
+        console.error('Error fetching approved classes:', error);
+      } finally {
+        setLoadingClasses(false);
+      }
+    };
+
+    if (activeSection === 'browse-classes') {
+      fetchApprovedClasses();
+    }
+  }, [activeSection]);
 
   return (
     <>
@@ -154,7 +302,7 @@ export default function StudentDashboard() {
         }
 
         body {
-          font-family: 'Inter', sans-serif;
+          font-family: 'Poppins', sans-serif;
           background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
           color: #fff;
           overflow-x: hidden;
@@ -598,249 +746,278 @@ export default function StudentDashboard() {
 
           {/* Total Classes Enrolled */}
           <div className="section">
-            <h2 className="section-title">Total Classes Enrolled</h2>
-            <div className="course-grid">
-              {enrolledCourses.map((course) => (
-                <Link key={course.id} href={`/product/${course.slug}`} className="course-card">
-                  <div className="course-image-wrap">
-                    <img src={course.image} alt={course.title} className="course-image" />
-                    <div className="course-teacher-wrap">
-                      <img src={course.instructorImage} alt={course.instructor} className="course-instructor-image-rounded" />
-                      <div>{course.instructor}</div>
-                    </div>
-                  </div>
-                  <div className="course-info">
-                    <h3 className="course-title">{course.title}</h3>
-                    <div className="course-meta">
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                        <div>{course.sections} Sections</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                        <div>{course.duration} Days</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
-                        <div>{course.students} Students</div>
+            <h2 className="section-title">Total Classes Enrolled ({enrollments.length})</h2>
+            {loadingEnrollments ? (
+              <div className="text-white text-center py-8">Loading enrollments...</div>
+            ) : enrollments.length > 0 ? (
+              <div className="course-grid">
+                {enrollments.map((course) => (
+                  <Link key={course.id} href={`/product/${course.classId}`} className="course-card">
+                    <div className="course-image-wrap">
+                      <img
+                        src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"
+                        alt={course.className}
+                        className="course-image"
+                      />
+                      <div className="course-teacher-wrap">
+                        <div style={{
+                          width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
+                        }}>
+                          Z
+                        </div>
+                        <div className="ml-2">Zefrix</div>
                       </div>
                     </div>
-                  </div>
-                  <div className="course-bottom">
-                    <div className="course-price-wrap">
-                      <h4 className="course-price">$ {course.price.toFixed(2)} USD</h4>
-                      {course.comparePrice && (
-                        <div className="course-price-compare">$ {course.comparePrice.toFixed(2)} USD</div>
-                      )}
+                    <div className="course-info">
+                      <h3 className="course-title">{course.className}</h3>
+                      <div className="course-meta">
+                        <div className="course-meta-item">
+                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
+                          <div>{course.numberOfSessions || 1} Sessions</div>
+                        </div>
+                        <div className="course-meta-item">
+                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
+                          <div>{course.classType || 'One-time'}</div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
+                    <div className="course-bottom">
+                      <div className="course-price-wrap">
+                        <h4 className="course-price">₹{(course.classPrice || 0).toFixed(2)}</h4>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-400 py-8">
+                You haven't enrolled in any classes yet. <Link href="#browse-classes" style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse classes</Link> to get started!
+              </div>
+            )}
           </div>
 
           {/* Upcoming Classes */}
-          <div className="section" style={{ marginTop: '4rem' }}>
-            <h2 className="section-title">Upcoming Classes</h2>
-            <div className="course-grid">
-              {upcomingCourses.map((course) => (
-                <Link key={course.id} href={`/product/${course.slug}`} className="course-card">
-                  <div className="course-image-wrap">
-                    <img src={course.image} alt={course.title} className="course-image" />
-                    <div className="course-teacher-wrap">
-                      <img src={course.instructorImage} alt={course.instructor} className="course-instructor-image-rounded" />
-                      <div>{course.instructor}</div>
-                    </div>
-                  </div>
-                  <div className="course-info">
-                    <h3 className="course-title">{course.title}</h3>
-                    <div className="course-meta">
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                        <div>{course.sections} Sections</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                        <div>{course.duration} Days</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
-                        <div>{course.students} Students</div>
+          <div id="upcoming-classes" className="section" style={{ marginTop: '4rem' }}>
+            <h2 className="section-title">Upcoming Classes ({upcomingCourses.length})</h2>
+            {loadingClasses ? (
+              <div className="text-white text-center py-8">Loading classes...</div>
+            ) : upcomingCourses.length > 0 ? (
+              <div className="course-grid">
+                {upcomingCourses.map((course) => (
+                  <Link key={course.id} href={`/product/${course.id}`} className="course-card">
+                    <div className="course-image-wrap">
+                      <img src={course.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} alt={course.title} className="course-image" />
+                      <div className="course-teacher-wrap">
+                        <div style={{
+                          width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'
+                        }}>
+                          {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
+                        </div>
+                        <div>{course.creatorName || 'Instructor'}</div>
                       </div>
                     </div>
-                  </div>
-                  <div className="course-bottom">
-                    <div className="course-price-wrap">
-                      <h4 className="course-price">$ {course.price.toFixed(2)} USD</h4>
-                      {course.comparePrice && (
-                        <div className="course-price-compare">$ {course.comparePrice.toFixed(2)} USD</div>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Completed Classes */}
-          <div className="section" style={{ marginTop: '4rem' }}>
-            <h2 className="section-title">Completed Classes</h2>
-            <div className="course-grid">
-              {completedCourses.map((course) => (
-                <Link key={course.id} href={`/product/${course.slug}`} className="course-card">
-                  <div className="course-image-wrap">
-                    <img src={course.image} alt={course.title} className="course-image" />
-                    <div className="course-teacher-wrap">
-                      <img src={course.instructorImage} alt={course.instructor} className="course-instructor-image-rounded" />
-                      <div>{course.instructor}</div>
-                    </div>
-                  </div>
-                  <div className="course-info">
-                    <h3 className="course-title">{course.title}</h3>
-                    <div className="course-meta">
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                        <div>{course.sections} Sections</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                        <div>{course.duration} Days</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
-                        <div>{course.students} Students</div>
+                    <div className="course-info">
+                      <h3 className="course-title">{course.title}</h3>
+                      <div className="course-meta">
+                        <div className="course-meta-item">
+                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
+                          <div>{course.numberSessions || 1} Sessions</div>
+                        </div>
+                        <div className="course-meta-item">
+                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
+                          <div>{course.classType || 'One-time'}</div>
+                        </div>
+                        <div className="course-meta-item">
+                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
+                          <div>{course.category || 'General'}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="course-bottom">
-                    <div className="course-price-wrap">
-                      <h4 className="course-price">$ {course.price.toFixed(2)} USD</h4>
-                      {course.comparePrice && (
-                        <div className="course-price-compare">$ {course.comparePrice.toFixed(2)} USD</div>
-                      )}
+                    <div className="course-bottom">
+                      <div className="course-price-wrap">
+                        <h4 className="course-price">₹{(course.price || 0).toFixed(2)}</h4>
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-400 py-8 text-center">
+                No upcoming classes available at the moment.
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
           <div className="section" style={{ marginTop: '4rem' }}>
             <div className="section-title-inline button-inline-flex-style">
-              <Link href="/courses" className="button-dark">Browse Classes</Link>
-              <Link href="#my-enrollments" className="button-dark">View all Enrollments</Link>
+              <a href="#upcoming-classes" className="button-dark" style={{ textDecoration: 'none' }}>Browse Classes</a>
+              <a href="#my-enrollments" className="button-dark" style={{ textDecoration: 'none' }}>View all Enrollments</a>
             </div>
           </div>
 
           {/* My Enrollments */}
+          {/* My Enrollments */}
           <div id="my-enrollments" className="my-enrollments">
             <h2 className="section-title">My Enrollments</h2>
-            <div className="enrollment-list">
-              {[1, 2, 3, 4].map((item) => (
-                <div key={item} className="enrollment-item">
-                  <img 
-                    src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b7c7_avatar-10.jpg" 
-                    alt="Avatar" 
-                    className="enrollment-avatar" 
-                  />
-                  <div className="enrollment-info">
-                    <h1>Title</h1>
-                  </div>
-                  <div className="enrollment-info">
-                    <h1>John Doe</h1>
-                  </div>
-                  <div className="enrollment-info">
-                    <h1>Status</h1>
-                  </div>
-                  <div className="enrollment-status">
-                    next Session Date/Time
-                  </div>
-                  <div className="enrollment-actions">
-                    <button className="button-dark">Join Class</button>
-                    <button className="button-dark">View Details</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Browse Classes */}
-          <div id="browse-classes" className="section" style={{ marginTop: '4rem' }}>
-            <h2 className="section-title">Browse Classes</h2>
-            <div className="course-grid">
-              {browseCourses.map((course) => (
-                <Link key={course.id} href={`/product/${course.slug}`} className="course-card">
-                  <div className="course-image-wrap">
-                    <img src={course.image} alt={course.title} className="course-image" />
-                    <div className="course-teacher-wrap">
-                      <img src={course.instructorImage} alt={course.instructor} className="course-instructor-image-rounded" />
-                      <div>{course.instructor}</div>
+            {loadingEnrollments ? (
+              <div className="text-white text-center py-8">Loading enrollments...</div>
+            ) : enrollments.length > 0 ? (
+              <div className="enrollment-list">
+                {enrollments.map((item) => (
+                  <div key={item.id} className="enrollment-item">
+                    <div style={{
+                      width: '60px', height: '60px', borderRadius: '50%', background: '#D92A63',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 'bold'
+                    }}>
+                      {item.className ? item.className.charAt(0) : 'C'}
                     </div>
-                  </div>
-                  <div className="course-info">
-                    <h3 className="course-title">{course.title}</h3>
-                    <div className="course-meta">
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                        <div>{course.sections} Sections</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                        <div>{course.duration} Days</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
-                        <div>{course.students} Students</div>
+                    <div className="enrollment-info">
+                      <h1 style={{ fontSize: '1rem', fontWeight: '600' }}>{item.className}</h1>
+                      <div className="enrollment-status">ID: {item.classId}</div>
+                    </div>
+                    <div className="enrollment-info">
+                      <h1 style={{ fontSize: '0.875rem', color: '#aaa' }}>Enrolled On</h1>
+                      <div style={{ fontWeight: '600' }}>
+                        {item.enrolledAt?.toDate ? item.enrolledAt.toDate().toLocaleDateString() : 'Just now'}
                       </div>
                     </div>
-                  </div>
-                  <div className="course-bottom">
-                    <div className="course-price-wrap">
-                      <h4 className="course-price">$ {course.price.toFixed(2)} USD</h4>
-                      {course.comparePrice && (
-                        <div className="course-price-compare">$ {course.comparePrice.toFixed(2)} USD</div>
-                      )}
+                    <div className="enrollment-info">
+                      <h1 style={{ fontSize: '0.875rem', color: '#aaa' }}>Status</h1>
+                      <div style={{ color: '#4ade80', fontWeight: '600', textTransform: 'uppercase', fontSize: '0.75rem' }}>
+                        {item.status || 'Active'}
+                      </div>
+                    </div>
+                    <div className="enrollment-status">
+                      Check email for schedule
+                    </div>
+                    <div className="enrollment-actions">
+                      <Link href={`/product/${item.classId}`} className="button-dark" style={{ fontSize: '0.875rem', padding: '0.5rem 1rem' }}>
+                        View Content
+                      </Link>
                     </div>
                   </div>
-                </Link>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-400 py-8 text-center" style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+                No active enrollments found.
+              </div>
+            )}
           </div>
 
           {/* My Profile */}
           <div id="profile" className="section" style={{ marginTop: '4rem' }}>
             <h2 className="section-title">My Profile</h2>
+            {profileMessage && (
+              <div style={{
+                padding: '1rem',
+                marginBottom: '1rem',
+                borderRadius: '8px',
+                background: profileMessage.includes('success') ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)',
+                border: `1px solid ${profileMessage.includes('success') ? '#4CAF50' : '#F44336'}`,
+                color: profileMessage.includes('success') ? '#4CAF50' : '#F44336'
+              }}>
+                {profileMessage}
+              </div>
+            )}
             <div className="profile-form">
-              <form onSubmit={(e) => { e.preventDefault(); alert('Profile updated!'); }}>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setProfileLoading(true);
+                setProfileMessage('');
+
+                try {
+                  if (!user) {
+                    throw new Error('User not logged in');
+                  }
+
+                  // Wait for Firebase to be ready (with retry)
+                  let retries = 0;
+                  while ((!window.firebaseDb || !window.doc || !window.setDoc) && retries < 6) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    retries++;
+                  }
+
+                  if (!window.firebaseDb || !window.doc || !window.setDoc) {
+                    throw new Error('Firebase not initialized. Please refresh the page.');
+                  }
+
+                  // Update/create user document in Firestore
+                  const userRef = window.doc(window.firebaseDb, 'users', user.uid);
+                  await window.setDoc(userRef, {
+                    displayName: profileName,
+                    interests: profileInterests,
+                    photoURL: profileImage,
+                    email: user.email,
+                    role: 'student',
+                    updatedAt: new Date()
+                  }, { merge: true }); // merge: true creates document if it doesn't exist
+
+                  setProfileMessage('✅ Profile updated successfully!');
+                  setTimeout(() => setProfileMessage(''), 3000);
+                } catch (error) {
+                  console.error('Error updating profile:', error);
+                  const errorMessage = error instanceof Error ? error.message : 'Failed to update profile. Please try again.';
+                  setProfileMessage(`❌ ${errorMessage}`);
+                } finally {
+                  setProfileLoading(false);
+                }
+              }}>
                 <div className="form-group">
                   <label htmlFor="name" className="form-label">Name</label>
-                  <input 
-                    type="text" 
-                    id="name" 
-                    className="form-input" 
-                    placeholder={user?.displayName || 'Enter your name'} 
+                  <input
+                    type="text"
+                    id="name"
+                    className="form-input"
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    placeholder="Enter your name"
+                    required
                   />
                 </div>
                 <div className="form-group">
                   <label htmlFor="interests" className="form-label">Interest/Skills</label>
-                  <input 
-                    type="text" 
-                    id="interests" 
-                    className="form-input" 
-                    placeholder="Enter your interests or skills" 
+                  <input
+                    type="text"
+                    id="interests"
+                    className="form-input"
+                    value={profileInterests}
+                    onChange={(e) => setProfileInterests(e.target.value)}
+                    placeholder="Enter your interests or skills (e.g., Photography, Web Development)"
                   />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="profileImage" className="form-label">Profile Image</label>
-                  <input 
-                    type="text" 
-                    id="profileImage" 
-                    className="form-input" 
-                    placeholder="Enter image URL" 
+                  <label htmlFor="profileImage" className="form-label">Profile Image URL</label>
+                  <input
+                    type="url"
+                    id="profileImage"
+                    className="form-input"
+                    value={profileImage}
+                    onChange={(e) => setProfileImage(e.target.value)}
+                    placeholder="https://example.com/your-photo.jpg"
                   />
+                  {profileImage && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <img
+                        src={profileImage}
+                        alt="Profile preview"
+                        style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover' }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
                 </div>
-                <button type="submit" className="button-dark">Submit</button>
+                <button
+                  type="submit"
+                  className="button-dark"
+                  disabled={profileLoading}
+                  style={{ opacity: profileLoading ? 0.6 : 1 }}
+                >
+                  {profileLoading ? 'Updating...' : 'Update Profile'}
+                </button>
               </form>
             </div>
           </div>
