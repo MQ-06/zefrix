@@ -9,18 +9,24 @@ import Footer from '@/components/Footer';
 
 export default function SignupLoginPage() {
   const [isActive, setIsActive] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const { signUp, signIn, signInWithGoogle, user, loading } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
 
   // Redirect if already authenticated
   useEffect(() => {
+    console.log('🔄 Redirect check - loading:', loading, 'user:', user ? `${user.email} (${user.role})` : 'null');
     if (!loading && user) {
+      console.log('🚀 Redirecting user to dashboard...');
       if (user.role === 'admin') {
+        console.log('→ Redirecting to admin-dashboard');
         router.push('/admin-dashboard');
       } else if (user.role === 'creator') {
+        console.log('→ Redirecting to creator-dashboard');
         router.push('/creator-dashboard');
       } else {
+        console.log('→ Redirecting to student-dashboard');
         router.push('/student-dashboard');
       }
     }
@@ -28,6 +34,9 @@ export default function SignupLoginPage() {
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
     const form = e.currentTarget;
     const name = (form.querySelector('#signup-name') as HTMLInputElement)?.value.trim();
@@ -37,17 +46,20 @@ export default function SignupLoginPage() {
     // Validation
     if (!name || !email || !password) {
       showError('Please fill in all fields');
+      setIsSubmitting(false);
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       showError('Please enter a valid email address');
+      setIsSubmitting(false);
       return;
     }
 
     if (password.length < 6) {
       showError('Password must be at least 6 characters long');
+      setIsSubmitting(false);
       return;
     }
 
@@ -74,11 +86,16 @@ export default function SignupLoginPage() {
       
       showError(errorMessage);
       console.error('Signup error:', err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
     const form = e.currentTarget;
     const email = (form.querySelector('#login-email') as HTMLInputElement)?.value.trim();
@@ -86,6 +103,7 @@ export default function SignupLoginPage() {
 
     if (!email || !password) {
       showError('Please fill in all fields');
+      setIsSubmitting(false);
       return;
     }
 
@@ -112,10 +130,15 @@ export default function SignupLoginPage() {
       
       showError(errorMessage);
       console.error('Login error:', err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleGoogleAuth = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
     const googleSignInBtn = document.getElementById('googleSignIn');
     const googleSignUpBtn = document.getElementById('googleSignUp');
 
@@ -136,6 +159,7 @@ export default function SignupLoginPage() {
         }
         showError(errorMessage);
       }
+      setIsSubmitting(false);
     } finally {
       if (googleSignInBtn) googleSignInBtn.removeAttribute('disabled');
       if (googleSignUpBtn) googleSignUpBtn.removeAttribute('disabled');
@@ -412,7 +436,9 @@ export default function SignupLoginPage() {
               <input type="text" id="signup-name" placeholder="Name" required autoComplete="name" />
               <input type="email" id="signup-email" placeholder="Email" required autoComplete="email" />
               <input type="password" id="signup-password" placeholder="Password" required autoComplete="new-password" />
-              <button type="submit" id="emailSignUpBtn">Sign Up</button>
+              <button type="submit" id="emailSignUpBtn" disabled={isSubmitting}>
+                {isSubmitting ? 'Creating Account...' : 'Sign Up'}
+              </button>
             </form>
           </div>
 
@@ -428,7 +454,9 @@ export default function SignupLoginPage() {
               <span style={{ color: '#666' }}>or use your email password</span>
               <input type="email" id="login-email" placeholder="Email" required autoComplete="email" />
               <input type="password" id="login-password" placeholder="Password" required autoComplete="current-password" />
-              <button type="submit" id="emailLoginBtn">Sign In</button>
+              <button type="submit" id="emailLoginBtn" disabled={isSubmitting}>
+                {isSubmitting ? 'Signing In...' : 'Sign In'}
+              </button>
             </form>
           </div>
 

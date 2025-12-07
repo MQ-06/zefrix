@@ -70,17 +70,37 @@ export default function CoursesSection() {
 
   useEffect(() => {
     const fetchApprovedClasses = async () => {
-      // Wait for Firebase to be ready (with timeout)
-      let attempts = 0;
-      const maxAttempts = 20; // 10 seconds max wait
-      while ((!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        attempts++;
+      // Check if Firebase is already ready
+      if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+        await loadClasses();
+        return;
       }
 
+      // Listen for firebaseReady event
+      const handleFirebaseReady = () => {
+        loadClasses();
+      };
+
+      window.addEventListener('firebaseReady', handleFirebaseReady);
+
+      // Fallback: try after a delay if event doesn't fire
+      const timeout = setTimeout(() => {
+        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+          loadClasses();
+        } else {
+          console.warn('Firebase not ready after timeout, using fallback data');
+          setLoading(false);
+        }
+      }, 5000);
+
+      return () => {
+        window.removeEventListener('firebaseReady', handleFirebaseReady);
+        clearTimeout(timeout);
+      };
+    };
+
+    const loadClasses = async () => {
       if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        console.warn('Firebase not ready after timeout, using fallback data');
-        setLoading(false);
         return;
       }
 
@@ -115,12 +135,7 @@ export default function CoursesSection() {
       }
     };
 
-    // Wait a bit for Firebase script to load
-    const timer = setTimeout(() => {
-      fetchApprovedClasses();
-    }, 1000);
-
-    return () => clearTimeout(timer);
+    fetchApprovedClasses();
   }, []);
 
   // Use approved classes if available, otherwise fallback to mock data
