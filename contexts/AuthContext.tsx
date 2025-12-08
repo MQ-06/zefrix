@@ -45,9 +45,11 @@ declare global {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const ADMIN_EMAIL = 'kartik@zefrix.com';
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const normalizeEmail = (email?: string | null) => (email || '').toLowerCase();
 
   // Initialize Firebase
   useEffect(() => {
@@ -158,28 +160,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Fetch user data from Firestore
             if (window.firebaseDb && window.doc && window.getDoc) {
               const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid));
+              const isAdminEmail = normalizeEmail(firebaseUser.email) === ADMIN_EMAIL;
               if (userDoc.exists()) {
                 const userData = userDoc.data();
                 console.log('📄 User data from Firestore:', userData);
+                let role = userData.role || 'student';
+                if (isAdminEmail) {
+                  role = 'admin';
+                  if (userData.role !== 'admin' && window.updateDoc) {
+                    try {
+                      await window.updateDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid), { role: 'admin' });
+                      console.log('🔒 Elevated admin role in Firestore for', firebaseUser.email);
+                    } catch (err) {
+                      console.error('Failed to update admin role in Firestore:', err);
+                    }
+                  }
+                }
                 setUser({
                   uid: firebaseUser.uid,
                   email: firebaseUser.email,
                   name: userData.name || firebaseUser.displayName,
                   photoURL: userData.photoURL || firebaseUser.photoURL,
-                  role: userData.role || 'student',
+                  role,
                   isProfileComplete: userData.isProfileComplete || false,
                   isCreatorApproved: userData.isCreatorApproved || false,
                 });
-                console.log('✅ User state updated with role:', userData.role || 'student');
+                console.log('✅ User state updated with role:', role);
               } else {
                 // User exists in auth but not in Firestore - create basic record
                 console.log('⚠️ User not found in Firestore, using default role');
+                const role = isAdminEmail ? 'admin' : 'student';
+                if (window.setDoc) {
+                  try {
+                    await window.setDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid), {
+                      email: firebaseUser.email,
+                      name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+                      photoURL: firebaseUser.photoURL || '',
+                      role,
+                      createdAt: window.serverTimestamp ? window.serverTimestamp() : new Date(),
+                    }, { merge: true });
+                    console.log('🆕 Created user record in Firestore with role:', role);
+                  } catch (err) {
+                    console.error('Failed to seed user record in Firestore:', err);
+                  }
+                }
                 setUser({
                   uid: firebaseUser.uid,
                   email: firebaseUser.email,
                   name: firebaseUser.displayName,
                   photoURL: firebaseUser.photoURL,
-                  role: 'student',
+                  role,
                   isProfileComplete: false,
                 });
               }
