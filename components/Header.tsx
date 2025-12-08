@@ -4,13 +4,12 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Menu, X, LogOut, User } from 'lucide-react';
+import { Menu, X, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, signOut } = useAuth();
@@ -23,21 +22,6 @@ export default function Header() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  // Close user menu when clicking outside
-  useEffect(() => {
-    if (!isUserMenuOpen) return;
-    
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('[data-user-menu]')) {
-        setIsUserMenuOpen(false);
-      }
-    };
-    
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [isUserMenuOpen]);
 
   const navLinks = [
     { href: '/', label: 'Home' },
@@ -89,85 +73,7 @@ export default function Header() {
 
           {/* Right Side Actions */}
           <div className="hidden md:flex items-center space-x-6">
-            {isAuthenticated ? (
-              <div className="relative" data-user-menu>
-                <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center space-x-2 text-white hover:text-primary transition-colors duration-200"
-                >
-                  {user?.photoURL ? (
-                    <img
-                      src={user.photoURL}
-                      alt={user.name || 'User'}
-                      className="w-8 h-8 rounded-full border-2 border-white"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                      <User className="w-5 h-5 text-white" />
-                    </div>
-                  )}
-                  <span className="text-base font-medium">{user?.name || 'User'}</span>
-                </button>
-                <AnimatePresence>
-                  {isUserMenuOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute right-0 mt-2 w-48 bg-dark/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-800 overflow-hidden z-50"
-                    >
-                      <div className="p-2">
-                        <div className="px-3 py-2 border-b border-gray-800">
-                          <p className="text-white text-sm font-medium">{user?.name || 'User'}</p>
-                          <p className="text-gray-400 text-xs">{user?.email}</p>
-                        </div>
-                        {user?.role === 'admin' && (
-                          <Link
-                            href="/admin-dashboard"
-                            className="block px-3 py-2 text-white hover:bg-primary/20 transition-colors text-sm"
-                            onClick={() => setIsUserMenuOpen(false)}
-                          >
-                            Admin Dashboard
-                          </Link>
-                        )}
-                        {user?.role === 'creator' && (
-                          <Link
-                            href="/creator-dashboard"
-                            className="block px-3 py-2 text-white hover:bg-primary/20 transition-colors text-sm"
-                            onClick={() => setIsUserMenuOpen(false)}
-                          >
-                            Creator Dashboard
-                          </Link>
-                        )}
-                        {user?.role === 'student' && (
-                          <Link
-                            href="/student-dashboard"
-                            className="block px-3 py-2 text-white hover:bg-primary/20 transition-colors text-sm"
-                            onClick={() => setIsUserMenuOpen(false)}
-                          >
-                            Student Dashboard
-                          </Link>
-                        )}
-                        <button
-                          onClick={async () => {
-                            setIsUserMenuOpen(false);
-                            try {
-                              await signOut();
-                            } catch (error) {
-                              console.error('Sign out error:', error);
-                            }
-                          }}
-                          className="w-full flex items-center space-x-2 px-3 py-2 text-white hover:bg-red-500/20 transition-colors text-sm"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          <span>Logout</span>
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            ) : (
+            {isAuthenticated ? null : (
               <>
                 {!isLoginPage && (
                   <Link

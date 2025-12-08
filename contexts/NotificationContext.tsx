@@ -28,10 +28,16 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     const id = Math.random().toString(36).substring(2, 9);
     const notification: Notification = { id, message, type, duration };
 
-    setNotifications((prev) => [...prev, notification]);
+    console.log('🔔 Showing notification:', { type, message, duration });
+    setNotifications((prev) => {
+      const updated = [...prev, notification];
+      console.log('📋 Notifications array:', updated.length, 'notifications');
+      return updated;
+    });
 
     // Auto remove after duration
     setTimeout(() => {
+      console.log('⏰ Removing notification:', id);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     }, duration);
   };
@@ -82,8 +88,19 @@ function NotificationContainer({
   notifications: Notification[];
   onRemove: (id: string) => void;
 }) {
+  if (notifications.length === 0) return null;
+  
   return (
-    <div className="fixed top-20 right-4 z-[9999] flex flex-col gap-3 max-w-md w-full pointer-events-none">
+    <div 
+      className="fixed top-20 right-4 z-[99999] flex flex-col gap-3 max-w-md w-full pointer-events-none"
+      style={{ 
+        position: 'fixed',
+        top: '80px',
+        right: '16px',
+        zIndex: 99999,
+        maxWidth: '420px'
+      }}
+    >
       {notifications.map((notification) => (
         <NotificationToast
           key={notification.id}
@@ -161,17 +178,20 @@ function NotificationToast({
         flex
         items-start
         gap-3
-        animate-slide-in-right
         min-w-[300px]
         max-w-md
       `}
       style={{
         animation: 'slideInRight 0.3s ease-out',
+        position: 'relative',
+        zIndex: 99999,
+        transform: 'translateX(0)',
+        opacity: 1,
       }}
     >
       <div className="flex-shrink-0 text-white mt-0.5">{getIcon()}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-white font-medium text-sm leading-relaxed break-words">
+        <p className="text-white font-medium text-sm leading-relaxed break-words" style={{ color: 'white' }}>
           {message}
         </p>
       </div>

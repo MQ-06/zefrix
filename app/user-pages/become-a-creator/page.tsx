@@ -36,6 +36,7 @@ export default function BecomeACreatorPage() {
   const { signUp, signInWithGoogle, user, loading } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
   const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     fullname: '',
     email: '',
@@ -125,13 +126,18 @@ export default function BecomeACreatorPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
     if (!window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
       showError('Firebase not initialized. Please wait...');
+      setIsSubmitting(false);
       return;
     }
 
     if (!validateStep(5)) {
       showError('Please fill in all required fields');
+      setIsSubmitting(false);
       return;
     }
 
@@ -139,11 +145,13 @@ export default function BecomeACreatorPage() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       showError('Please enter a valid email address');
+      setIsSubmitting(false);
       return;
     }
 
     if (formData.password.length < 6) {
       showError('Password must be at least 6 characters long');
+      setIsSubmitting(false);
       return;
     }
 
@@ -185,7 +193,9 @@ export default function BecomeACreatorPage() {
         lastLogin: window.serverTimestamp(),
       }, { merge: true });
 
-      showSuccess('Creator account created successfully! Your profile is pending admin approval.');
+      showSuccess('Creator account created successfully!');
+      // Delay redirect to show notification
+      await new Promise(resolve => setTimeout(resolve, 2000));
       router.push('/creator-dashboard');
     } catch (err: any) {
       let errorMessage = 'Signup failed. ';
@@ -206,12 +216,18 @@ export default function BecomeACreatorPage() {
       
       showError(errorMessage);
       console.error('Signup error:', err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleGoogleAuth = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
     if (!window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
       showError('Firebase not initialized. Please wait...');
+      setIsSubmitting(false);
       return;
     }
 
@@ -241,6 +257,8 @@ export default function BecomeACreatorPage() {
       }, { merge: true });
 
       showSuccess('Google signup successful! Please complete your creator profile.');
+      // Delay redirect to show notification
+      await new Promise(resolve => setTimeout(resolve, 2000));
       router.push('/creator-dashboard');
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {
@@ -252,6 +270,7 @@ export default function BecomeACreatorPage() {
         }
         showError(errorMessage);
       }
+      setIsSubmitting(false);
     }
   };
 
@@ -793,9 +812,15 @@ export default function BecomeACreatorPage() {
           box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
         }
 
-        .btn-submit:hover {
+        .btn-submit:hover:not(:disabled) {
           transform: translateY(-2px);
           box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
+        
+        .btn-submit:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+          transform: none;
         }
 
         .social-auth {
@@ -821,10 +846,16 @@ export default function BecomeACreatorPage() {
           font-size: 20px;
         }
 
-        .social-auth-btn:hover {
+        .social-auth-btn:hover:not(:disabled) {
           border-color: #4e54c8;
           background: rgba(78, 84, 200, 0.2);
           transform: translateY(-2px);
+        }
+        
+        .social-auth-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
         }
 
         @media (max-width: 768px) {
@@ -875,8 +906,17 @@ export default function BecomeACreatorPage() {
           </div>
 
           <div className="social-auth">
-            <button className="social-auth-btn" onClick={handleGoogleAuth} title="Continue with Google">
-              <i className="fa-brands fa-google"></i>
+            <button 
+              className="social-auth-btn" 
+              onClick={handleGoogleAuth} 
+              title="Continue with Google"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <i className="fa-solid fa-spinner fa-spin"></i>
+              ) : (
+                <i className="fa-brands fa-google"></i>
+              )}
             </button>
           </div>
 
@@ -929,8 +969,16 @@ export default function BecomeACreatorPage() {
                   Next <i className="fa-solid fa-arrow-right"></i>
                 </button>
               ) : (
-                <button type="submit" className="btn btn-submit">
-                  <i className="fa-solid fa-check"></i> Submit Application
+                <button type="submit" className="btn btn-submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin"></i> Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-check"></i> Submit Application
+                    </>
+                  )}
                 </button>
               )}
             </div>

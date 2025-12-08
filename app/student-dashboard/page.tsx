@@ -51,6 +51,7 @@ export default function StudentDashboard() {
   const [profileMessage, setProfileMessage] = useState('');
 
   const router = useRouter();
+  const userInitial = ((user?.displayName || user?.email || 'S')[0] || 'S').toUpperCase();
 
   useEffect(() => {
     // Load Firebase SDKs dynamically
@@ -399,16 +400,51 @@ export default function StudentDashboard() {
           font-size: 1rem;
         }
 
-        .notification-icon {
-          width: 50px;
-          height: 50px;
-          background: rgba(255, 255, 255, 0.1);
+        .user-summary {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.75rem 1rem;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.1);
           border-radius: 12px;
+          min-width: 220px;
+        }
+
+        .user-avatar {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #D92A63, #6C63FF);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 1.5rem;
-          cursor: pointer;
+          font-weight: 700;
+          color: #fff;
+          overflow: hidden;
+        }
+
+        .user-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .user-meta {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .user-name {
+          color: #fff;
+          font-weight: 700;
+          line-height: 1.1;
+        }
+
+        .user-email {
+          color: rgba(255, 255, 255, 0.7);
+          font-size: 0.9rem;
+          line-height: 1.1;
         }
 
         /* Course Grid */
@@ -739,8 +775,18 @@ export default function StudentDashboard() {
               <h2>Welcome back, {user?.displayName || 'Student'}!</h2>
               <p>Continue your learning journey</p>
             </div>
-            <div className="notification-icon">
-              🔔
+            <div className="user-summary">
+              <div className="user-avatar">
+                {user?.photoURL ? (
+                  <img src={user.photoURL} alt={user?.displayName || 'Student'} />
+                ) : (
+                  userInitial
+                )}
+              </div>
+              <div className="user-meta">
+                <div className="user-name">{user?.displayName || user?.email?.split('@')[0] || 'Student'}</div>
+                <div className="user-email">{user?.email || 'Student account'}</div>
+              </div>
             </div>
           </div>
 

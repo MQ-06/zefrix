@@ -14,21 +14,26 @@ export default function SignupLoginPage() {
   const { signUp, signIn, signInWithGoogle, user, loading } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (with delay to show notifications)
   useEffect(() => {
     console.log('🔄 Redirect check - loading:', loading, 'user:', user ? `${user.email} (${user.role})` : 'null');
     if (!loading && user) {
       console.log('🚀 Redirecting user to dashboard...');
-      if (user.role === 'admin') {
-        console.log('→ Redirecting to admin-dashboard');
-        router.push('/admin-dashboard');
-      } else if (user.role === 'creator') {
-        console.log('→ Redirecting to creator-dashboard');
-        router.push('/creator-dashboard');
-      } else {
-        console.log('→ Redirecting to student-dashboard');
-        router.push('/student-dashboard');
-      }
+      // Small delay to ensure notifications are visible
+      const redirectTimer = setTimeout(() => {
+        if (user.role === 'admin') {
+          console.log('→ Redirecting to admin-dashboard');
+          router.push('/admin-dashboard');
+        } else if (user.role === 'creator') {
+          console.log('→ Redirecting to creator-dashboard');
+          router.push('/creator-dashboard');
+        } else {
+          console.log('→ Redirecting to student-dashboard');
+          router.push('/student-dashboard');
+        }
+      }, 2500); // Wait 2.5 seconds to show notification
+      
+      return () => clearTimeout(redirectTimer);
     }
   }, [user, loading, router]);
 
@@ -66,6 +71,8 @@ export default function SignupLoginPage() {
     try {
       await signUp(email, password, name);
       showSuccess('Account created successfully! Redirecting...');
+      // Delay redirect to show notification
+      await new Promise(resolve => setTimeout(resolve, 2000));
       // Navigation will be handled by useEffect when user state updates
     } catch (err: any) {
       let errorMessage = 'Signup failed. ';
@@ -110,6 +117,8 @@ export default function SignupLoginPage() {
     try {
       await signIn(email, password);
       showSuccess('Login successful! Redirecting...');
+      // Delay redirect to show notification
+      await new Promise(resolve => setTimeout(resolve, 2000));
       // Navigation will be handled by useEffect when user state updates
     } catch (err: any) {
       let errorMessage = 'Login failed. ';
@@ -148,6 +157,8 @@ export default function SignupLoginPage() {
     try {
       await signInWithGoogle();
       showSuccess('Google authentication successful! Redirecting...');
+      // Delay redirect to show notification
+      await new Promise(resolve => setTimeout(resolve, 2000));
       // Navigation will be handled by useEffect when user state updates
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {

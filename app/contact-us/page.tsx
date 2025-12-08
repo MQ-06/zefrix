@@ -79,6 +79,7 @@ export default function ContactUsPage() {
         read: false
       });
 
+      showSuccess('Thank you! Your message has been sent successfully. We\'ll get back to you soon!');
       setSubmitMessage({
         type: 'success',
         text: 'Thank you! Your message has been sent successfully. We\'ll get back to you soon!'
@@ -94,6 +95,7 @@ export default function ContactUsPage() {
       });
     } catch (error: any) {
       console.error('Error submitting contact form:', error);
+      showError('Sorry, there was an error sending your message. Please try again.');
       setSubmitMessage({
         type: 'error',
         text: 'Sorry, there was an error sending your message. Please try again.'
