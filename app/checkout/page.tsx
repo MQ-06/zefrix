@@ -25,6 +25,9 @@ export default function CheckoutPage() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [userEmail, setUserEmail] = useState('');
     const [loading, setLoading] = useState(true);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+    const [isRedirecting, setIsRedirecting] = useState(false);
 
     useEffect(() => {
         // Load Firebase - ensure addDoc is available
@@ -90,6 +93,20 @@ export default function CheckoutPage() {
             return;
         }
 
+        // Show confirmation dialog first
+        setShowConfirmDialog(true);
+    };
+
+    const confirmPayment = async () => {
+        setShowConfirmDialog(false);
+        setIsProcessing(true);
+
+        if (cart.length === 0) {
+            showError('Your cart is empty!');
+            setIsProcessing(false);
+            return;
+        }
+
         try {
             // Get current user
             const currentUser = window.firebaseAuth?.currentUser;
@@ -142,12 +159,19 @@ export default function CheckoutPage() {
             // Small delay to ensure Firestore writes complete
             await new Promise(resolve => setTimeout(resolve, 500));
 
-            // Clear cart and redirect to thank you page
+            // Set redirecting state immediately to prevent empty cart UI
+            setIsRedirecting(true);
+            
+            // Clear cart first (but UI won't show empty cart because isRedirecting is true)
             clearCart();
-            router.push(`/thank-you?payment_id=${mockPaymentId}&status=success`);
+            
+            // Use window.location for instant redirect (no React re-render delay)
+            window.location.href = `/thank-you?payment_id=${mockPaymentId}&status=success`;
         } catch (error) {
             console.error('Error processing enrollment:', error);
             showError('Enrollment failed. Please try again.');
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -163,7 +187,19 @@ export default function CheckoutPage() {
         return null; // Will redirect
     }
 
-    if (cart.length === 0) {
+    // Show loading/processing state during redirect to prevent empty cart flash
+    if (isRedirecting || (isProcessing && cart.length === 0)) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#1A1A2E] to-[#0F3460]">
+                <div className="text-center">
+                    <div className="text-white text-xl mb-4">Processing your payment...</div>
+                    <div className="w-16 h-16 border-4 border-[#D92A63] border-t-transparent rounded-full animate-spin mx-auto"></div>
+                </div>
+            </div>
+        );
+    }
+
+    if (cart.length === 0 && !isProcessing && !isRedirecting) {
         return (
             <div className="min-h-screen pt-32 pb-16 bg-gradient-to-b from-[#1A1A2E] to-[#0F3460]">
                 <div className="container max-w-4xl mx-auto px-4">
@@ -189,6 +225,15 @@ export default function CheckoutPage() {
         <div className="min-h-screen pt-32 pb-16 bg-gradient-to-b from-[#1A1A2E] to-[#0F3460]">
             <div className="container max-w-6xl mx-auto px-4">
                 <h1 className="text-4xl font-bold text-white mb-8">Checkout</h1>
+
+                {/* Cart Preview Section */}
+                <div className="mb-8 bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+                    <h2 className="text-2xl font-bold text-white mb-4">Cart Preview</h2>
+                    <p className="text-gray-300 mb-4">Review your items before proceeding to payment</p>
+                    <div className="text-white">
+                        <span className="font-semibold">{cart.length}</span> {cart.length === 1 ? 'item' : 'items'} in your cart
+                    </div>
+                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Cart Items */}
@@ -246,9 +291,10 @@ export default function CheckoutPage() {
 
                             <button
                                 onClick={handlePayment}
-                                className="w-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-8 py-4 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-[#D92A63]/30 mb-4"
+                                disabled={isProcessing || cart.length === 0}
+                                className="w-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-8 py-4 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-[#D92A63]/30 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Proceed to Payment
+                                {isProcessing ? 'Processing...' : 'Proceed to Payment'}
                             </button>
 
                             <Link
@@ -267,6 +313,38 @@ export default function CheckoutPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Confirmation Dialog */}
+            {showConfirmDialog && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+                    <div className="bg-gradient-to-b from-[#1A1A2E] to-[#2D1B3D] rounded-xl p-8 border border-white/10 max-w-md w-full">
+                        <h3 className="text-2xl font-bold text-white mb-4">Confirm Payment</h3>
+                        <p className="text-gray-300 mb-6">
+                            You are about to proceed with payment for <strong className="text-white">{cart.length}</strong> {cart.length === 1 ? 'item' : 'items'}.
+                        </p>
+                        <div className="bg-white/5 rounded-lg p-4 mb-6">
+                            <div className="flex justify-between text-white mb-2">
+                                <span>Total Amount:</span>
+                                <span className="font-bold text-xl">₹{cartTotal.toFixed(2)} INR</span>
+                            </div>
+                        </div>
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => setShowConfirmDialog(false)}
+                                className="flex-1 border-2 border-white/20 px-6 py-3 rounded-lg text-white font-medium hover:bg-white/5 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmPayment}
+                                className="flex-1 bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-6 py-3 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity"
+                            >
+                                Confirm Payment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

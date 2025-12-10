@@ -32,6 +32,7 @@ export default function ProductPage({ params }: PageProps) {
   const [isInCart, setIsInCart] = useState(false);
   const [relatedCourses, setRelatedCourses] = useState<any[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(true);
+  const [creatorProfile, setCreatorProfile] = useState<any>(null);
 
   useEffect(() => {
     // Load Firebase if not already loaded
@@ -85,11 +86,15 @@ export default function ProductPage({ params }: PageProps) {
               id: docSnap.id,
               slug: docSnap.id,
               title: data.title || 'Untitled Class',
+              subtitle: data.subtitle || '',
               price: data.price || 0,
               image: data.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
               instructor: data.creatorName || 'Instructor',
+              instructorId: data.creatorId || '',
               instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.creatorName || 'I')}&background=D92A63&color=fff`,
               description: data.description || 'No description available.',
+              whatStudentsWillLearn: data.whatStudentsWillLearn || '',
+              level: data.level || '',
               sections: data.numberSessions || 1,
               duration: data.duration || 1,
               students: 0,
@@ -166,6 +171,40 @@ export default function ProductPage({ params }: PageProps) {
     fetchRelatedCourses();
   }, [params.slug]);
 
+  // Fetch creator profile data
+  useEffect(() => {
+    const fetchCreatorProfile = async () => {
+      if (!course?.instructorId || !window.firebaseDb || !window.doc || !window.getDoc) {
+        return;
+      }
+
+      try {
+        const userRef = window.doc(window.firebaseDb, 'users', course.instructorId);
+        const userSnap = await window.getDoc(userRef);
+        
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          setCreatorProfile({
+            name: userData.name || course.instructor,
+            bio: userData.bio || '',
+            expertise: userData.expertise || '',
+            profileImage: userData.profileImage || course.instructorImage,
+            instagram: userData.instagram || '',
+            youtube: userData.youtube || '',
+            twitter: userData.twitter || '',
+            linkedin: userData.linkedin || '',
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching creator profile:', error);
+      }
+    };
+
+    if (course) {
+      fetchCreatorProfile();
+    }
+  }, [course]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#1A1A2E] to-[#0F3460] flex items-center justify-center">
@@ -217,9 +256,11 @@ export default function ProductPage({ params }: PageProps) {
               <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
                 {course.title}
               </h1>
-              <p className="text-gray-300 text-lg leading-relaxed">
-                There are many variations of passages of Lorem Ipsum available, but the majority have suffered alteration.
-              </p>
+              {course.subtitle && (
+                <p className="text-gray-300 text-lg leading-relaxed">
+                  {course.subtitle}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -243,15 +284,6 @@ export default function ProductPage({ params }: PageProps) {
                   Overview
                 </button>
                 <button
-                  onClick={() => setActiveTab('result')}
-                  className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'result'
-                    ? 'bg-gradient-to-r from-[#D92A63] to-[#FF654B] text-white'
-                    : 'bg-white/5 text-gray-300 hover:bg-white/10'
-                    }`}
-                >
-                  Result
-                </button>
-                <button
                   onClick={() => setActiveTab('instructor')}
                   className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'instructor'
                     ? 'bg-gradient-to-r from-[#D92A63] to-[#FF654B] text-white'
@@ -260,49 +292,38 @@ export default function ProductPage({ params }: PageProps) {
                 >
                   Instructor
                 </button>
-                <button
-                  onClick={() => setActiveTab('faqs')}
-                  className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'faqs'
-                    ? 'bg-gradient-to-r from-[#D92A63] to-[#FF654B] text-white'
-                    : 'bg-white/5 text-gray-300 hover:bg-white/10'
-                    }`}
-                >
-                  FAQs
-                </button>
               </div>
 
               {/* Tab Content */}
               <div className="bg-white/5 backdrop-blur-lg rounded-xl p-8 border border-white/10">
                 {activeTab === 'overview' && (
-                  <div>
-                    <h2 className="text-2xl font-bold text-white mb-4">Course Description</h2>
-                    <div className="text-gray-300 space-y-4">
-                      <p>
-                        Anything embarrassing hidden in the middle of text. All the Lorem Ipsum generators on the Internet tend to repeat predefined chunks as necessary, making this the first true generator.
-                      </p>
-                      <ul className="list-disc list-inside space-y-2">
-                        <li>But her ready least set lived spite solid</li>
-                        <li>Frequently partiality possession resolution at or appearance</li>
-                        <li>No visited raising gravity outward subject my cottage Mr be</li>
-                      </ul>
-                      <p>
-                        Improved own provided blessing may peculiar domestic. Sight house has sex never. No visited raising gravity outward subject my cottage Mr be. Hold do at tore in park feet near my case.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                  <div className="space-y-6">
+                    {course.description && (
+                      <div>
+                        <h2 className="text-2xl font-bold text-white mb-4">Course Description</h2>
+                        <div className="text-gray-300 whitespace-pre-wrap">
+                          {course.description}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {course.whatStudentsWillLearn && (
+                      <div>
+                        <h2 className="text-2xl font-bold text-white mb-4">What Students Will Learn</h2>
+                        <div className="text-gray-300 whitespace-pre-wrap">
+                          {course.whatStudentsWillLearn}
+                        </div>
+                      </div>
+                    )}
 
-                {activeTab === 'result' && (
-                  <div>
-                    <h2 className="text-2xl font-bold text-white mb-4">Results after course completion</h2>
-                    <div className="text-gray-300 space-y-4">
-                      <p>
-                        Nor again is there anyone who loves or pursues or desires to obtain pain of itself, because it is pain, but because occasionally circumstances occur in which toil and pain can procure him some great pleasure.
-                      </p>
-                      <p>
-                        But who has any right to find fault with a man who chooses to enjoy a pleasure that has no annoying consequences, or one who avoids a pain that produces no resultant pleasure.
-                      </p>
-                    </div>
+                    {course.level && (
+                      <div>
+                        <h2 className="text-2xl font-bold text-white mb-4">Level</h2>
+                        <div className="text-gray-300">
+                          {course.level}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -310,57 +331,71 @@ export default function ProductPage({ params }: PageProps) {
                   <div>
                     <div className="flex gap-6 items-start">
                       <img
-                        src={course.instructorImage}
-                        alt={course.instructor}
-                        className="w-24 h-24 rounded-full"
+                        src={creatorProfile?.profileImage || course.instructorImage}
+                        alt={creatorProfile?.name || course.instructor}
+                        className="w-24 h-24 rounded-full object-cover"
                       />
                       <div className="flex-1">
-                        <h3 className="text-2xl font-bold text-white mb-1">{course.instructor}</h3>
-                        <p className="text-gray-400 mb-4">Instructor</p>
-                        <p className="text-gray-300 mb-4">
-                          But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born.
-                        </p>
-                        <div className="flex gap-3">
-                          <a href="#" className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#FF654B] transition-colors">
-                            <span className="text-white text-sm">f</span>
-                          </a>
-                          <a href="#" className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#FF654B] transition-colors">
-                            <span className="text-white text-sm">in</span>
-                          </a>
-                          <a href="#" className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#FF654B] transition-colors">
-                            <span className="text-white text-sm">tw</span>
-                          </a>
-                        </div>
+                        <h3 className="text-2xl font-bold text-white mb-1">
+                          {creatorProfile?.name || course.instructor}
+                        </h3>
+                        {creatorProfile?.expertise && (
+                          <p className="text-gray-400 mb-4">{creatorProfile.expertise}</p>
+                        )}
+                        {creatorProfile?.bio && (
+                          <p className="text-gray-300 mb-4">
+                            {creatorProfile.bio}
+                          </p>
+                        )}
+                        {(creatorProfile?.instagram || creatorProfile?.youtube || creatorProfile?.twitter || creatorProfile?.linkedin) && (
+                          <div className="flex gap-3">
+                            {creatorProfile.instagram && (
+                              <a 
+                                href={creatorProfile.instagram} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#FF654B] transition-colors"
+                                title="Instagram"
+                              >
+                                <span className="text-white text-sm">IG</span>
+                              </a>
+                            )}
+                            {creatorProfile.youtube && (
+                              <a 
+                                href={creatorProfile.youtube} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#FF654B] transition-colors"
+                                title="YouTube"
+                              >
+                                <span className="text-white text-sm">YT</span>
+                              </a>
+                            )}
+                            {creatorProfile.twitter && (
+                              <a 
+                                href={creatorProfile.twitter} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#FF654B] transition-colors"
+                                title="Twitter"
+                              >
+                                <span className="text-white text-sm">TW</span>
+                              </a>
+                            )}
+                            {creatorProfile.linkedin && (
+                              <a 
+                                href={creatorProfile.linkedin} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#FF654B] transition-colors"
+                                title="LinkedIn"
+                              >
+                                <span className="text-white text-sm">LI</span>
+                              </a>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'faqs' && (
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-lg font-bold text-white mb-2">
-                        What should I look for in a course description when choosing an online course?
-                      </h3>
-                      <p className="text-gray-300">
-                        When choosing an online course, look for a detailed course description that outlines the learning objectives, course content, prerequisites, instructor information, and any assessments or assignments.
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-white mb-2">
-                        How can I determine if a course description aligns with my learning goals?
-                      </h3>
-                      <p className="text-gray-300">
-                        Pay attention to the course objectives and content outlined in the description. Ensure they match your learning objectives and interests. Look for keywords that indicate relevance to your goals.
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-white mb-2">
-                        Are there specific formats or structures that course descriptions typically follow?
-                      </h3>
-                      <p className="text-gray-300">
-                        While there is no standard format, course descriptions often include an overview of the course, learning outcomes, curriculum breakdown, instructor information, prerequisites, and any additional resources or materials.
-                      </p>
                     </div>
                   </div>
                 )}
@@ -381,7 +416,7 @@ export default function ProductPage({ params }: PageProps) {
 
                 {/* Price */}
                 <h3 className="text-3xl font-bold text-white mb-6">
-                  ${course.price.toFixed(2)} USD
+                  ₹{course.price.toFixed(2)} INR
                 </h3>
 
                 {/* Course Meta */}
