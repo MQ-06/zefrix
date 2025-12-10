@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Play } from 'lucide-react';
 
 export default function HeroSection() {
   return (
@@ -84,19 +83,6 @@ export default function HeroSection() {
                   Start Learning
                 </Link>
               </motion.div>
-              <motion.a
-                href="#"
-                className="flex items-center gap-4 text-white hover:text-primary transition-colors duration-200 group"
-                whileHover={{ x: 5 }}
-              >
-                <span className="text-lg font-medium">Watch Video</span>
-                <motion.div 
-                  className="w-14 h-14 rounded-full border-2 border-white flex items-center justify-center group-hover:border-primary transition-colors duration-200"
-                  whileHover={{ scale: 1.1 }}
-                >
-                  <Play className="w-6 h-6 ml-1" fill="currentColor" />
-                </motion.div>
-              </motion.a>
             </div>
           </motion.div>
 

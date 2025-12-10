@@ -20,12 +20,17 @@ declare global {
   interface Window {
     firebaseAuth: any;
     firebaseDb: any;
+    firebaseStorage: any;
     logout: any;
     doc: any;
     getDoc: any;
     addDoc: any;
     Timestamp: any;
     updateProfile: any;
+    ref: any;
+    uploadBytes: any;
+    getDownloadURL: any;
+    deleteObject: any;
   }
 }
 
@@ -166,6 +171,7 @@ export default function CreatorDashboard() {
           import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
           import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, addDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -180,6 +186,7 @@ export default function CreatorDashboard() {
           const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
           window.firebaseAuth = getAuth(app);
           window.firebaseDb = getFirestore(app);
+          window.firebaseStorage = getStorage(app);
           window.doc = doc;
           window.getDoc = getDoc;
           window.setDoc = setDoc;
@@ -193,6 +200,10 @@ export default function CreatorDashboard() {
           window.addDoc = addDoc;
           window.Timestamp = Timestamp;
           window.updateProfile = updateProfile;
+          window.ref = ref;
+          window.uploadBytes = uploadBytes;
+          window.getDownloadURL = getDownloadURL;
+          window.deleteObject = deleteObject;
 
           console.log('✅ Firebase initialized - serverTimestamp available:', typeof window.serverTimestamp);
           console.log('✅ Firebase objects:', {
@@ -758,61 +769,92 @@ export default function CreatorDashboard() {
         /* Form Styles */
         .creator-form-container {
           background: rgba(255, 255, 255, 0.05);
-          padding: 1.5rem;
-          border-radius: 12px;
+          padding: 2.5rem;
+          border-radius: 16px;
+          max-width: 900px;
+          margin: 0 auto;
         }
 
         .creator-form {
           display: flex;
           flex-direction: column;
-          gap: 1.25rem;
+          gap: 0;
+        }
+
+        .creator-form-section {
+          margin-bottom: 3rem;
+          padding-bottom: 2.5rem;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .creator-form-section:last-of-type {
+          border-bottom: none;
+          margin-bottom: 2rem;
         }
 
         .creator-form-heading {
-          font-size: 1.125rem;
+          font-size: 1.25rem;
           font-weight: 700;
           color: #fff;
-          margin-top: 1.5rem;
-          margin-bottom: 0.75rem;
+          margin-bottom: 1.5rem;
+          padding-bottom: 0.75rem;
+          border-bottom: 2px solid rgba(217, 42, 99, 0.3);
         }
 
-        .creator-form-heading:first-child {
-          margin-top: 0;
+        .creator-form-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1.5rem;
+          margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+          .creator-form-grid {
+            grid-template-columns: 1fr;
+          }
         }
 
         .creator-form-group {
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
+          gap: 0.75rem;
         }
 
         .creator-field-label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: rgba(255, 255, 255, 0.95);
+          letter-spacing: 0.3px;
+        }
+
+        .creator-field-hint {
           font-size: 0.75rem;
-          font-weight: 500;
-          color: rgba(255, 255, 255, 0.9);
+          color: rgba(255, 255, 255, 0.5);
+          margin-top: -0.5rem;
+          font-style: italic;
         }
 
         .creator-form-input,
         .creator-textarea {
           width: 100%;
-          padding: 8px 12px;
+          padding: 12px 16px;
           background: rgba(255, 255, 255, 0.1);
           border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 6px;
+          border-radius: 8px;
           color: #fff;
-          font-size: 0.875rem;
+          font-size: 0.9375rem;
           font-family: inherit;
           transition: all 0.3s;
         }
 
         .creator-select {
           width: 100%;
-          padding: 8px 12px;
+          padding: 12px 16px;
           background: #fff;
           border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 6px;
+          border-radius: 8px;
           color: #000;
-          font-size: 0.875rem;
+          font-size: 0.9375rem;
           font-family: inherit;
           transition: all 0.3s;
         }
@@ -852,13 +894,17 @@ export default function CreatorDashboard() {
 
         .creator-textarea {
           resize: vertical;
-          min-height: 100px;
+          min-height: 120px;
+          line-height: 1.6;
         }
 
         .creator-radio-group {
           display: flex;
-          gap: 2rem;
-          margin-bottom: 1rem;
+          gap: 2.5rem;
+          margin-bottom: 2rem;
+          padding: 1rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 8px;
         }
 
         .creator-radio-wrap {
@@ -884,12 +930,18 @@ export default function CreatorDashboard() {
           display: flex;
           flex-direction: column;
           gap: 1.5rem;
+          margin-top: 1.5rem;
+          padding: 1.5rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .creator-pill-wrap {
           display: flex;
           flex-wrap: wrap;
-          gap: 0.75rem;
+          gap: 0.875rem;
+          margin-top: 0.5rem;
         }
 
         .creator-pill-item {
@@ -903,12 +955,13 @@ export default function CreatorDashboard() {
         }
 
         .creator-pill-label {
-          padding: 0.5rem 1rem;
+          padding: 0.625rem 1.25rem;
           background: rgba(255, 255, 255, 0.1);
           border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 20px;
+          border-radius: 24px;
           color: rgba(255, 255, 255, 0.7);
           font-size: 0.875rem;
+          font-weight: 500;
           transition: all 0.3s;
           cursor: pointer;
         }
@@ -919,18 +972,43 @@ export default function CreatorDashboard() {
           color: #fff;
         }
 
+        .creator-form-actions {
+          margin-top: 2rem;
+          padding-top: 2rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         .creator-submit-btn {
           background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
           color: white;
           border: none;
-          padding: 14px 32px;
-          border-radius: 8px;
-          font-size: 1rem;
+          padding: 16px 40px;
+          border-radius: 10px;
+          font-size: 1.0625rem;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s;
+          width: 100%;
+          max-width: 300px;
+        }
+
+        .creator-message {
           margin-top: 1rem;
-          align-self: flex-start;
+          padding: 1rem 1.25rem;
+          border-radius: 8px;
+          font-size: 0.9375rem;
+        }
+
+        .creator-message-success {
+          background-color: rgba(212, 237, 218, 0.15);
+          color: #d4edda;
+          border: 1px solid rgba(195, 230, 203, 0.3);
+        }
+
+        .creator-message-error {
+          background-color: rgba(248, 215, 218, 0.15);
+          color: #f8d7da;
+          border: 1px solid rgba(245, 198, 203, 0.3);
         }
 
         .creator-submit-btn:hover {

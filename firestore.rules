@@ -108,6 +108,26 @@ service cloud.firestore {
                             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
+    // Contacts collection - Contact form messages
+    match /contacts/{contactId} {
+      // Anyone can create contact messages (no auth required for contact form)
+      allow create: if request.resource.data.keys().hasAll(['name', 'email', 'subject', 'message', 'status', 'createdAt', 'read']) &&
+                       request.resource.data.name is string &&
+                       request.resource.data.email is string &&
+                       request.resource.data.subject is string &&
+                       request.resource.data.message is string &&
+                       request.resource.data.status == 'new' &&
+                       request.resource.data.read == false;
+      
+      // Only admins can read contact messages
+      allow read: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // Only admins can update/delete contact messages
+      allow update, delete: if request.auth != null && 
+                               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

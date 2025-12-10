@@ -24,41 +24,99 @@ export default function ContactUsPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [firebaseReady, setFirebaseReady] = useState(false);
 
   useEffect(() => {
     // Load Firebase if not already loaded
-    if (typeof window !== 'undefined' && !window.firebaseDb) {
-      const script = document.createElement('script');
-      script.type = 'module';
-      script.textContent = `
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        
-        const firebaseConfig = {
-          apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-          authDomain: "zefrix-custom.firebaseapp.com",
-          projectId: "zefrix-custom",
-          storageBucket: "zefrix-custom.firebasestorage.app",
-          messagingSenderId: "50732408558",
-          appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-          measurementId: "G-27HS1SWB5X"
-        };
-        
-        const app = initializeApp(firebaseConfig);
-        window.firebaseDb = getFirestore(app);
-        window.collection = collection;
-        window.addDoc = addDoc;
-        window.serverTimestamp = serverTimestamp;
-      `;
-      document.head.appendChild(script);
-    }
+    const initializeFirebase = async () => {
+      // Check if already initialized
+      if (window.firebaseDb && window.collection && window.addDoc && window.serverTimestamp) {
+        setFirebaseReady(true);
+        return;
+      }
+
+      // Load Firebase App script first
+      const appScript = document.createElement('script');
+      appScript.src = "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      appScript.type = "module";
+      
+      appScript.onload = () => {
+        // Then load Firestore
+        const firestoreScript = document.createElement('script');
+        firestoreScript.type = "module";
+        firestoreScript.innerHTML = `
+          import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+          import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          
+          const firebaseConfig = {
+            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+            authDomain: "zefrix-custom.firebaseapp.com",
+            projectId: "zefrix-custom",
+            storageBucket: "zefrix-custom.firebasestorage.app",
+            messagingSenderId: "50732408558",
+            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+            measurementId: "G-27HS1SWB5X"
+          };
+          
+          const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+          window.firebaseDb = getFirestore(app);
+          window.collection = collection;
+          window.addDoc = addDoc;
+          window.serverTimestamp = serverTimestamp;
+          
+          console.log('✅ Contact form Firebase initialized');
+          window.dispatchEvent(new CustomEvent('firebaseReady'));
+        `;
+        document.body.appendChild(firestoreScript);
+      };
+
+      document.body.appendChild(appScript);
+
+      // Listen for Firebase ready event
+      const handleFirebaseReady = () => {
+        setFirebaseReady(true);
+      };
+      window.addEventListener('firebaseReady', handleFirebaseReady);
+
+      return () => {
+        window.removeEventListener('firebaseReady', handleFirebaseReady);
+      };
+    };
+
+    initializeFirebase();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!window.firebaseDb || !window.collection || !window.addDoc) {
-      showInfo('Please wait a moment and try again...');
+    // Validation
+    if (!formData.name.trim()) {
+      showError('Please enter your name');
+      return;
+    }
+    if (!formData.email.trim()) {
+      showError('Please enter your email');
+      return;
+    }
+    if (!formData.subject.trim()) {
+      showError('Please enter a subject');
+      return;
+    }
+    if (!formData.message.trim()) {
+      showError('Please enter your message');
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      showError('Please enter a valid email address');
+      return;
+    }
+
+    // Check if Firebase is ready
+    if (!firebaseReady || !window.firebaseDb || !window.collection || !window.addDoc || !window.serverTimestamp) {
+      showError('System is initializing. Please wait a moment and try again.');
       return;
     }
 
@@ -68,16 +126,18 @@ export default function ContactUsPage() {
     try {
       // Save to Firestore
       const contactsRef = window.collection(window.firebaseDb, 'contacts');
-      await window.addDoc(contactsRef, {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone || '',
-        subject: formData.subject,
-        message: formData.message,
+      const docRef = await window.addDoc(contactsRef, {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim() || '',
+        subject: formData.subject.trim(),
+        message: formData.message.trim(),
         status: 'new',
         createdAt: window.serverTimestamp(),
         read: false
       });
+
+      console.log('✅ Contact message saved to Firestore with ID:', docRef.id);
 
       showSuccess('Thank you! Your message has been sent successfully. We\'ll get back to you soon!');
       setSubmitMessage({
@@ -95,10 +155,11 @@ export default function ContactUsPage() {
       });
     } catch (error: any) {
       console.error('Error submitting contact form:', error);
-      showError('Sorry, there was an error sending your message. Please try again.');
+      const errorMessage = error.message || 'Sorry, there was an error sending your message. Please try again.';
+      showError(errorMessage);
       setSubmitMessage({
         type: 'error',
-        text: 'Sorry, there was an error sending your message. Please try again.'
+        text: errorMessage
       });
     } finally {
       setIsSubmitting(false);
@@ -241,11 +302,14 @@ export default function ContactUsPage() {
 
                   <input
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !firebaseReady}
                     data-wait="Please wait..."
                     className="button-primary-1 button-full w-button w-full bg-gradient-to-r from-[#E91E63] to-[#FF6B9D] text-white px-8 py-4 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    value={isSubmitting ? 'Sending...' : 'Send Message'}
+                    value={isSubmitting ? 'Sending...' : !firebaseReady ? 'Initializing...' : 'Send Message'}
                   />
+                  {!firebaseReady && (
+                    <p className="text-sm text-gray-500 mt-2">Please wait while we initialize the system...</p>
+                  )}
                 </form>
               </div>
             </motion.div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNotification } from '@/contexts/NotificationContext';
+import { uploadImage, getProfileImagePath, validateFile } from '@/lib/utils/firebaseStorage';
 
 declare global {
   interface Window {
@@ -35,6 +36,11 @@ export default function CreatorProfile() {
     twitter: '',
     linkedin: '',
   });
+
+  // File upload state
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Wait for Firebase and load user data
   useEffect(() => {
@@ -150,6 +156,45 @@ export default function CreatorProfile() {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file
+    const validation = validateFile(file, 'image');
+    if (!validation.valid) {
+      showError(validation.error || 'Invalid file');
+      return;
+    }
+
+    setProfileImageFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfileImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload image immediately
+    if (user) {
+      setUploadingImage(true);
+      try {
+        const path = getProfileImagePath(user.uid, file.name);
+        const downloadURL = await uploadImage(file, path, true);
+        setFormData(prev => ({ ...prev, profileImage: downloadURL }));
+        showSuccess('Profile image uploaded successfully!');
+      } catch (error: any) {
+        console.error('Image upload error:', error);
+        showError(error.message || 'Failed to upload image');
+        setProfileImageFile(null);
+        setProfileImagePreview('');
+      } finally {
+        setUploadingImage(false);
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -291,26 +336,52 @@ export default function CreatorProfile() {
         </div>
 
         <div className="creator-form-group">
-          <label htmlFor="profile-image" className="creator-field-label">Profile Image URL</label>
-          <input
-            type="url"
-            id="profile-image"
-            name="profileImage"
-            className="creator-form-input"
-            value={formData.profileImage}
-            onChange={handleInputChange}
-            placeholder="https://example.com/image.jpg"
-          />
-          {formData.profileImage && (
-            <div style={{ marginTop: '0.5rem' }}>
-              <img
-                src={formData.profileImage}
-                alt="Profile preview"
-                style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover' }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          <label htmlFor="profile-image" className="creator-field-label">Profile Image</label>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <input
+                type="file"
+                id="profile-image"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                onChange={handleImageChange}
+                disabled={uploadingImage}
+                style={{ 
+                  width: '100%',
+                  padding: '0.75rem',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  cursor: uploadingImage ? 'not-allowed' : 'pointer'
+                }}
               />
+              <small style={{ display: 'block', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.75rem' }}>
+                Max size: 5MB. Formats: JPEG, PNG, WebP, GIF. Image will be automatically optimized.
+              </small>
+              {uploadingImage && (
+                <div style={{ marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                  ⏳ Uploading and optimizing image...
+                </div>
+              )}
             </div>
-          )}
+            {(profileImagePreview || formData.profileImage) && (
+              <div style={{ 
+                width: '100px', 
+                height: '100px', 
+                borderRadius: '50%', 
+                overflow: 'hidden',
+                border: '2px solid rgba(217, 42, 99, 0.5)',
+                flexShrink: 0
+              }}>
+                <img
+                  src={profileImagePreview || formData.profileImage}
+                  alt="Profile preview"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="creator-form-group">

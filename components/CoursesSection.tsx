@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { courses } from '@/lib/data';
 import CourseCard from './CourseCard';
 
 declare global {
@@ -138,28 +137,26 @@ export default function CoursesSection() {
     fetchApprovedClasses();
   }, []);
 
-  // Use approved classes if available, otherwise fallback to mock data
-  const featuredCourses = approvedClasses.length > 0 
-    ? approvedClasses.map((classItem) => ({
-        id: classItem.classId,
-        slug: classItem.classId,
-        title: classItem.title,
-        subtitle: classItem.subtitle || '',
-        category: classItem.category,
-        categorySlug: '',
-        subCategory: classItem.subCategory,
-        instructor: classItem.creatorName || 'Creator',
-        instructorId: '',
-        instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
-        image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg',
-        price: classItem.price,
-        originalPrice: classItem.price * 1.2,
-        sections: classItem.numberSessions,
-        duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
-        students: 0,
-        level: 'Beginner' as const,
-      }))
-    : courses.slice(0, 6);
+  // Map approved classes to course format (only real classes, no dummy data)
+  const featuredCourses = approvedClasses.map((classItem) => ({
+    id: classItem.classId,
+    slug: classItem.classId,
+    title: classItem.title,
+    subtitle: classItem.subtitle || '',
+    category: classItem.category,
+    categorySlug: '',
+    subCategory: classItem.subCategory,
+    instructor: classItem.creatorName || 'Creator',
+    instructorId: '',
+    instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
+    image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg',
+    price: classItem.price,
+    originalPrice: classItem.price * 1.2,
+    sections: classItem.numberSessions,
+    duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
+    students: 0,
+    level: 'Beginner' as const,
+  }));
 
   return (
     <section className="section-spacing-bottom">
@@ -185,11 +182,26 @@ export default function CoursesSection() {
           <div className="text-center py-12">
             <p className="text-gray-400 text-lg">Loading courses...</p>
           </div>
-        ) : (
+        ) : featuredCourses.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {featuredCourses.map((course, index) => (
               <CourseCard key={course.id} course={course} />
             ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-lg mb-4">
+              No classes available yet.
+            </div>
+            <p className="text-gray-500 text-sm mb-6">
+              Check back soon for new courses!
+            </p>
+            <Link
+              href="/signup-login"
+              className="inline-block bg-gradient-to-r from-[#E91E63] to-[#FF6B9D] text-white px-8 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300"
+            >
+              Signup today!
+            </Link>
           </div>
         )}
       </div>

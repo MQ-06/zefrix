@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { courses } from '@/lib/data';
 import { notFound, useRouter } from 'next/navigation';
 import { BookOpen, Clock, Users, Globe, Award } from 'lucide-react';
 import Link from 'next/link';
@@ -25,9 +24,8 @@ interface PageProps {
 }
 
 export default function ProductPage({ params }: PageProps) {
-  const staticCourse = courses.find((c) => c.slug === params.slug);
-  const [course, setCourse] = useState<any>(staticCourse || null);
-  const [loading, setLoading] = useState(!staticCourse);
+  const [course, setCourse] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const { addToCart, cart } = useCart();
   const router = useRouter();
@@ -69,11 +67,6 @@ export default function ProductPage({ params }: PageProps) {
     }
 
     const fetchCourse = async () => {
-      if (staticCourse) {
-        setLoading(false);
-        return;
-      }
-
       // Wait for Firebase to load
       if (!window.firebaseDb || !window.doc || !window.getDoc) {
         setTimeout(fetchCourse, 500);
@@ -86,30 +79,40 @@ export default function ProductPage({ params }: PageProps) {
 
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setCourse({
-            id: docSnap.id,
-            slug: docSnap.id,
-            title: data.title || 'Untitled Class',
-            price: data.price || 0,
-            image: data.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
-            instructor: data.creatorName || 'Instructor',
-            instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.creatorName || 'I')}&background=D92A63&color=fff`,
-            description: data.description || 'No description available.',
-            sections: data.numberSessions || 1,
-            duration: data.duration || 1,
-            students: 0,
-            originalPrice: data.price || 0,
-          });
+          // Only show approved classes
+          if (data.status === 'approved') {
+            setCourse({
+              id: docSnap.id,
+              slug: docSnap.id,
+              title: data.title || 'Untitled Class',
+              price: data.price || 0,
+              image: data.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
+              instructor: data.creatorName || 'Instructor',
+              instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.creatorName || 'I')}&background=D92A63&color=fff`,
+              description: data.description || 'No description available.',
+              sections: data.numberSessions || 1,
+              duration: data.duration || 1,
+              students: 0,
+              originalPrice: data.price || 0,
+            });
+          } else {
+            // Class exists but not approved
+            setCourse(null);
+          }
+        } else {
+          // Class not found
+          setCourse(null);
         }
       } catch (err) {
         console.error('Error fetching class:', err);
+        setCourse(null);
       } finally {
         setLoading(false);
       }
     };
 
     fetchCourse();
-  }, [params.slug, staticCourse]);
+  }, [params.slug]);
 
   useEffect(() => {
     if (course) {

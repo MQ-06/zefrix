@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { uploadImage, getClassThumbnailPath, validateFile } from '@/lib/utils/firebaseStorage';
 
 declare global {
   interface Window {
@@ -110,6 +111,12 @@ export default function CreateClassForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
+  
+  // Thumbnail upload state
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
+  const [thumbnailURL, setThumbnailURL] = useState<string>('');
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
   // Wait for Firebase to be ready
   useEffect(() => {
@@ -154,6 +161,30 @@ export default function CreateClassForm() {
     setSelectedDays(prev =>
       prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
     );
+  };
+
+  const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file
+    const validation = validateFile(file, 'image');
+    if (!validation.valid) {
+      setSubmitMessage({ type: 'error', text: validation.error || 'Invalid file' });
+      return;
+    }
+
+    setThumbnailFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setThumbnailPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload image immediately (we'll need classId after form submission, so store file for now)
+    // For now, we'll upload after class is created, but show preview
   };
 
   // Helper function to calculate minutes between two times
@@ -321,6 +352,22 @@ export default function CreateClassForm() {
       // Generate class ID
       const classId = `CLASS_${new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)}_${Math.random().toString(36).substr(2, 9)}`;
 
+      // Upload thumbnail if file was selected
+      let finalVideoLink = videoLink;
+      if (thumbnailFile) {
+        try {
+          setUploadingThumbnail(true);
+          const path = getClassThumbnailPath(classId, thumbnailFile.name);
+          finalVideoLink = await uploadImage(thumbnailFile, path, true);
+          setThumbnailURL(finalVideoLink);
+        } catch (error: any) {
+          console.error('Thumbnail upload error:', error);
+          // Continue with form submission even if thumbnail upload fails
+        } finally {
+          setUploadingThumbnail(false);
+        }
+      }
+
       // Prepare payload for n8n webhook
       const n8nPayload = {
         class_id: classId,
@@ -394,7 +441,7 @@ export default function CreateClassForm() {
         description: description,
         whatStudentsWillLearn: whatStudentsWillLearn,
         level: level,
-        videoLink: videoLink,
+        videoLink: finalVideoLink || videoLink,
         price: price,
         maxSeats: maxSeats,
         scheduleType: scheduleType as 'one-time' | 'recurring',
@@ -469,6 +516,9 @@ export default function CreateClassForm() {
         setSelectedDays([]);
         setScheduleType('one-time');
         setSubmitMessage(null);
+        setThumbnailFile(null);
+        setThumbnailPreview('');
+        setThumbnailURL('');
       }, 2000);
 
     } catch (error: any) {
@@ -503,284 +553,365 @@ export default function CreateClassForm() {
 
   return (
     <form onSubmit={handleSubmit} className="creator-form">
-      <h5 className="creator-form-heading">Class Information Fields</h5>
-      
-      <div className="creator-form-group">
-        <label htmlFor="title" className="creator-field-label">Title</label>
-        <input
-          type="text"
-          id="title"
-          name="title"
-          className="creator-form-input"
-          required
-        />
-      </div>
-
-      <div className="creator-form-group">
-        <label htmlFor="subtitle" className="creator-field-label">Subtitle</label>
-        <input
-          type="text"
-          id="subtitle"
-          name="subtitle"
-          className="creator-form-input"
-          required
-        />
-      </div>
-
-      <div className="creator-form-group">
-        <label htmlFor="category" className="creator-field-label">Category</label>
-        <select
-          id="category"
-          name="category"
-          className="creator-form-input creator-select"
-          value={selectedCategory}
-          onChange={handleCategoryChange}
-          required
-        >
-          <option value="">Select a category</option>
-          {categories.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {selectedCategory && subCategories[selectedCategory] && (
-        <div className="creator-form-group">
-          <label htmlFor="subcategory" className="creator-field-label">Sub Category</label>
-          <select
-            id="subcategory"
-            name="subcategory"
-            className="creator-form-input creator-select"
-            required
-          >
-            <option value="">Select a subcategory</option>
-            {subCategories[selectedCategory].map((subcat) => (
-              <option key={subcat} value={subcat}>
-                {subcat}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      <div className="creator-form-group">
-        <label htmlFor="description" className="creator-field-label">Description</label>
-        <textarea
-          id="description"
-          name="description"
-          className="creator-form-input creator-textarea"
-          rows={4}
-          required
-        />
-      </div>
-
-      <div className="creator-form-group">
-        <label htmlFor="learn" className="creator-field-label">What Students Will Learn</label>
-        <textarea
-          id="learn"
-          name="learn"
-          className="creator-form-input creator-textarea"
-          rows={4}
-          required
-        />
-      </div>
-
-      <div className="creator-form-group">
-        <label htmlFor="level" className="creator-field-label">Level</label>
-        <input
-          type="text"
-          id="level"
-          name="level"
-          className="creator-form-input"
-          placeholder="e.g., Beginner, Intermediate, Advanced"
-          required
-        />
-      </div>
-
-      <h5 className="creator-form-heading">Media</h5>
-      <div className="creator-form-group">
-        <label htmlFor="video-link" className="creator-field-label">Video Link</label>
-        <input
-          type="url"
-          id="video-link"
-          name="videoLink"
-          className="creator-form-input"
-          placeholder="https://youtube.com/watch?v=..."
-        />
-      </div>
-
-      <h5 className="creator-form-heading">Pricing</h5>
-      <div className="creator-form-group">
-        <label htmlFor="price" className="creator-field-label">Price (INR)</label>
-        <input
-          type="number"
-          id="price"
-          name="price"
-          className="creator-form-input"
-          min="0"
-          step="0.01"
-          required
-        />
-      </div>
-
-      <div className="creator-form-group">
-        <label htmlFor="max-seats" className="creator-field-label">Max Seats (Optional)</label>
-        <input
-          type="number"
-          id="max-seats"
-          name="maxSeats"
-          className="creator-form-input"
-          min="1"
-        />
-      </div>
-
-      <h5 className="creator-form-heading">Schedule Type</h5>
-      <div className="creator-radio-group">
-        <label className="creator-radio-wrap">
-          <input
-            type="radio"
-            name="scheduleType"
-            value="one-time"
-            checked={scheduleType === 'one-time'}
-            onChange={(e) => setScheduleType(e.target.value)}
-            className="creator-radio-input"
-          />
-          <span className="creator-radio-label">One-time Session</span>
-        </label>
-        <label className="creator-radio-wrap">
-          <input
-            type="radio"
-            name="scheduleType"
-            value="recurring"
-            checked={scheduleType === 'recurring'}
-            onChange={(e) => setScheduleType(e.target.value)}
-            className="creator-radio-input"
-          />
-          <span className="creator-radio-label">Recurring Batch</span>
-        </label>
-      </div>
-
-      {scheduleType === 'one-time' && (
-        <div className="creator-one-time-fields">
+      {/* Basic Information Section */}
+      <div className="creator-form-section">
+        <h5 className="creator-form-heading">Basic Information</h5>
+        <div className="creator-form-grid">
           <div className="creator-form-group">
-            <label htmlFor="date" className="creator-field-label">Date</label>
+            <label htmlFor="title" className="creator-field-label">Title *</label>
             <input
-              type="date"
-              id="date"
-              name="date"
+              type="text"
+              id="title"
+              name="title"
               className="creator-form-input"
+              placeholder="Enter class title"
               required
             />
           </div>
+
           <div className="creator-form-group">
-            <label htmlFor="start-time" className="creator-field-label">Start Time</label>
+            <label htmlFor="subtitle" className="creator-field-label">Subtitle *</label>
             <input
-              type="time"
-              id="start-time"
-              name="startTime"
+              type="text"
+              id="subtitle"
+              name="subtitle"
               className="creator-form-input"
-              required
-            />
-          </div>
-          <div className="creator-form-group">
-            <label htmlFor="end-time" className="creator-field-label">End Time</label>
-            <input
-              type="time"
-              id="end-time"
-              name="endTime"
-              className="creator-form-input"
+              placeholder="Enter a brief subtitle"
               required
             />
           </div>
         </div>
-      )}
 
-      {scheduleType === 'recurring' && (
-        <div className="creator-recurring-fields">
+        <div className="creator-form-grid">
           <div className="creator-form-group">
-            <label className="creator-field-label">Days</label>
-            <div className="creator-pill-wrap">
-              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
-                <label key={day} className="creator-pill-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedDays.includes(day)}
-                    onChange={() => handleDayToggle(day)}
-                    className="creator-pill-checkbox"
-                  />
-                  <span className="creator-pill-label">{day}</span>
-                </label>
+            <label htmlFor="category" className="creator-field-label">Category *</label>
+            <select
+              id="category"
+              name="category"
+              className="creator-form-input creator-select"
+              value={selectedCategory}
+              onChange={handleCategoryChange}
+              required
+            >
+              <option value="">Select a category</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
               ))}
+            </select>
+          </div>
+
+          {selectedCategory && subCategories[selectedCategory] && (
+            <div className="creator-form-group">
+              <label htmlFor="subcategory" className="creator-field-label">Sub Category *</label>
+              <select
+                id="subcategory"
+                name="subcategory"
+                className="creator-form-input creator-select"
+                required
+              >
+                <option value="">Select a subcategory</option>
+                {subCategories[selectedCategory].map((subcat) => (
+                  <option key={subcat} value={subcat}>
+                    {subcat}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div className="creator-form-group">
+          <label htmlFor="description" className="creator-field-label">Description *</label>
+          <textarea
+            id="description"
+            name="description"
+            className="creator-form-input creator-textarea"
+            rows={5}
+            placeholder="Describe your class in detail..."
+            required
+          />
+        </div>
+
+        <div className="creator-form-group">
+          <label htmlFor="learn" className="creator-field-label">What Students Will Learn *</label>
+          <textarea
+            id="learn"
+            name="learn"
+            className="creator-form-input creator-textarea"
+            rows={5}
+            placeholder="List the key learning outcomes..."
+            required
+          />
+        </div>
+
+        <div className="creator-form-group">
+          <label htmlFor="level" className="creator-field-label">Level *</label>
+          <input
+            type="text"
+            id="level"
+            name="level"
+            className="creator-form-input"
+            placeholder="e.g., Beginner, Intermediate, Advanced"
+            required
+          />
+        </div>
+      </div>
+
+      {/* Media Section */}
+      <div className="creator-form-section">
+        <h5 className="creator-form-heading">Media</h5>
+        
+        <div className="creator-form-group">
+          <label htmlFor="thumbnail" className="creator-field-label">Class Thumbnail / Banner</label>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <input
+                type="file"
+                id="thumbnail"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                onChange={handleThumbnailChange}
+                disabled={uploadingThumbnail}
+                style={{ 
+                  width: '100%',
+                  padding: '0.75rem',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  cursor: uploadingThumbnail ? 'not-allowed' : 'pointer'
+                }}
+              />
+              <small className="creator-field-hint">
+                Max size: 5MB. Formats: JPEG, PNG, WebP, GIF. Image will be automatically optimized.
+              </small>
+              {uploadingThumbnail && (
+                <div style={{ marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                  ⏳ Uploading and optimizing thumbnail...
+                </div>
+              )}
+              {thumbnailURL && (
+                <input type="hidden" name="videoLink" value={thumbnailURL} />
+              )}
+            </div>
+            {(thumbnailPreview || thumbnailURL) && (
+              <div style={{ 
+                width: '150px', 
+                height: '100px', 
+                borderRadius: '8px', 
+                overflow: 'hidden',
+                border: '2px solid rgba(217, 42, 99, 0.5)',
+                flexShrink: 0
+              }}>
+                <img
+                  src={thumbnailPreview || thumbnailURL}
+                  alt="Thumbnail preview"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="creator-form-group">
+          <label htmlFor="video-link" className="creator-field-label">Intro Video Link (Optional)</label>
+          <input
+            type="url"
+            id="video-link"
+            name="videoLink"
+            className="creator-form-input"
+            placeholder="https://youtube.com/watch?v=... or direct video URL"
+          />
+          <small className="creator-field-hint">Add a promotional video or intro video for your class</small>
+        </div>
+      </div>
+
+      {/* Pricing Section */}
+      <div className="creator-form-section">
+        <h5 className="creator-form-heading">Pricing & Capacity</h5>
+        <div className="creator-form-grid">
+          <div className="creator-form-group">
+            <label htmlFor="price" className="creator-field-label">Price (INR) *</label>
+            <input
+              type="number"
+              id="price"
+              name="price"
+              className="creator-form-input"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              required
+            />
+          </div>
+
+          <div className="creator-form-group">
+            <label htmlFor="max-seats" className="creator-field-label">Max Seats (Optional)</label>
+            <input
+              type="number"
+              id="max-seats"
+              name="maxSeats"
+              className="creator-form-input"
+              min="1"
+              placeholder="Leave empty for unlimited"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Schedule Section */}
+      <div className="creator-form-section">
+        <h5 className="creator-form-heading">Schedule</h5>
+        <div className="creator-radio-group">
+          <label className="creator-radio-wrap">
+            <input
+              type="radio"
+              name="scheduleType"
+              value="one-time"
+              checked={scheduleType === 'one-time'}
+              onChange={(e) => setScheduleType(e.target.value)}
+              className="creator-radio-input"
+            />
+            <span className="creator-radio-label">One-time Session</span>
+          </label>
+          <label className="creator-radio-wrap">
+            <input
+              type="radio"
+              name="scheduleType"
+              value="recurring"
+              checked={scheduleType === 'recurring'}
+              onChange={(e) => setScheduleType(e.target.value)}
+              className="creator-radio-input"
+            />
+            <span className="creator-radio-label">Recurring Batch</span>
+          </label>
+        </div>
+
+        {scheduleType === 'one-time' && (
+          <div className="creator-one-time-fields">
+            <div className="creator-form-grid">
+              <div className="creator-form-group">
+                <label htmlFor="date" className="creator-field-label">Date *</label>
+                <input
+                  type="date"
+                  id="date"
+                  name="date"
+                  className="creator-form-input"
+                  required
+                />
+              </div>
+            </div>
+            <div className="creator-form-grid">
+              <div className="creator-form-group">
+                <label htmlFor="start-time" className="creator-field-label">Start Time *</label>
+                <input
+                  type="time"
+                  id="start-time"
+                  name="startTime"
+                  className="creator-form-input"
+                  required
+                />
+              </div>
+              <div className="creator-form-group">
+                <label htmlFor="end-time" className="creator-field-label">End Time *</label>
+                <input
+                  type="time"
+                  id="end-time"
+                  name="endTime"
+                  className="creator-form-input"
+                  required
+                />
+              </div>
             </div>
           </div>
-          <div className="creator-form-group">
-            <label htmlFor="start-date" className="creator-field-label">Start Date</label>
-            <input
-              type="date"
-              id="start-date"
-              name="startDate"
-              className="creator-form-input"
-              required
-            />
-          </div>
-          <div className="creator-form-group">
-            <label htmlFor="end-date" className="creator-field-label">End Date</label>
-            <input
-              type="date"
-              id="end-date"
-              name="endDate"
-              className="creator-form-input"
-              required
-            />
-          </div>
-          <div className="creator-form-group">
-            <label htmlFor="recurring-start-time" className="creator-field-label">Start Time</label>
-            <input
-              type="time"
-              id="recurring-start-time"
-              name="recurringStartTime"
-              className="creator-form-input"
-              required
-            />
-          </div>
-          <div className="creator-form-group">
-            <label htmlFor="recurring-end-time" className="creator-field-label">End Time</label>
-            <input
-              type="time"
-              id="recurring-end-time"
-              name="recurringEndTime"
-              className="creator-form-input"
-              required
-            />
-          </div>
-        </div>
-      )}
+        )}
 
-      <button 
-        type="submit" 
-        className="creator-submit-btn"
-        disabled={isSubmitting}
-        style={{ opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
-      >
-        {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
-      </button>
+        {scheduleType === 'recurring' && (
+          <div className="creator-recurring-fields">
+            <div className="creator-form-group">
+              <label className="creator-field-label">Select Days *</label>
+              <div className="creator-pill-wrap">
+                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
+                  <label key={day} className="creator-pill-item">
+                    <input
+                      type="checkbox"
+                      checked={selectedDays.includes(day)}
+                      onChange={() => handleDayToggle(day)}
+                      className="creator-pill-checkbox"
+                    />
+                    <span className="creator-pill-label">{day}</span>
+                  </label>
+                ))}
+              </div>
+              <small className="creator-field-hint">Select the days when sessions will occur</small>
+            </div>
+            <div className="creator-form-grid">
+              <div className="creator-form-group">
+                <label htmlFor="start-date" className="creator-field-label">Start Date *</label>
+                <input
+                  type="date"
+                  id="start-date"
+                  name="startDate"
+                  className="creator-form-input"
+                  required
+                />
+              </div>
+              <div className="creator-form-group">
+                <label htmlFor="end-date" className="creator-field-label">End Date *</label>
+                <input
+                  type="date"
+                  id="end-date"
+                  name="endDate"
+                  className="creator-form-input"
+                  required
+                />
+              </div>
+            </div>
+            <div className="creator-form-grid">
+              <div className="creator-form-group">
+                <label htmlFor="recurring-start-time" className="creator-field-label">Start Time *</label>
+                <input
+                  type="time"
+                  id="recurring-start-time"
+                  name="recurringStartTime"
+                  className="creator-form-input"
+                  required
+                />
+              </div>
+              <div className="creator-form-group">
+                <label htmlFor="recurring-end-time" className="creator-field-label">End Time *</label>
+                <input
+                  type="time"
+                  id="recurring-end-time"
+                  name="recurringEndTime"
+                  className="creator-form-input"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
-      {submitMessage && (
-        <div 
-          style={{
-            marginTop: '1rem',
-            padding: '0.75rem 1rem',
-            borderRadius: '8px',
-            backgroundColor: submitMessage.type === 'success' ? '#d4edda' : '#f8d7da',
-            color: submitMessage.type === 'success' ? '#155724' : '#721c24',
-            border: `1px solid ${submitMessage.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
-          }}
+      <div className="creator-form-actions">
+        <button 
+          type="submit" 
+          className="creator-submit-btn"
+          disabled={isSubmitting}
+          style={{ opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
         >
-          {submitMessage.text}
-        </div>
-      )}
+          {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
+        </button>
+
+        {submitMessage && (
+          <div 
+            className={`creator-message ${submitMessage.type === 'success' ? 'creator-message-success' : 'creator-message-error'}`}
+          >
+            {submitMessage.text}
+          </div>
+        )}
+      </div>
     </form>
   );
 }

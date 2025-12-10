@@ -13,7 +13,7 @@ export default function FooterCTA() {
               Join over 1,000 satisfied learners today.
             </h5>
             <Link
-              href="/user-pages/sign-up"
+              href="/signup-login"
               className="button-dark lg bg-gradient-to-r from-[#E91E63] to-[#FF6B9D] text-white px-8 py-4 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300 whitespace-nowrap"
             >
               Signup today!

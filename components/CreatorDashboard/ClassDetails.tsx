@@ -8,6 +8,7 @@ declare global {
   interface Window {
     firebaseAuth: any;
     firebaseDb: any;
+    firebaseStorage: any;
     doc: any;
     getDoc: any;
     collection: any;
@@ -15,6 +16,7 @@ declare global {
     where: any;
     getDocs: any;
     updateDoc: any;
+    serverTimestamp: any;
   }
 }
 
@@ -209,8 +211,71 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
     }
   };
 
-  const handleUploadRecording = (batchId: string) => {
-    showInfo('Upload recording functionality - Coming soon! This will allow you to upload class recordings for students to review.');
+  const [uploadingRecording, setUploadingRecording] = useState<string | null>(null);
+  const [recordingFile, setRecordingFile] = useState<{ [key: string]: File }>({});
+
+  const handleRecordingFileChange = (batchId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRecordingFile(prev => ({ ...prev, [batchId]: file }));
+  };
+
+  const handleUploadRecording = async (batchId: string) => {
+    const file = recordingFile[batchId];
+    if (!file) {
+      showError('Please select a recording file first');
+      return;
+    }
+
+    if (!classId) {
+      showError('Class ID not found. Please try again.');
+      return;
+    }
+
+    if (!window.firebaseStorage || !window.ref || !window.uploadBytes || !window.getDownloadURL) {
+      showError('Firebase Storage is not initialized. Please refresh the page.');
+      return;
+    }
+
+    setUploadingRecording(batchId);
+    try {
+      const { uploadVideo, getClassRecordingPath, validateFile } = await import('@/lib/utils/firebaseStorage');
+      
+      // Validate file
+      const validation = validateFile(file, 'video');
+      if (!validation.valid) {
+        showError(validation.error || 'Invalid file');
+        return;
+      }
+
+      // Upload video
+      const path = getClassRecordingPath(classId, batchId, file.name);
+      const downloadURL = await uploadVideo(file, path);
+
+      // Update batch with recording link
+      if (window.firebaseDb && window.doc && window.updateDoc) {
+        const batchRef = window.doc(window.firebaseDb, 'batches', batchId);
+        await window.updateDoc(batchRef, {
+          recordingLink: downloadURL,
+          updatedAt: window.serverTimestamp(),
+        });
+      }
+
+      // Refresh batches
+      await fetchBatches();
+
+      showSuccess('Recording uploaded successfully!');
+      setRecordingFile(prev => {
+        const newState = { ...prev };
+        delete newState[batchId];
+        return newState;
+      });
+    } catch (error: any) {
+      console.error('Recording upload error:', error);
+      showError(error.message || 'Failed to upload recording');
+    } finally {
+      setUploadingRecording(null);
+    }
   };
 
   if (loading) {

@@ -208,7 +208,7 @@ export default function CheckoutPage() {
                                     <p className="text-gray-400 mb-4">by {item.instructor}</p>
                                     <div className="flex items-center justify-between">
                                         <p className="text-2xl font-bold text-white">
-                                            ${item.price.toFixed(2)} USD
+                                            ₹{item.price.toFixed(2)} INR
                                         </p>
                                         <button
                                             onClick={() => removeFromCart(item.id)}
@@ -230,16 +230,16 @@ export default function CheckoutPage() {
                             <div className="space-y-4 mb-6">
                                 <div className="flex justify-between text-gray-300">
                                     <span>Subtotal</span>
-                                    <span>${cartTotal.toFixed(2)} USD</span>
+                                    <span>₹{cartTotal.toFixed(2)} INR</span>
                                 </div>
                                 <div className="flex justify-between text-gray-300">
                                     <span>Tax</span>
-                                    <span>$0.00 USD</span>
+                                    <span>₹0.00 INR</span>
                                 </div>
                                 <div className="border-t border-white/10 pt-4">
                                     <div className="flex justify-between text-white text-xl font-bold">
                                         <span>Total</span>
-                                        <span>${cartTotal.toFixed(2)} USD</span>
+                                        <span>₹{cartTotal.toFixed(2)} INR</span>
                                     </div>
                                 </div>
                             </div>
