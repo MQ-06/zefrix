@@ -35,9 +35,10 @@ interface ManageClassesProps {
   onEditClass?: (classId: string) => void;
   onViewClass?: (classId: string) => void;
   onManageBatches?: (classId: string, className: string) => void;
+  onViewEnrollments?: (classId: string, className: string) => void;
 }
 
-export default function ManageClasses({ onEditClass, onViewClass, onManageBatches }: ManageClassesProps) {
+export default function ManageClasses({ onEditClass, onViewClass, onManageBatches, onViewEnrollments }: ManageClassesProps) {
   const { showSuccess, showError, showInfo } = useNotification();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,6 +159,14 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
     }
   };
 
+  const handleViewEnrollments = (classId: string, className: string) => {
+    if (onViewEnrollments) {
+      onViewEnrollments(classId, className);
+    } else {
+      showInfo(`View Enrollments for "${className}" - Enrollment view coming soon!`);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved':
@@ -232,6 +241,15 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
                   onClick={() => handleManageBatches(classItem.classId, classItem.title)}
                 >
                   Manage Batches
+                </button>
+                <button
+                  className={styles.button}
+                  onClick={() => handleViewEnrollments(classItem.classId, classItem.title)}
+                  style={{
+                    background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)'
+                  }}
+                >
+                  View Enrollments
                 </button>
                 <button
                   className={styles.button}

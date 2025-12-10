@@ -13,6 +13,8 @@ import ViewClass from '@/components/CreatorDashboard/ViewClass';
 import ClassDetails from '@/components/CreatorDashboard/ClassDetails';
 import LiveClass from '@/components/CreatorDashboard/LiveClass';
 import CreatorProfile from '@/components/CreatorDashboard/Profile';
+import EnrollmentList from '@/components/CreatorDashboard/EnrollmentList';
+import Analytics from '@/components/CreatorDashboard/Analytics';
 
 declare global {
   interface Window {
@@ -23,6 +25,7 @@ declare global {
     getDoc: any;
     addDoc: any;
     Timestamp: any;
+    updateProfile: any;
   }
 }
 
@@ -132,6 +135,8 @@ export default function CreatorDashboard() {
   const [viewingClassId, setViewingClassId] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
+  const [viewingEnrollmentsClassId, setViewingEnrollmentsClassId] = useState<string | null>(null);
+  const [viewingEnrollmentsClassName, setViewingEnrollmentsClassName] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -159,7 +164,7 @@ export default function CreatorDashboard() {
         firebaseAuthConfig.type = "module";
         firebaseAuthConfig.innerHTML = `
           import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+          import { getAuth, onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
           import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, addDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
           const firebaseConfig = {
@@ -187,6 +192,7 @@ export default function CreatorDashboard() {
           window.getDocs = getDocs;
           window.addDoc = addDoc;
           window.Timestamp = Timestamp;
+          window.updateProfile = updateProfile;
 
           console.log('✅ Firebase initialized - serverTimestamp available:', typeof window.serverTimestamp);
           console.log('✅ Firebase objects:', {
@@ -397,6 +403,11 @@ export default function CreatorDashboard() {
           position: relative;
         }
 
+        .dashboard-container {
+          display: flex;
+          min-height: 100vh;
+        }
+
         /* Mobile Navigation */
         .creator-mobile-nav {
           display: none;
@@ -454,11 +465,10 @@ export default function CreatorDashboard() {
           transform: rotate(-45deg) translate(7px, -7px);
         }
 
-        /* Sidebar */
-        .creator-sidebar {
+        /* Sidebar - Matching Student Dashboard Design */
+        .sidebar {
           width: 280px;
-          background: rgba(15, 15, 30, 0.95);
-          backdrop-filter: blur(10px);
+          background: #0f0f1e;
           padding: 2rem 1.5rem;
           display: flex;
           flex-direction: column;
@@ -466,58 +476,47 @@ export default function CreatorDashboard() {
           height: 100vh;
           left: 0;
           top: 0;
-          z-index: 999;
+          z-index: 1000;
           border-right: 1px solid rgba(255, 255, 255, 0.1);
-          overflow-y: auto;
+          overflow: hidden;
         }
 
-        .creator-sidebar::-webkit-scrollbar {
-          width: 6px;
+        .sidebar-logo {
+          margin-bottom: 3rem;
+          flex-shrink: 0;
         }
 
-        .creator-sidebar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .creator-sidebar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.2);
-          border-radius: 3px;
-        }
-
-        .creator-sidebar::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.3);
-        }
-
-        .creator-sidebar-top {
-          flex: 1;
-        }
-
-        .creator-logo-link {
-          display: block;
-          margin-bottom: 2rem;
-        }
-
-        .creator-sidebar-header {
-          display: flex;
-          align-items: center;
-        }
-
-        .creator-sidebar-logo {
+        .sidebar-logo img {
           width: 150px;
           height: auto;
         }
 
-        .creator-sidebar-menu {
+        .sidebar-nav {
           flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          min-height: 0;
         }
 
-        .creator-nav-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
+        .sidebar-nav::-webkit-scrollbar {
+          width: 6px;
         }
 
-        .creator-nav-item {
+        .sidebar-nav::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb {
+          background: rgba(217, 42, 99, 0.5);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb:hover {
+          background: rgba(217, 42, 99, 0.7);
+        }
+
+        .sidebar-nav-item {
           display: flex;
           align-items: center;
           gap: 1rem;
@@ -528,56 +527,69 @@ export default function CreatorDashboard() {
           text-decoration: none;
           transition: all 0.3s;
           cursor: pointer;
-          background: transparent;
-          border: none;
-          width: 100%;
-          text-align: left;
-          font-family: inherit;
-          font-size: 1rem;
         }
 
-        .creator-nav-item:hover {
+        .sidebar-nav-item:hover {
           background: rgba(255, 255, 255, 0.1);
         }
 
-        .creator-nav-item.active {
-          background: linear-gradient(135deg, rgba(217, 42, 99, 0.3) 0%, rgba(255, 101, 75, 0.3) 100%);
+        .sidebar-nav-item.active {
+          background: rgba(217, 42, 99, 0.2);
           border-left: 3px solid #D92A63;
-          color: #fff;
         }
 
-        .creator-nav-item.active .creator-nav-icon {
-          opacity: 1;
-        }
-
-        .creator-nav-icon {
+        .sidebar-nav-item img {
           width: 20px;
           height: 20px;
-          opacity: 0.8;
         }
 
-        .creator-nav-text {
-          font-weight: 500;
-        }
-
-        .creator-logout-btn {
+        .sidebar-footer {
           margin-top: auto;
           padding-top: 2rem;
           border-top: 1px solid rgba(255, 255, 255, 0.1);
+          flex-shrink: 0;
         }
 
-        .creator-nav-overlay {
+        .sidebar-footer .sidebar-nav-item {
+          background: rgba(217, 42, 99, 0.1);
+          border-left: 3px solid #D92A63;
+        }
+
+        .sidebar-footer .sidebar-nav-item:hover {
+          background: rgba(217, 42, 99, 0.2);
+        }
+
+        /* Hamburger for mobile */
+        .hamburger {
           display: none;
+          flex-direction: column;
+          gap: 5px;
+          cursor: pointer;
+          padding: 0.5rem;
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          top: 1rem;
+          left: 1rem;
+          z-index: 1001;
           background: rgba(0, 0, 0, 0.5);
-          z-index: 998;
+          border-radius: 8px;
+        }
+
+        .hamburger-line {
+          width: 25px;
+          height: 3px;
+          background: #fff;
+          border-radius: 3px;
+          transition: all 0.3s;
         }
 
         /* Main Content */
+        .main-content {
+          margin-left: 280px;
+          flex: 1;
+          padding: 2rem;
+          min-height: 100vh;
+        }
+
         .creator-content-wrapper {
           margin-left: 280px;
           flex: 1;
@@ -611,22 +623,6 @@ export default function CreatorDashboard() {
           font-size: 0.875rem;
         }
 
-        .creator-notification-icon {
-          width: 44px;
-          height: 44px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.25rem;
-          cursor: pointer;
-          transition: all 0.3s;
-        }
-
-        .creator-notification-icon:hover {
-          background: rgba(255, 255, 255, 0.2);
-        }
 
         /* Section Titles */
         .creator-section-title {
@@ -1442,7 +1438,20 @@ export default function CreatorDashboard() {
             padding-top: 80px;
           }
 
-          .creator-mobile-nav {
+          .main-content {
+            margin-left: 0;
+          }
+
+          .sidebar {
+            transform: translateX(-100%);
+            transition: transform 0.3s;
+          }
+
+          .sidebar.open {
+            transform: translateX(0);
+          }
+
+          .hamburger {
             display: flex;
           }
 
@@ -1468,23 +1477,20 @@ export default function CreatorDashboard() {
         }
       `}</style>
 
-      <div className="creator-dashboard-container">
+      <div className="dashboard-container">
         <CreatorSidebar
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           onLogout={handleLogout}
         />
 
-        <div className="creator-content-wrapper">
+        <div className="main-content">
           <div className="creator-content">
             {/* Dashboard Header */}
             <div className="creator-dashboard-header">
               <div className="creator-welcome-section">
                 <h2>Welcome back, {user?.displayName || user?.email?.split('@')[0] || 'Creator'}!</h2>
                 <p>Continue your teaching journey</p>
-              </div>
-              <div className="creator-notification-icon">
-                <div>🔔</div>
               </div>
             </div>
 
@@ -1523,6 +1529,35 @@ export default function CreatorDashboard() {
               </div>
             )}
 
+            {/* Notifications Section */}
+            {activeSection === 'notifications' && (
+              <div id="notifications" className="creator-section">
+                <h2 className="creator-section-title">Notifications</h2>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '16px',
+                  padding: '2rem',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem', color: '#fff' }}>Notifications Center</h3>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '1rem' }}>
+                    Class reminders and updates are sent via email and WhatsApp through n8n automation.
+                  </p>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
+                    You'll receive notifications about class approvals, student enrollments, and important updates.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Analytics Section */}
+            {activeSection === 'analytics' && (
+              <div id="analytics" className="creator-section">
+                <Analytics />
+              </div>
+            )}
+
             {/* Create Class Section */}
             {activeSection === 'create-class' && (
               <div id="create-class" className="creator-section">
@@ -1536,7 +1571,16 @@ export default function CreatorDashboard() {
             {/* Manage Classes Section */}
             {activeSection === 'manage-classes' && (
               <div id="manage-classes" className="creator-section">
-                {viewingClassId ? (
+                {viewingEnrollmentsClassId ? (
+                  <EnrollmentList
+                    classId={viewingEnrollmentsClassId}
+                    className={viewingEnrollmentsClassName || undefined}
+                    onBack={() => {
+                      setViewingEnrollmentsClassId(null);
+                      setViewingEnrollmentsClassName(null);
+                    }}
+                  />
+                ) : viewingClassId ? (
                   <ViewClass
                     classId={viewingClassId}
                     onBack={() => setViewingClassId(null)}
@@ -1571,8 +1615,18 @@ export default function CreatorDashboard() {
                       setSelectedClassId(classId);
                       setSelectedClassName(className);
                     }}
+                    onViewEnrollments={(classId, className) => {
+                      setViewingEnrollmentsClassId(classId);
+                      setViewingEnrollmentsClassName(className);
+                    }}
                   />
                 )}
+              </div>
+            )}
+
+            {activeSection === 'enrollments' && (
+              <div id="enrollments" className="creator-section">
+                <EnrollmentList />
               </div>
             )}
 
@@ -1584,9 +1638,9 @@ export default function CreatorDashboard() {
             )}
 
             {/* Class Details Section */}
-            {activeSection === 'class-details' && (
+            {activeSection === 'class-details' && viewingClassId && (
               <div id="class-details" className="creator-section">
-                <ClassDetails />
+                <ClassDetails classId={viewingClassId} onBack={() => setViewingClassId(null)} />
               </div>
             )}
 
