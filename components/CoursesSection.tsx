@@ -1,12 +1,162 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { courses } from '@/lib/data';
 import CourseCard from './CourseCard';
 
+declare global {
+  interface Window {
+    firebaseDb: any;
+    collection: any;
+    query: any;
+    where: any;
+    getDocs: any;
+  }
+}
+
+interface ApprovedClass {
+  classId: string;
+  title: string;
+  subtitle?: string;
+  category: string;
+  subCategory: string;
+  creatorName: string;
+  price: number;
+  scheduleType: 'one-time' | 'recurring';
+  numberSessions: number;
+  videoLink?: string;
+  createdAt: any;
+  [key: string]: any;
+}
+
 export default function CoursesSection() {
-  const featuredCourses = courses.slice(0, 6);
+  const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Initialize Firebase if not already loaded
+    if (!window.firebaseDb) {
+      const loadFirebase = () => {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.textContent = `
+          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          
+          const firebaseConfig = {
+            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+            authDomain: "zefrix-custom.firebaseapp.com",
+            projectId: "zefrix-custom",
+            storageBucket: "zefrix-custom.firebasestorage.app",
+            messagingSenderId: "50732408558",
+            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+            measurementId: "G-27HS1SWB5X"
+          };
+          
+          const app = initializeApp(firebaseConfig);
+          window.firebaseDb = getFirestore(app);
+          window.collection = collection;
+          window.query = query;
+          window.where = where;
+          window.getDocs = getDocs;
+        `;
+        document.head.appendChild(script);
+      };
+      loadFirebase();
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchApprovedClasses = async () => {
+      // Check if Firebase is already ready
+      if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+        await loadClasses();
+        return;
+      }
+
+      // Listen for firebaseReady event
+      const handleFirebaseReady = () => {
+        loadClasses();
+      };
+
+      window.addEventListener('firebaseReady', handleFirebaseReady);
+
+      // Fallback: try after a delay if event doesn't fire
+      const timeout = setTimeout(() => {
+        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+          loadClasses();
+        } else {
+          console.warn('Firebase not ready after timeout, using fallback data');
+          setLoading(false);
+        }
+      }, 5000);
+
+      return () => {
+        window.removeEventListener('firebaseReady', handleFirebaseReady);
+        clearTimeout(timeout);
+      };
+    };
+
+    const loadClasses = async () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        return;
+      }
+
+      setLoading(true);
+      try {
+        console.log('Fetching approved classes from Firestore...');
+        const classesRef = window.collection(window.firebaseDb, 'classes');
+        const q = window.query(classesRef, window.where('status', '==', 'approved'));
+        const querySnapshot = await window.getDocs(q);
+        
+        const classes: ApprovedClass[] = [];
+        querySnapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
+        
+        console.log(`Found ${classes.length} approved classes`);
+        
+        // Sort by creation date (newest first) and take first 6
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+        
+        setApprovedClasses(classes.slice(0, 6));
+      } catch (error) {
+        console.error('Error fetching approved classes:', error);
+        // Fallback to mock data if Firestore fails
+        setApprovedClasses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchApprovedClasses();
+  }, []);
+
+  // Map approved classes to course format (only real classes, no dummy data)
+  const featuredCourses = approvedClasses.map((classItem) => ({
+    id: classItem.classId,
+    slug: classItem.classId,
+    title: classItem.title,
+    subtitle: classItem.subtitle || '',
+    category: classItem.category,
+    categorySlug: '',
+    subCategory: classItem.subCategory,
+    instructor: classItem.creatorName || 'Creator',
+    instructorId: '',
+    instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
+    image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg',
+    price: classItem.price,
+    originalPrice: classItem.price * 1.2,
+    sections: classItem.numberSessions,
+    duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
+    students: 0,
+    level: 'Beginner' as const,
+  }));
 
   return (
     <section className="section-spacing-bottom">
@@ -28,11 +178,32 @@ export default function CoursesSection() {
           </motion.div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {featuredCourses.map((course, index) => (
-            <CourseCard key={course.id} course={course} />
-          ))}
-        </div>
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-400 text-lg">Loading courses...</p>
+          </div>
+        ) : featuredCourses.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {featuredCourses.map((course, index) => (
+              <CourseCard key={course.id} course={course} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-lg mb-4">
+              No classes available yet.
+            </div>
+            <p className="text-gray-500 text-sm mb-6">
+              Check back soon for new courses!
+            </p>
+            <Link
+              href="/signup-login"
+              className="inline-block bg-gradient-to-r from-[#E91E63] to-[#FF6B9D] text-white px-8 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300"
+            >
+              Signup today!
+            </Link>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -1,21 +1,171 @@
 'use client';
 
-import { useState } from 'react';
-import { courses } from '@/lib/data';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import CoursesPageCard from '@/components/CoursesPageCard';
 import FooterCTA from '@/components/FooterCTA';
 import { motion } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 
+declare global {
+  interface Window {
+    firebaseDb: any;
+    collection: any;
+    query: any;
+    where: any;
+    getDocs: any;
+  }
+}
+
+interface ApprovedClass {
+  classId: string;
+  title: string;
+  subtitle?: string;
+  category: string;
+  subCategory: string;
+  creatorName: string;
+  price: number;
+  scheduleType: 'one-time' | 'recurring';
+  numberSessions: number;
+  videoLink?: string;
+  createdAt: any;
+  [key: string]: any;
+}
+
 const COURSES_PER_PAGE = 6;
 
 export default function CoursesPage() {
   const [currentPage, setCurrentPage] = useState(1);
-  
-  const totalPages = Math.ceil(courses.length / COURSES_PER_PAGE);
+  const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Initialize Firebase if not already loaded
+    if (!window.firebaseDb) {
+      const loadFirebase = () => {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.textContent = `
+          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          
+          const firebaseConfig = {
+            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+            authDomain: "zefrix-custom.firebaseapp.com",
+            projectId: "zefrix-custom",
+            storageBucket: "zefrix-custom.firebasestorage.app",
+            messagingSenderId: "50732408558",
+            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+            measurementId: "G-27HS1SWB5X"
+          };
+          
+          const app = initializeApp(firebaseConfig);
+          window.firebaseDb = getFirestore(app);
+          window.collection = collection;
+          window.query = query;
+          window.where = where;
+          window.getDocs = getDocs;
+        `;
+        document.head.appendChild(script);
+      };
+      loadFirebase();
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchApprovedClasses = async () => {
+      // Check if Firebase is already ready
+      if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+        await loadClasses();
+        return;
+      }
+
+      // Listen for firebaseReady event
+      const handleFirebaseReady = () => {
+        loadClasses();
+      };
+
+      window.addEventListener('firebaseReady', handleFirebaseReady);
+
+      // Fallback: try after a delay if event doesn't fire
+      const timeout = setTimeout(() => {
+        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+          loadClasses();
+        } else {
+          console.warn('Firebase not ready after timeout, using fallback data');
+          setLoading(false);
+        }
+      }, 5000);
+
+      return () => {
+        window.removeEventListener('firebaseReady', handleFirebaseReady);
+        clearTimeout(timeout);
+      };
+    };
+
+    const loadClasses = async () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        return;
+      }
+
+      setLoading(true);
+      try {
+        console.log('Fetching approved classes from Firestore...');
+        const classesRef = window.collection(window.firebaseDb, 'classes');
+        const q = window.query(classesRef, window.where('status', '==', 'approved'));
+        const querySnapshot = await window.getDocs(q);
+        
+        const classes: ApprovedClass[] = [];
+        querySnapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
+        
+        console.log(`Found ${classes.length} approved classes`);
+        
+        // Sort by creation date (newest first)
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+        
+        setApprovedClasses(classes);
+      } catch (error) {
+        console.error('Error fetching approved classes:', error);
+        setApprovedClasses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchApprovedClasses();
+  }, []);
+
+  // Convert approved classes to course format (only real classes, no dummy data)
+  const allCourses = approvedClasses.map((classItem) => ({
+    id: classItem.classId,
+    slug: classItem.classId,
+    title: classItem.title,
+    subtitle: classItem.subtitle || '',
+    category: classItem.category,
+    categorySlug: '',
+    subCategory: classItem.subCategory,
+    instructor: classItem.creatorName || 'Creator',
+    instructorId: '',
+    instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
+    image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg',
+    price: classItem.price,
+    originalPrice: classItem.price * 1.2,
+    sections: classItem.numberSessions,
+    duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
+    students: 0,
+    level: 'Beginner' as const,
+  }));
+
+  const totalPages = Math.ceil(allCourses.length / COURSES_PER_PAGE);
   const startIndex = (currentPage - 1) * COURSES_PER_PAGE;
   const endIndex = startIndex + COURSES_PER_PAGE;
-  const currentCourses = courses.slice(startIndex, endIndex);
+  const currentCourses = allCourses.slice(startIndex, endIndex);
 
   const handleNextPage = () => {
     if (currentPage < totalPages) {
@@ -61,16 +211,6 @@ export default function CoursesPage() {
               transition={{ duration: 1, delay: 0.5 }}
             />
             
-            {/* Decorative X marks */}
-            <div className="absolute top-20 left-10 w-4 h-4 opacity-20">
-              <div className="text-green-400 text-2xl font-bold">×</div>
-            </div>
-            <div className="absolute top-32 right-20 w-4 h-4 opacity-20">
-              <div className="text-green-400 text-2xl font-bold">×</div>
-            </div>
-            <div className="absolute bottom-20 left-20 w-4 h-4 opacity-20">
-              <div className="text-green-400 text-2xl font-bold">×</div>
-            </div>
           </div>
         </div>
       </section>
@@ -78,22 +218,45 @@ export default function CoursesPage() {
       {/* Courses Grid Section */}
       <section className="section-spacing-bottom bg-gradient-to-b from-transparent via-[#1A1A2E] to-[#1A1A2E]">
         <div className="container">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-            {currentCourses.map((course, index) => (
-              <motion.div
-                key={course.id}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: index * 0.1 }}
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-gray-400 text-lg">Loading courses...</p>
+            </div>
+          ) : currentCourses.length > 0 ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+                {currentCourses.map((course, index) => (
+                  <motion.div
+                    key={course.id}
+                    initial={{ opacity: 0, y: 30 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.6, delay: index * 0.1 }}
+                  >
+                    <CoursesPageCard course={course} />
+                  </motion.div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-gray-400 text-lg mb-4">
+                No approved classes available yet.
+              </p>
+              <p className="text-gray-500 text-sm mb-6">
+                Join over 1,000 satisfied learners today.
+              </p>
+              <Link
+                href="/signup-login"
+                className="inline-block bg-gradient-to-r from-[#E91E63] to-[#FF6B9D] text-white px-8 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300"
               >
-                <CoursesPageCard course={course} />
-              </motion.div>
-            ))}
-          </div>
+                Signup today!
+              </Link>
+            </div>
+          )}
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {allCourses.length > 0 && totalPages > 1 && (
             <div className="flex items-center justify-center gap-4 mt-12">
               <div className="text-white text-lg font-medium">
                 {currentPage} / {totalPages}

@@ -13,14 +13,16 @@ export default function FAQSection() {
   };
 
   return (
-    <section className="section-spacing bg-dark-light">
+    <section className="section-spacing bg-gradient-to-b from-gray-50 via-pink-50/30 to-purple-50/30">
       <div className="container">
         <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
             Questions? We've Got{' '}
-            <span className="text-primary">Answers.</span>
+            <span className="bg-gradient-to-r from-[#FF6B9D] to-[#E91E63] bg-clip-text text-transparent">
+              Answers.
+            </span>
           </h2>
-          <p className="text-gray-400 text-xl">
+          <p className="text-gray-600 text-xl">
             We've got answers to help you.
           </p>
         </div>
@@ -35,28 +37,32 @@ export default function FAQSection() {
               transition={{ duration: 0.5, delay: index * 0.1 }}
               className="overflow-hidden"
             >
-              {/* Question Header - Light Background */}
+              {/* Question Header - Light Background with Product Colors */}
               <button
                 onClick={() => toggleFAQ(index)}
                 className={`w-full px-8 py-6 flex items-center justify-between text-left transition-all duration-300 ${
                   openIndex === index
-                    ? 'bg-white/10 rounded-t-xl'
-                    : 'bg-white/5 rounded-xl hover:bg-white/10'
+                    ? 'bg-gradient-to-r from-pink-100 to-purple-100 rounded-t-xl shadow-md'
+                    : 'bg-white rounded-xl hover:bg-gradient-to-r hover:from-pink-50 hover:to-purple-50 shadow-sm'
                 }`}
               >
-                <h3 className="text-white font-bold text-xl md:text-2xl pr-4">
+                <h3 className={`font-bold text-xl md:text-2xl pr-4 ${
+                  openIndex === index 
+                    ? 'text-gray-900' 
+                    : 'text-gray-800'
+                }`}>
                   {faq.question}
                 </h3>
                 <div className="flex-shrink-0">
                   {openIndex === index ? (
-                    <X className="w-7 h-7 text-primary" />
+                    <X className="w-7 h-7 text-[#FF6B9D]" />
                   ) : (
-                    <Plus className="w-7 h-7 text-primary" />
+                    <Plus className="w-7 h-7 text-[#E91E63]" />
                   )}
                 </div>
               </button>
 
-              {/* Answer Section - Gradient Background */}
+              {/* Answer Section - Light Background with Product Color Gradient */}
               <AnimatePresence>
                 {openIndex === index && (
                   <motion.div
@@ -66,8 +72,8 @@ export default function FAQSection() {
                     transition={{ duration: 0.4, ease: 'easeInOut' }}
                     className="overflow-hidden"
                   >
-                    <div className="px-8 py-6 bg-gradient-to-r from-dark via-purple-900 to-pink-900 rounded-b-xl">
-                      <p className="text-white text-lg leading-relaxed">
+                    <div className="px-8 py-6 bg-gradient-to-r from-pink-50 via-purple-50 to-pink-50 rounded-b-xl border-t border-pink-200/50">
+                      <p className="text-gray-700 text-lg leading-relaxed">
                         {faq.answer}
                       </p>
                     </div>

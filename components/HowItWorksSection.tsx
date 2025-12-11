@@ -24,7 +24,7 @@ const steps = [
     icon: Monitor,
     title: 'Start learning right away',
     description:
-      'Affronting imprudence do he he everything. Sex lasted dinner wanted indeed wished.',
+      'Affronting imprudence do he he everything.  lasted dinner wanted indeed wished. right any other thing in place of it.',
     bgColor: 'bg-yellow-200',
     borderColor: 'border-pink-400',
   },

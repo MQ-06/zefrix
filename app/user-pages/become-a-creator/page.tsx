@@ -1,160 +1,491 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNotification } from '@/contexts/NotificationContext';
+import { categoryDetails } from '@/lib/categoriesData';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 
 declare global {
   interface Window {
     firebaseAuth: any;
     firebaseDb: any;
-    createUserWithEmailAndPassword: any;
-    GoogleAuthProvider: any;
-    signInWithPopup: any;
     doc: any;
     setDoc: any;
     serverTimestamp: any;
   }
 }
 
-const categories = [
-  { value: 'dance', label: 'Dance & Performing Arts' },
-  { value: 'music', label: 'Music & Singing' },
-  { value: 'design', label: 'Design & Creativity' },
-  { value: 'content', label: 'Content & Creator Skills' },
-  { value: 'communication', label: 'Communication & Confidence' },
-  { value: 'wellness', label: 'Wellness & Lifestyle' },
-  { value: 'tech', label: 'Tech & Digital Skills' },
-  { value: 'art', label: 'Art, Craft & DIY' },
-  { value: 'cooking', label: 'Cooking & Culinary Arts' },
-  { value: 'fashion', label: 'Fashion, Styling & Beauty' },
-  { value: 'business', label: 'Business, Career & Freelancing' },
-  { value: 'language', label: 'Language & Culture' },
-  { value: 'gaming', label: 'Gaming & Esports' },
-  { value: 'photography', label: 'Video, Photography & Filmmaking' },
+const categories = categoryDetails.map(cat => ({
+  value: cat.slug,
+  label: cat.title,
+}));
+
+const STEPS = [
+  { id: 1, title: 'Basic Info', icon: 'fa-user' },
+  { id: 2, title: 'Category', icon: 'fa-tag' },
+  { id: 3, title: 'About You', icon: 'fa-file-text' },
+  { id: 4, title: 'Social Links', icon: 'fa-link' },
+  { id: 5, title: 'Security', icon: 'fa-lock' },
 ];
 
 export default function BecomeACreatorPage() {
   const router = useRouter();
+  const { signUp, signInWithGoogle, user, loading } = useAuth();
+  const { showSuccess, showError, showInfo } = useNotification();
+  const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    fullname: '',
+    email: '',
+    whatsapp: '',
+    category: '',
+    subCategory: '',
+    bio: '',
+    expertise: '',
+    introVideo: '',
+    profileImage: '',
+    instagram: '',
+    youtube: '',
+    twitter: '',
+    linkedin: '',
+    password: '',
+  });
 
+  // Initialize Firestore for creator profile data
   useEffect(() => {
-    // Load Firebase SDKs dynamically
-    const loadFirebaseScripts = () => {
-      const firebaseAppScript = document.createElement('script');
-      firebaseAppScript.src = "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-      firebaseAppScript.type = "module";
-      firebaseAppScript.onload = () => {
-        const firebaseAuthConfig = document.createElement('script');
-        firebaseAuthConfig.type = "module";
-        firebaseAuthConfig.innerHTML = `
-          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getAuth, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    if (typeof window === 'undefined') return;
 
-          const firebaseConfig = {
-            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-            authDomain: "zefrix-custom.firebaseapp.com",
-            projectId: "zefrix-custom",
-            storageBucket: "zefrix-custom.firebasestorage.app",
-            messagingSenderId: "50732408558",
-            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-            measurementId: "G-27HS1SWB5X"
-          };
-
-          const app = initializeApp(firebaseConfig);
-          window.firebaseAuth = getAuth(app);
-          window.firebaseDb = getFirestore(app);
-
-          window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
-          window.GoogleAuthProvider = GoogleAuthProvider;
-          window.signInWithPopup = signInWithPopup;
-          window.doc = doc;
-          window.setDoc = setDoc;
-          window.serverTimestamp = serverTimestamp;
-        `;
-        document.body.appendChild(firebaseAuthConfig);
-      };
-      document.body.appendChild(firebaseAppScript);
-    };
-
-    loadFirebaseScripts();
-  }, [router]);
-
-  const handleCreatorSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!window.firebaseAuth || !window.firebaseDb) {
-      alert('Firebase not initialized. Please wait...');
+    // Check if Firestore is already initialized
+    if (window.firebaseDb && window.doc && window.setDoc && window.serverTimestamp) {
       return;
     }
 
-    const form = e.currentTarget;
-    const fullName = (form.querySelector('[name="fullname"]') as HTMLInputElement)?.value.trim();
-    const email = (form.querySelector('[name="email"]') as HTMLInputElement)?.value.trim();
-    const whatsapp = (form.querySelector('[name="whatsapp"]') as HTMLInputElement)?.value.trim();
-    const category = (form.querySelector('[name="category"]') as HTMLSelectElement)?.value;
-    const password = (form.querySelector('[name="password"]') as HTMLInputElement)?.value.trim();
+    // Load Firestore initialization script
+    const initScript = document.createElement('script');
+    initScript.type = 'module';
+    initScript.textContent = `
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      
+      const firebaseConfig = {
+        apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+        authDomain: "zefrix-custom.firebaseapp.com",
+        projectId: "zefrix-custom",
+        storageBucket: "zefrix-custom.firebasestorage.app",
+        messagingSenderId: "50732408558",
+        appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+        measurementId: "G-27HS1SWB5X"
+      };
+      
+      const app = initializeApp(firebaseConfig);
+      window.firebaseDb = getFirestore(app);
+      window.doc = doc;
+      window.setDoc = setDoc;
+      window.serverTimestamp = serverTimestamp;
+    `;
+    document.head.appendChild(initScript);
+  }, []);
 
-    if (!fullName || !email || !whatsapp || !category || !password) {
-      alert('Please fill in all fields');
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const validateStep = (step: number): boolean => {
+    switch (step) {
+      case 1:
+        return !!(formData.fullname && formData.email && formData.whatsapp);
+      case 2:
+        return !!formData.category;
+      case 3:
+        return !!(formData.bio && formData.expertise);
+      case 4:
+        return true; // Optional step
+      case 5:
+        return !!formData.password && formData.password.length >= 6;
+      default:
+        return false;
+    }
+  };
+
+  const nextStep = () => {
+    if (validateStep(currentStep) && currentStep < STEPS.length) {
+      setCurrentStep(prev => prev + 1);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(prev => prev - 1);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    if (!window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
+      showError('Firebase not initialized. Please wait...');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!validateStep(5)) {
+      showError('Please fill in all required fields');
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Additional validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      showError('Please enter a valid email address');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      showError('Password must be at least 6 characters long');
+      setIsSubmitting(false);
       return;
     }
 
     try {
-      const cred = await window.createUserWithEmailAndPassword(window.firebaseAuth, email, password);
+      // Create user account using AuthContext
+      await signUp(formData.email.trim(), formData.password, formData.fullname.trim());
       
-      await window.setDoc(window.doc(window.firebaseDb, 'users', cred.user.uid), {
-        uid: cred.user.uid,
-        email,
-        name: fullName,
-        whatsapp,
-        creatorCategory: category,
+      // Get the current user from Firebase Auth directly
+      if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
+        showError('User creation successful, but could not update profile. Please try logging in.');
+        router.push('/signup-login');
+        return;
+      }
+
+      const currentUser = window.firebaseAuth.currentUser;
+
+      // Update user profile with creator-specific data
+      await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
+        uid: currentUser.uid,
+        email: formData.email.trim(),
+        name: formData.fullname.trim(),
+        whatsapp: formData.whatsapp.trim(),
+        creatorCategory: formData.category,
+        subCategory: formData.subCategory?.trim() || '',
         role: 'creator',
-        isCreatorApproved: true,
+        bio: formData.bio?.trim() || '',
+        expertise: formData.expertise?.trim() || '',
+        introVideo: formData.introVideo?.trim() || '',
+        profileImage: formData.profileImage?.trim() || '',
+        socialHandles: {
+          instagram: formData.instagram?.trim() || '',
+          youtube: formData.youtube?.trim() || '',
+          twitter: formData.twitter?.trim() || '',
+          linkedin: formData.linkedin?.trim() || '',
+        },
+        isCreatorApproved: false,
         isProfileComplete: true,
         createdAt: window.serverTimestamp(),
         lastLogin: window.serverTimestamp(),
-      });
+      }, { merge: true });
 
-      alert('Creator account created successfully!');
+      showSuccess('Creator account created successfully!');
+      // Delay redirect to show notification
+      await new Promise(resolve => setTimeout(resolve, 2000));
       router.push('/creator-dashboard');
     } catch (err: any) {
-      alert('Signup failed: ' + err.message);
+      let errorMessage = 'Signup failed. ';
+      
+      if (err.code === 'auth/email-already-in-use') {
+        errorMessage += 'This email is already registered. Please use a different email or try logging in.';
+      } else if (err.code === 'auth/invalid-email') {
+        errorMessage += 'Invalid email address. Please check your email format.';
+      } else if (err.code === 'auth/weak-password') {
+        errorMessage += 'Password is too weak. Please use a stronger password (at least 6 characters).';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        errorMessage += 'Email/password accounts are not enabled. Please contact support.';
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Please try again or contact support.';
+      }
+      
+      showError(errorMessage);
+      console.error('Signup error:', err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleGoogleAuth = async () => {
-    if (!window.firebaseAuth || !window.firebaseDb) {
-      alert('Firebase not initialized. Please wait...');
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    if (!window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
+      showError('Firebase not initialized. Please wait...');
+      setIsSubmitting(false);
       return;
     }
 
     try {
-      const googleProvider = new window.GoogleAuthProvider();
-      const result = await window.signInWithPopup(window.firebaseAuth, googleProvider);
-      const user = result.user;
+      await signInWithGoogle();
+      
+      // Get the current user from Firebase Auth directly
+      if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
+        showError('Google authentication successful, but could not update profile. Please try again.');
+        return;
+      }
 
-      await window.setDoc(window.doc(window.firebaseDb, 'users', user.uid), {
-        uid: user.uid,
-        email: user.email,
-        name: user.displayName || '',
-        photoURL: user.photoURL || '',
+      const currentUser = window.firebaseAuth.currentUser;
+
+      // Update user profile with creator role
+      await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
+        uid: currentUser.uid,
+        email: currentUser.email,
+        name: currentUser.displayName || '',
+        photoURL: currentUser.photoURL || '',
+        profileImage: currentUser.photoURL || '',
         role: 'creator',
-        isCreatorApproved: true,
+        isCreatorApproved: false,
         isProfileComplete: false,
         createdAt: window.serverTimestamp(),
         lastLogin: window.serverTimestamp(),
       }, { merge: true });
 
-      alert('Creator account created successfully!');
+      showSuccess('Google signup successful! Please complete your creator profile.');
+      // Delay redirect to show notification
+      await new Promise(resolve => setTimeout(resolve, 2000));
       router.push('/creator-dashboard');
     } catch (err: any) {
-      alert('Google signup failed: ' + err.message);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        let errorMessage = 'Google signup failed. ';
+        if (err.message) {
+          errorMessage += err.message;
+        } else {
+          errorMessage += 'Please try again.';
+        }
+        showError(errorMessage);
+      }
+      setIsSubmitting(false);
+    }
+  };
+
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <div className="step-content">
+            <h2>Let's Start with Your Basic Information</h2>
+            <div className="form-group">
+              <label>Full Name *</label>
+              <input
+                type="text"
+                name="fullname"
+                value={formData.fullname}
+                onChange={handleInputChange}
+                placeholder="John Doe"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Email *</label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                placeholder="john@example.com"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>WhatsApp Number *</label>
+              <input
+                type="tel"
+                name="whatsapp"
+                value={formData.whatsapp}
+                onChange={handleInputChange}
+                placeholder="+1234567890"
+                required
+              />
+            </div>
+          </div>
+        );
+      case 2:
+        return (
+          <div className="step-content">
+            <h2>Choose Your Category</h2>
+            <div className="form-group">
+              <label>Category *</label>
+              <select
+                name="category"
+                value={formData.category}
+                onChange={handleInputChange}
+                required
+              >
+                <option value="">Select Your Category</option>
+                {categories.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Sub-Category (optional)</label>
+              <input
+                type="text"
+                name="subCategory"
+                value={formData.subCategory}
+                onChange={handleInputChange}
+                placeholder="e.g., Graphic Design, Web Development"
+              />
+            </div>
+          </div>
+        );
+      case 3:
+        return (
+          <div className="step-content">
+            <h2>Tell Us About Yourself</h2>
+            <div className="form-group">
+              <label>Bio *</label>
+              <textarea
+                name="bio"
+                value={formData.bio}
+                onChange={handleInputChange}
+                placeholder="Tell us about yourself and your expertise..."
+                rows={4}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Expertise / Skills *</label>
+              <textarea
+                name="expertise"
+                value={formData.expertise}
+                onChange={handleInputChange}
+                placeholder="e.g., Graphic Design, Video Editing, Music Production"
+                rows={3}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Intro Video URL (optional)</label>
+              <input
+                type="url"
+                name="introVideo"
+                value={formData.introVideo}
+                onChange={handleInputChange}
+                placeholder="https://youtube.com/watch?v=..."
+              />
+            </div>
+            <div className="form-group">
+              <label>Profile Image URL (optional)</label>
+              <input
+                type="url"
+                name="profileImage"
+                value={formData.profileImage}
+                onChange={handleInputChange}
+                placeholder="https://example.com/profile.jpg"
+              />
+            </div>
+          </div>
+        );
+      case 4:
+        return (
+          <div className="step-content">
+            <h2>Connect Your Social Profiles</h2>
+            <p className="step-description">Help students find you on social media (all optional)</p>
+            <div className="social-grid">
+              <div className="form-group">
+                <label>Instagram</label>
+                <input
+                  type="text"
+                  name="instagram"
+                  value={formData.instagram}
+                  onChange={handleInputChange}
+                  placeholder="@instagram"
+                />
+              </div>
+              <div className="form-group">
+                <label>YouTube</label>
+                <input
+                  type="text"
+                  name="youtube"
+                  value={formData.youtube}
+                  onChange={handleInputChange}
+                  placeholder="@youtube"
+                />
+              </div>
+              <div className="form-group">
+                <label>Twitter</label>
+                <input
+                  type="text"
+                  name="twitter"
+                  value={formData.twitter}
+                  onChange={handleInputChange}
+                  placeholder="@twitter"
+                />
+              </div>
+              <div className="form-group">
+                <label>LinkedIn</label>
+                <input
+                  type="text"
+                  name="linkedin"
+                  value={formData.linkedin}
+                  onChange={handleInputChange}
+                  placeholder="LinkedIn username"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      case 5:
+        return (
+          <div className="step-content">
+            <h2>Create Your Password</h2>
+            <p className="step-description">Choose a strong password to secure your account</p>
+            <div className="form-group">
+              <label>Password *</label>
+              <input
+                type="password"
+                name="password"
+                value={formData.password}
+                onChange={handleInputChange}
+                placeholder="Minimum 6 characters"
+                minLength={6}
+                required
+              />
+            </div>
+            <div className="form-summary">
+              <h3>Review Your Information</h3>
+              <div className="summary-item">
+                <span>Name:</span>
+                <strong>{formData.fullname || 'Not provided'}</strong>
+              </div>
+              <div className="summary-item">
+                <span>Email:</span>
+                <strong>{formData.email || 'Not provided'}</strong>
+              </div>
+              <div className="summary-item">
+                <span>Category:</span>
+                <strong>{categories.find(c => c.value === formData.category)?.label || 'Not selected'}</strong>
+              </div>
+            </div>
+          </div>
+        );
+      default:
+        return null;
     }
   };
 
   return (
     <>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
-      <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
       <style jsx global>{`
         * {
           margin: 0;
@@ -163,311 +494,498 @@ export default function BecomeACreatorPage() {
         }
 
         body {
-          font-family: 'Montserrat', sans-serif;
+          font-family: 'Poppins', sans-serif;
           min-height: 100vh;
         }
 
-        .user-page-section {
+        .creator-page-section {
           min-height: 100vh;
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 60px 20px;
-          background: linear-gradient(to right, #0b0d3e, #4e54c8, #d81b60);
+          padding: 120px 20px 40px;
+          background: #0A0A1A;
+          position: relative;
+          overflow: hidden;
         }
 
-        .container.sign-up {
-          max-width: 1200px;
+        .creator-page-section::before {
+          content: '';
+          position: absolute;
           width: 100%;
+          height: 100%;
+          background: radial-gradient(circle at 20% 50%, rgba(78, 84, 200, 0.1) 0%, transparent 50%),
+                      radial-gradient(circle at 80% 80%, rgba(216, 27, 96, 0.1) 0%, transparent 50%);
+          top: 0;
+          left: 0;
         }
 
-        .w-container {
-          max-width: 1200px;
-          margin-left: auto;
-          margin-right: auto;
+        .creator-container {
+          background-color: #fff;
+          border-radius: 30px;
+          box-shadow: 0 5px 15px rgba(0, 0, 0, 0.35);
+          position: relative;
+          overflow: hidden;
+          width: 100%;
+          max-width: 750px;
+          z-index: 1;
         }
 
-        .wf-layout-layout {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          min-height: 650px;
-          border-radius: 0;
-          overflow: visible;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        .w-layout-cell.cell {
-          padding: 60px 50px;
-          display: flex;
-          flex-direction: column;
-          justify-content: flex-start;
-          background: #ffffff;
-          border-radius: 20px 0 0 20px;
-        }
-
-        .w-layout-cell.cell-2 {
-          padding: 60px 50px;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
+        .creator-header {
+          background: linear-gradient(135deg, #4e54c8 0%, #d81b60 100%);
+          padding: 30px 40px;
+          color: white;
           text-align: center;
-          background: linear-gradient(to right, #0b0d3e, #4e54c8, #d81b60);
-          border-radius: 0 20px 20px 0;
         }
 
-        .heading-13.become-creator {
-          font-size: 24px;
-          font-weight: bold;
-          color: #000;
-          margin-bottom: 20px;
-          font-family: 'Montserrat', sans-serif;
-        }
-
-        .heading-13.dark-bg {
+        .creator-header h1 {
           font-size: 28px;
-          font-weight: bold;
-          color: #fff;
-          margin-bottom: 20px;
-          font-family: 'Montserrat', sans-serif;
+          font-weight: 700;
+          margin-bottom: 10px;
         }
 
-        .text-block-27 {
+        .creator-header p {
           font-size: 14px;
-          line-height: 20px;
-          letter-spacing: 0.3px;
-          color: rgba(255, 255, 255, 0.95);
-          font-family: 'Montserrat', sans-serif;
+          opacity: 0.9;
         }
 
-        .list {
-          list-style: none;
-          margin-bottom: 1.5rem;
-          padding: 0;
+        .progress-container {
+          padding: 30px 40px 20px;
+          background: #f8f9fa;
         }
 
-        .list-item {
-          display: inline-block;
-        }
-
-        .social-icons {
-          margin: 20px 0;
-        }
-
-        .social-icons a {
-          border: 1px solid #ccc;
-          border-radius: 20%;
-          display: inline-flex;
-          justify-content: center;
+        .progress-steps {
+          display: flex;
+          justify-content: space-between;
           align-items: center;
-          margin: 0 3px;
+          position: relative;
+          margin-bottom: 20px;
+        }
+
+        .progress-line {
+          position: absolute;
+          top: 20px;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: #e0e0e0;
+          z-index: 0;
+        }
+
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #4e54c8, #d81b60);
+          transition: width 0.5s ease;
+          border-radius: 3px;
+        }
+
+        .step-indicator {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          position: relative;
+          z-index: 1;
+          flex: 1;
+        }
+
+        .step-circle {
           width: 40px;
           height: 40px;
-          color: #333;
-          text-decoration: none;
-        }
-
-        .w-layout-blockcontainer {
-          width: 100%;
-        }
-
-        .container-5 {
-          max-width: 100%;
-        }
-
-        .w-embed {
-          position: relative;
-          width: 100%;
-        }
-
-        /* Form Styles - Matching Login Page */
-        #zefrix-creator-form-2024 {
-          font-family: 'Montserrat', sans-serif;
-          box-sizing: border-box;
-        }
-
-        #zefrix-creator-form-2024 * {
-          box-sizing: border-box;
-        }
-
-        #zefrix-creator-form-2024 .zefrix-creator-form {
+          border-radius: 50%;
+          background: white;
+          border: 3px solid #e0e0e0;
           display: flex;
-          flex-direction: column;
           align-items: center;
           justify-content: center;
-          width: 100%;
-          max-width: 100%;
-        }
-
-
-        #zefrix-creator-form-2024 .zefrix-form-group {
-          width: 100%;
-        }
-
-        /* Button styling - matching login page */
-        #zefrix-creator-form-2024 button,
-        #zefrix-creator-form-2024 .zefrix-creator-btn,
-        #creator-submit-btn,
-        button.zefrix-creator-btn {
-          background-color: #4e54c8 !important;
-          color: #fff !important;
-          font-size: 12px !important;
-          padding: 10px 45px !important;
-          border: 1px solid transparent !important;
-          border-radius: 8px !important;
-          font-weight: 600 !important;
-          letter-spacing: 0.5px !important;
-          text-transform: uppercase !important;
-          margin-top: 10px !important;
-          cursor: pointer !important;
-          font-family: 'Montserrat', sans-serif !important;
-          width: 100% !important;
-          display: block !important;
-          visibility: visible !important;
-          opacity: 1 !important;
-          min-height: 40px !important;
-        }
-
-        #zefrix-creator-form-2024 button:hover,
-        #zefrix-creator-form-2024 .zefrix-creator-btn:hover,
-        #creator-submit-btn:hover,
-        button.zefrix-creator-btn:hover {
-          opacity: 0.9 !important;
-        }
-
-        #zefrix-creator-form-2024 .zefrix-input {
-          background-color: #eee;
-          border: none;
-          margin: 8px 0;
-          padding: 10px 15px;
-          font-size: 13px;
-          border-radius: 8px;
-          width: 100%;
-          outline: none;
-          color: #000;
-          font-family: 'Montserrat', sans-serif;
-        }
-
-        #zefrix-creator-form-2024 .zefrix-select {
-          background-color: #eee;
-          border: none;
-          margin: 8px 0;
-          padding: 10px 15px;
-          font-size: 13px;
-          border-radius: 8px;
-          width: 100%;
-          outline: none;
-          color: #000;
-          font-family: 'Montserrat', sans-serif;
-          appearance: none;
-          -webkit-appearance: none;
-          -moz-appearance: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.762L10.825 4z'/%3E%3C/svg%3E");
-          background-repeat: no-repeat;
-          background-position: right 15px center;
-          background-size: 12px;
-          padding-right: 35px;
-          background-color: #eee;
-        }
-
-        #zefrix-creator-form-2024 .zefrix-input::placeholder {
+          font-size: 16px;
+          transition: all 0.3s ease;
+          margin-bottom: 8px;
           color: #666;
         }
 
-        #zefrix-creator-form-2024 .zefrix-select option {
-          color: #000;
-          padding: 8px;
-          background: #eee;
+        .step-indicator.active .step-circle {
+          background: linear-gradient(135deg, #4e54c8, #d81b60);
+          border-color: #4e54c8;
+          color: white;
+          transform: scale(1.1);
+          box-shadow: 0 4px 12px rgba(78, 84, 200, 0.4);
         }
 
+        .step-indicator.completed .step-circle {
+          background: #4caf50;
+          border-color: #4caf50;
+          color: white;
+        }
 
-        .form-separator {
+        .step-title {
+          font-size: 11px;
           color: #666;
-          font-size: 12px;
-          margin: 15px 0 10px;
+          font-weight: 600;
+          text-align: center;
         }
 
-        @media (max-width: 991px) {
-          .wf-layout-layout {
+        .step-indicator.active .step-title {
+          color: #4e54c8;
+        }
+
+        .form-container {
+          padding: 40px;
+          min-height: 400px;
+        }
+
+        .step-content {
+          animation: slideIn 0.4s ease;
+        }
+
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateX(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+
+        .step-content h2 {
+          font-size: 24px;
+          color: #333;
+          margin-bottom: 10px;
+          font-weight: 700;
+        }
+
+        .step-description {
+          color: #666;
+          font-size: 14px;
+          margin-bottom: 30px;
+        }
+
+        .form-group {
+          margin-bottom: 20px;
+        }
+
+        .form-group label {
+          display: block;
+          font-size: 13px;
+          font-weight: 600;
+          color: #333;
+          margin-bottom: 8px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+          width: 100%;
+          padding: 10px 15px;
+          border: none;
+          border-radius: 8px;
+          font-size: 13px;
+          font-family: 'Poppins', sans-serif;
+          transition: all 0.3s ease;
+          background-color: #eee;
+          color: #000;
+          margin: 8px 0;
+          outline: none;
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+          color: #999;
+        }
+
+        .form-group select {
+          color: #000;
+        }
+
+        .form-group select option {
+          color: #333;
+          background: white;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+          outline: none;
+          background-color: #f5f5f5;
+        }
+
+        .form-group textarea {
+          resize: vertical;
+          min-height: 100px;
+        }
+
+        .social-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+        }
+
+        .form-summary {
+          background: #f8f9fa;
+          padding: 20px;
+          border-radius: 10px;
+          margin-top: 20px;
+        }
+
+        .form-summary h3 {
+          font-size: 18px;
+          margin-bottom: 15px;
+          color: #333;
+        }
+
+        .summary-item {
+          display: flex;
+          justify-content: space-between;
+          padding: 10px 0;
+          border-bottom: 1px solid #e0e0e0;
+        }
+
+        .summary-item:last-child {
+          border-bottom: none;
+        }
+
+        .summary-item span {
+          color: #666;
+          font-size: 14px;
+        }
+
+        .summary-item strong {
+          color: #333;
+          font-size: 14px;
+        }
+
+        .form-actions {
+          display: flex;
+          justify-content: space-between;
+          gap: 15px;
+          padding: 30px 40px;
+          background: #f8f9fa;
+          border-top: 1px solid #e0e0e0;
+        }
+
+        .btn {
+          padding: 14px 30px;
+          border: none;
+          border-radius: 10px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: 'Poppins', sans-serif;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+          background: linear-gradient(135deg, #4e54c8, #d81b60);
+          color: white;
+          flex: 1;
+          box-shadow: 0 4px 15px rgba(78, 84, 200, 0.3);
+        }
+
+        .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(78, 84, 200, 0.4);
+        }
+
+        .btn-primary:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        .btn-secondary {
+          background: rgba(255, 255, 255, 0.1);
+          color: #4e54c8;
+          border: 2px solid #4e54c8;
+        }
+
+        .btn-secondary:hover {
+          background: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-submit {
+          background: linear-gradient(135deg, #4caf50, #45a049);
+          color: white;
+          width: 100%;
+          box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+        }
+
+        .btn-submit:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
+        
+        .btn-submit:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        .social-auth {
+          text-align: center;
+          padding: 20px 40px;
+          border-bottom: 1px solid #e0e0e0;
+        }
+
+        .social-auth-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 50px;
+          height: 50px;
+          padding: 0;
+          background: rgba(255, 255, 255, 0.1);
+          border: 2px solid rgba(255, 255, 255, 0.2);
+          border-radius: 50%;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: 'Poppins', sans-serif;
+          color: #fff;
+          font-size: 20px;
+        }
+
+        .social-auth-btn:hover:not(:disabled) {
+          border-color: #4e54c8;
+          background: rgba(78, 84, 200, 0.2);
+          transform: translateY(-2px);
+        }
+        
+        .social-auth-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        @media (max-width: 768px) {
+          .creator-container {
+            max-width: 100%;
+            border-radius: 20px;
+          }
+
+          .creator-header,
+          .form-container,
+          .form-actions {
+            padding: 20px;
+          }
+
+          .progress-steps {
+            flex-wrap: wrap;
+            gap: 10px;
+          }
+
+          .step-indicator {
+            flex: 0 0 calc(20% - 8px);
+          }
+
+          .step-title {
+            font-size: 10px;
+          }
+
+          .social-grid {
             grid-template-columns: 1fr;
-            min-height: auto;
           }
 
-          .w-layout-cell {
-            padding: 40px 30px;
+          .form-actions {
+            flex-direction: column;
           }
 
-          .w-layout-cell.cell {
-            border-radius: 20px 20px 0 0;
-          }
-
-          .w-layout-cell.cell-2 {
-            order: -1;
-            border-radius: 0 0 20px 20px;
-          }
-
-          .heading-13.become-creator {
-            font-size: 24px;
-          }
-
-          .heading-13.dark-bg {
-            font-size: 24px;
-          }
-        }
-
-        @media (max-width: 767px) {
-          .user-page-section {
-            padding: 40px 15px;
-          }
-
-          .w-layout-cell {
-            padding: 30px 20px;
+          .btn {
+            width: 100%;
           }
         }
       `}</style>
 
-      <div className="user-page-section">
-        <div className="container sign-up w-container">
-          <div className="w-layout-layout quick-stack wf-layout-layout">
-            <div className="w-layout-cell cell">
-              <h1 className="heading-13 become-creator">Become a Creator</h1>
-              <div className="social-icons">
-                <a href="#" className="icon" id="creatorGoogleBtn" onClick={(e) => { e.preventDefault(); handleGoogleAuth(); }}>
-                  <i className="fa-brands fa-google-plus-g"></i>
-                </a>
+      <Header />
+      <div className="creator-page-section">
+        <div className="creator-container">
+          <div className="creator-header">
+            <h1>Become a Creator</h1>
+            <p>Join Zefrix and start sharing your skills with eager learners</p>
+          </div>
+
+          <div className="social-auth">
+            <button 
+              className="social-auth-btn" 
+              onClick={handleGoogleAuth} 
+              title="Continue with Google"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <i className="fa-solid fa-spinner fa-spin"></i>
+              ) : (
+                <i className="fa-brands fa-google"></i>
+              )}
+            </button>
+          </div>
+
+          <div className="progress-container">
+            <div className="progress-steps">
+              <div className="progress-line">
+                <div 
+                  className="progress-fill" 
+                  style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}
+                />
               </div>
-              <span className="form-separator">or use your email for registration</span>
-              <div className="w-layout-blockcontainer container-5 w-container">
-                <div className="w-embed">
-                  <div id="zefrix-creator-form-2024" className="zefrix-creator-container">
-                    <form className="zefrix-creator-form" autoComplete="off" onSubmit={handleCreatorSignUp}>
-                      <input type="text" placeholder="Full Name" required className="zefrix-input" name="fullname" />
-                      <input type="email" placeholder="Email" required className="zefrix-input" name="email" />
-                      <input type="tel" placeholder="WhatsApp Number" required className="zefrix-input" name="whatsapp" />
-                      <select className="zefrix-select" name="category" required defaultValue="">
-                        <option value="" disabled>Select Your Category</option>
-                        {categories.map((cat) => (
-                          <option key={cat.value} value={cat.value}>
-                            {cat.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input type="password" placeholder="Password" required className="zefrix-input" name="password" />
-                      <button type="submit" className="zefrix-creator-btn" id="creator-submit-btn">Become a Creator</button>
-                    </form>
+              {STEPS.map((step) => (
+                <div
+                  key={step.id}
+                  className={`step-indicator ${
+                    currentStep === step.id ? 'active' : currentStep > step.id ? 'completed' : ''
+                  }`}
+                >
+                  <div className="step-circle">
+                    {currentStep > step.id ? (
+                      <i className="fa-solid fa-check"></i>
+                    ) : (
+                      <i className={`fa-solid ${step.icon}`}></i>
+                    )}
                   </div>
+                  <div className="step-title">{step.title}</div>
                 </div>
-              </div>
-            </div>
-            <div className="w-layout-cell cell-2">
-              <h1 className="heading-13 dark-bg">Hello, Friend!</h1>
-              <div className="text-block-27">
-                Become a creator and start your teaching career.<br/><br/>
-              </div>
+              ))}
             </div>
           </div>
+
+          <form onSubmit={handleSubmit}>
+            <div className="form-container">
+              {renderStepContent()}
+            </div>
+
+            <div className="form-actions">
+              {currentStep > 1 && (
+                <button type="button" className="btn btn-secondary" onClick={prevStep}>
+                  <i className="fa-solid fa-arrow-left"></i> Previous
+                </button>
+              )}
+              {currentStep < STEPS.length ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={nextStep}
+                  disabled={!validateStep(currentStep)}
+                >
+                  Next <i className="fa-solid fa-arrow-right"></i>
+                </button>
+              ) : (
+                <button type="submit" className="btn btn-submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin"></i> Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-check"></i> Submit Application
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </form>
         </div>
       </div>
+      <Footer />
     </>
   );
 }

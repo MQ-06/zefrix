@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import styles from './Sidebar.module.css';
 
 interface SidebarProps {
   activeSection: string;
@@ -9,104 +8,73 @@ interface SidebarProps {
   onLogout: () => void;
 }
 
-const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: '🎓' },
-  { id: 'create-class', label: 'Create Class', icon: '🎓' },
-  { id: 'manage-classes', label: 'Manage Classes', icon: '🎓' },
-  { id: 'manage-batches', label: 'Manage Batches', icon: '🎓' },
-  { id: 'class-details', label: 'Class Detail', icon: '🎓' },
-  { id: 'live-class', label: 'Live Class', icon: '🎓' },
-  { id: 'profile', label: 'My Profile', icon: '🎓' },
-];
-
 export default function CreatorSidebar({ activeSection, onSectionChange, onLogout }: SidebarProps) {
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const handleNavClick = (id: string) => {
-    onSectionChange(id);
-    setIsMobileOpen(false);
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, section: string) => {
+    e.preventDefault();
+    setIsMenuOpen(false);
+    onSectionChange(section);
   };
 
   return (
     <>
-      {/* Mobile Hamburger */}
-      <div className={styles.mobileNav}>
-        <a href="#" className={styles.logoLinkResponsive}>
-          <img
-            width="200"
-            loading="lazy"
-            alt="Zefrix Logo"
-            src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f9_6907f6cf8f1c1a9c8e68ea5c_logo.png"
-            className={styles.logoImg}
-          />
-        </a>
-        <button
-          className={styles.hamburger}
-          onClick={() => setIsMobileOpen(!isMobileOpen)}
-          aria-label="Toggle menu"
-        >
-          <div className={`${styles.hamburgerLine} ${styles.top} ${isMobileOpen ? styles.open : ''}`}></div>
-          <div className={`${styles.hamburgerLine} ${styles.mid} ${isMobileOpen ? styles.open : ''}`}></div>
-          <div className={`${styles.hamburgerLine} ${styles.bot} ${isMobileOpen ? styles.open : ''}`}></div>
-        </button>
-      </div>
-
-      {/* Sidebar Navigation */}
-      <div className={`${styles.sidebar} ${isMobileOpen ? styles.mobileOpen : ''}`}>
-        <div className={styles.sidebarTop}>
-          <a href="#" className={styles.logoLink}>
-            <div className={styles.sidebarHeader}>
-              <img
-                width="200"
-                loading="lazy"
-                alt="Zefrix Logo"
-                src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f9_6907f6cf8f1c1a9c8e68ea5c_logo.png"
-                className={styles.sidebarLogo}
-              />
-            </div>
-          </a>
-          <div className={styles.sidebarMenu}>
-            <div className={styles.navList}>
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  className={`${styles.navItem} ${activeSection === item.id ? styles.active : ''}`}
-                  onClick={() => handleNavClick(item.id)}
-                >
-                  <img
-                    loading="lazy"
-                    src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg"
-                    alt=""
-                    className={styles.navIcon}
-                  />
-                  <div className={styles.navText}>{item.label}</div>
-                </button>
-              ))}
-            </div>
-          </div>
+      <div className={`sidebar ${isMenuOpen ? 'open' : ''}`}>
+        <div className="sidebar-logo">
+          <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f9_6907f6cf8f1c1a9c8e68ea5c_logo.png" alt="Zefrix" />
         </div>
-        <button
-          id="logout-btn"
-          className={`${styles.navItem} ${styles.logoutBtn}`}
-          onClick={onLogout}
-        >
-          <img
-            loading="lazy"
-            src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg"
-            alt=""
-            className={styles.navIcon}
-          />
-          <div className={styles.navText}>Log Out</div>
-        </button>
+        <nav className="sidebar-nav">
+          <a href="#" onClick={(e) => handleNavClick(e, 'dashboard')} className={`sidebar-nav-item ${activeSection === 'dashboard' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>Dashboard</div>
+          </a>
+          <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeSection === 'notifications' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>Notifications</div>
+          </a>
+          <a href="#" onClick={(e) => handleNavClick(e, 'analytics')} className={`sidebar-nav-item ${activeSection === 'analytics' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>Analytics</div>
+          </a>
+          <a href="#" onClick={(e) => handleNavClick(e, 'create-class')} className={`sidebar-nav-item ${activeSection === 'create-class' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>Create Class</div>
+          </a>
+          <a href="#" onClick={(e) => handleNavClick(e, 'manage-classes')} className={`sidebar-nav-item ${activeSection === 'manage-classes' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>Manage Classes</div>
+          </a>
+          <a href="#" onClick={(e) => handleNavClick(e, 'manage-batches')} className={`sidebar-nav-item ${activeSection === 'manage-batches' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>Manage Batches</div>
+          </a>
+          <a href="#" onClick={(e) => handleNavClick(e, 'enrollments')} className={`sidebar-nav-item ${activeSection === 'enrollments' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>All Enrollments</div>
+          </a>
+          <a href="#" onClick={(e) => handleNavClick(e, 'live-class')} className={`sidebar-nav-item ${activeSection === 'live-class' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>Live Class</div>
+          </a>
+          <a href="#" onClick={(e) => handleNavClick(e, 'profile')} className={`sidebar-nav-item ${activeSection === 'profile' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>My Profile</div>
+          </a>
+        </nav>
+        <div className="sidebar-footer">
+          <a onClick={onLogout} className="sidebar-nav-item">
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>Log Out</div>
+          </a>
+        </div>
       </div>
 
-      {/* Mobile Overlay */}
-      {isMobileOpen && (
-        <div
-          className={styles.navOverlay}
-          onClick={() => setIsMobileOpen(false)}
-        ></div>
-      )}
+      {/* Mobile Hamburger */}
+      <div className="hamburger" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+        <div className="hamburger-line"></div>
+        <div className="hamburger-line"></div>
+        <div className="hamburger-line"></div>
+      </div>
     </>
   );
 }

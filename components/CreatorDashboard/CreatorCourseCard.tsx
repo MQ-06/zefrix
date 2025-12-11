@@ -70,8 +70,8 @@ export default function CreatorCourseCard({ course }: CreatorCourseCardProps) {
       </div>
       <div className="creator-course-bottom">
         <div className="creator-course-price-wrap">
-          <h4 className="creator-course-price">$ {course.price.toFixed(2)} USD</h4>
-          <div className="creator-course-price-compare">$ {course.originalPrice.toFixed(2)} USD</div>
+          <h4 className="creator-course-price">₹{course.price.toFixed(2)}</h4>
+          <div className="creator-course-price-compare">₹{course.originalPrice.toFixed(2)}</div>
         </div>
       </div>
     </a>

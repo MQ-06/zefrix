@@ -2,22 +2,35 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useNotification } from '@/contexts/NotificationContext';
 import CreatorSidebar from '@/components/CreatorDashboard/Sidebar';
 import CreatorCourseCard from '@/components/CreatorDashboard/CreatorCourseCard';
 import CreateClassForm from '@/components/CreatorDashboard/CreateClassForm';
+import EditClassForm from '@/components/CreatorDashboard/EditClassForm';
 import ManageClasses from '@/components/CreatorDashboard/ManageClasses';
 import ManageBatches from '@/components/CreatorDashboard/ManageBatches';
+import ViewClass from '@/components/CreatorDashboard/ViewClass';
 import ClassDetails from '@/components/CreatorDashboard/ClassDetails';
 import LiveClass from '@/components/CreatorDashboard/LiveClass';
 import CreatorProfile from '@/components/CreatorDashboard/Profile';
+import EnrollmentList from '@/components/CreatorDashboard/EnrollmentList';
+import Analytics from '@/components/CreatorDashboard/Analytics';
 
 declare global {
   interface Window {
     firebaseAuth: any;
     firebaseDb: any;
+    firebaseStorage: any;
     logout: any;
     doc: any;
     getDoc: any;
+    addDoc: any;
+    Timestamp: any;
+    updateProfile: any;
+    ref: any;
+    uploadBytes: any;
+    getDownloadURL: any;
+    deleteObject: any;
   }
 }
 
@@ -103,24 +116,62 @@ const mockCourses = [
   },
 ];
 
+interface ApprovedClass {
+  classId: string;
+  title: string;
+  subtitle?: string;
+  category: string;
+  subCategory: string;
+  price: number;
+  scheduleType: 'one-time' | 'recurring';
+  numberSessions: number;
+  videoLink?: string;
+  createdAt: any;
+  [key: string]: any;
+}
+
 export default function CreatorDashboard() {
+  const { showError } = useNotification();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [user, setUser] = useState<any>(null);
+  const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [viewingClassId, setViewingClassId] = useState<string | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
+  const [viewingEnrollmentsClassId, setViewingEnrollmentsClassId] = useState<string | null>(null);
+  const [viewingEnrollmentsClassName, setViewingEnrollmentsClassName] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     // Load Firebase SDKs dynamically
     const loadFirebaseScripts = () => {
+      // Check if already loaded with ALL required dependencies
+      if (window.firebaseAuth && window.firebaseDb && window.serverTimestamp &&
+        window.collection && window.query && window.where && window.getDocs &&
+        window.doc && window.deleteDoc && window.updateDoc) {
+        console.log('✅ Firebase and all dependencies already initialized');
+        window.dispatchEvent(new CustomEvent('firebaseReady'));
+        return;
+      }
+
+      console.log('🔄 Loading Firebase scripts...');
       const firebaseAppScript = document.createElement('script');
       firebaseAppScript.src = "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
       firebaseAppScript.type = "module";
+      firebaseAppScript.onerror = () => {
+        console.error('❌ Failed to load Firebase app script');
+      };
       firebaseAppScript.onload = () => {
+        console.log('✅ Firebase app script loaded');
         const firebaseAuthConfig = document.createElement('script');
         firebaseAuthConfig.type = "module";
         firebaseAuthConfig.innerHTML = `
-          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+          import { getAuth, onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+          import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, addDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -132,9 +183,46 @@ export default function CreatorDashboard() {
             measurementId: "G-27HS1SWB5X"
           };
 
-          const app = initializeApp(firebaseConfig);
+          const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
           window.firebaseAuth = getAuth(app);
           window.firebaseDb = getFirestore(app);
+          window.firebaseStorage = getStorage(app);
+          window.doc = doc;
+          window.getDoc = getDoc;
+          window.setDoc = setDoc;
+          window.updateDoc = updateDoc;
+          window.deleteDoc = deleteDoc;
+          window.serverTimestamp = serverTimestamp;
+          window.collection = collection;
+          window.query = query;
+          window.where = where;
+          window.getDocs = getDocs;
+          window.addDoc = addDoc;
+          window.Timestamp = Timestamp;
+          window.updateProfile = updateProfile;
+          window.ref = ref;
+          window.uploadBytes = uploadBytes;
+          window.getDownloadURL = getDownloadURL;
+          window.deleteObject = deleteObject;
+
+          console.log('✅ Firebase initialized - serverTimestamp available:', typeof window.serverTimestamp);
+          console.log('✅ Firebase objects:', {
+            firebaseAuth: !!window.firebaseAuth,
+            firebaseDb: !!window.firebaseDb,
+            doc: !!window.doc,
+            setDoc: !!window.setDoc,
+            serverTimestamp: typeof window.serverTimestamp
+          });
+
+          // Dispatch event when Firebase is ready
+          window.dispatchEvent(new CustomEvent('firebaseReady', { 
+            detail: { 
+              firebaseAuth: window.firebaseAuth,
+              firebaseDb: window.firebaseDb,
+              serverTimestamp: window.serverTimestamp 
+            } 
+          }));
+          console.log('📢 firebaseReady event dispatched');
 
           window.logout = async () => {
             try {
@@ -142,35 +230,36 @@ export default function CreatorDashboard() {
               location.replace('/signup-login');
             } catch (error) {
               console.error('Logout failed:', error);
-              alert('Logout failed, please try again.');
+              showError('Logout failed, please try again.');
             }
           };
 
           onAuthStateChanged(window.firebaseAuth, async (user) => {
-            // Temporarily disabled for testing
-            // if (!user) {
-            //   location.replace('/signup-login');
-            //   return;
-            // }
+            if (!user) {
+              location.replace('/signup-login');
+              return;
+            }
             
-            // try {
-            //   const userRef = doc(window.firebaseDb, 'users', user.uid);
-            //   const snap = await getDoc(userRef);
-            //   const role = snap.exists() ? snap.data().role : 'student';
+            try {
+              const userRef = doc(window.firebaseDb, 'users', user.uid);
+              const snap = await getDoc(userRef);
+              const role = snap.exists() ? snap.data().role : 'student';
               
-            //   if (role !== 'creator') {
-            //     if (role === 'admin') {
-            //       location.replace('/admin-dashboard');
-            //     } else {
-            //       location.replace('/student-dashboard');
-            //     }
-            //     return;
-            //   }
+              if (role !== 'creator') {
+                if (role === 'admin') {
+                  location.replace('/admin-dashboard');
+                } else {
+                  location.replace('/student-dashboard');
+                }
+                return;
+              }
               
-            //   window.dispatchEvent(new CustomEvent('userLoaded', { detail: { user, role } }));
-            // } catch (err) {
-            //   console.error('Auth check error:', err);
-            // }
+              window.dispatchEvent(new CustomEvent('userLoaded', { detail: { user, role } }));
+            } catch (err) {
+              console.error('Auth check error:', err);
+              // Still dispatch user event even if role check fails
+              window.dispatchEvent(new CustomEvent('userLoaded', { detail: { user, role: 'creator' } }));
+            }
           });
         `;
         document.body.appendChild(firebaseAuthConfig);
@@ -182,12 +271,25 @@ export default function CreatorDashboard() {
 
     // Listen for user loaded event
     const handleUserLoaded = (e: any) => {
+      console.log('User loaded event received:', e.detail);
       setUser(e.detail.user);
     };
     window.addEventListener('userLoaded', handleUserLoaded as EventListener);
 
+    // Also check for current user immediately if Firebase is already loaded
+    const checkCurrentUser = () => {
+      if (window.firebaseAuth && window.firebaseAuth.currentUser) {
+        setUser(window.firebaseAuth.currentUser);
+      }
+    };
+
+    // Check immediately and also set up interval
+    checkCurrentUser();
+    const userCheckInterval = setInterval(checkCurrentUser, 1000);
+
     return () => {
       window.removeEventListener('userLoaded', handleUserLoaded as EventListener);
+      clearInterval(userCheckInterval);
     };
   }, []);
 
@@ -204,9 +306,88 @@ export default function CreatorDashboard() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeSection]);
 
+  // Fetch approved classes for dashboard
+  useEffect(() => {
+    const fetchApprovedClasses = async () => {
+      // Wait for Firebase with retry logic
+      let retries = 0;
+      while (retries < 10) {
+        const currentUser = user || (window.firebaseAuth?.currentUser);
+
+        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs && currentUser) {
+          // Firebase is ready!
+          console.log('✅ Firebase ready, fetching classes for creator:', currentUser.uid);
+          break;
+        }
+
+        console.log(`⏳ Waiting for Firebase... (attempt ${retries + 1}/10)`, {
+          firebaseDb: !!window.firebaseDb,
+          collection: !!window.collection,
+          query: !!window.query,
+          where: !!window.where,
+          getDocs: !!window.getDocs,
+          user: !!currentUser
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+        retries++;
+      }
+
+      // Final check after retries
+      const currentUser = user || (window.firebaseAuth?.currentUser);
+
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !currentUser) {
+        console.error('❌ Firebase not ready after retries:', {
+          firebaseDb: !!window.firebaseDb,
+          collection: !!window.collection,
+          query: !!window.query,
+          where: !!window.where,
+          getDocs: !!window.getDocs,
+          user: !!currentUser
+        });
+        return;
+      }
+
+      setLoadingClasses(true);
+      try {
+        console.log('📦 Fetching approved classes for creator:', currentUser.uid);
+        const classesRef = window.collection(window.firebaseDb, 'classes');
+        const q = window.query(
+          classesRef,
+          window.where('creatorId', '==', currentUser.uid),
+          window.where('status', '==', 'approved')
+        );
+        const querySnapshot = await window.getDocs(q);
+
+        const classes: ApprovedClass[] = [];
+        querySnapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
+
+        console.log(`✅ Found ${classes.length} approved classes for creator`);
+
+        // Sort by creation date (newest first)
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setApprovedClasses(classes);
+      } catch (error) {
+        console.error('❌ Error fetching approved classes:', error);
+      } finally {
+        setLoadingClasses(false);
+      }
+    };
+
+    if (activeSection === 'dashboard') {
+      fetchApprovedClasses();
+    }
+  }, [activeSection, user]);
+
   return (
     <>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
       <style jsx global>{`
         * {
           margin: 0;
@@ -215,7 +396,7 @@ export default function CreatorDashboard() {
         }
 
         body {
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-family: 'Poppins', sans-serif;
           background: linear-gradient(180deg, #1a0f2e 0%, #2d1b4e 30%, #4a2c5e 60%, #6b3d6e 100%);
           min-height: 100vh;
           color: #fff;
@@ -231,6 +412,11 @@ export default function CreatorDashboard() {
           display: flex;
           min-height: 100vh;
           position: relative;
+        }
+
+        .dashboard-container {
+          display: flex;
+          min-height: 100vh;
         }
 
         /* Mobile Navigation */
@@ -290,11 +476,10 @@ export default function CreatorDashboard() {
           transform: rotate(-45deg) translate(7px, -7px);
         }
 
-        /* Sidebar */
-        .creator-sidebar {
+        /* Sidebar - Matching Student Dashboard Design */
+        .sidebar {
           width: 280px;
-          background: rgba(15, 15, 30, 0.95);
-          backdrop-filter: blur(10px);
+          background: #0f0f1e;
           padding: 2rem 1.5rem;
           display: flex;
           flex-direction: column;
@@ -302,58 +487,47 @@ export default function CreatorDashboard() {
           height: 100vh;
           left: 0;
           top: 0;
-          z-index: 999;
+          z-index: 1000;
           border-right: 1px solid rgba(255, 255, 255, 0.1);
-          overflow-y: auto;
+          overflow: hidden;
         }
 
-        .creator-sidebar::-webkit-scrollbar {
-          width: 6px;
+        .sidebar-logo {
+          margin-bottom: 3rem;
+          flex-shrink: 0;
         }
 
-        .creator-sidebar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .creator-sidebar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.2);
-          border-radius: 3px;
-        }
-
-        .creator-sidebar::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.3);
-        }
-
-        .creator-sidebar-top {
-          flex: 1;
-        }
-
-        .creator-logo-link {
-          display: block;
-          margin-bottom: 2rem;
-        }
-
-        .creator-sidebar-header {
-          display: flex;
-          align-items: center;
-        }
-
-        .creator-sidebar-logo {
+        .sidebar-logo img {
           width: 150px;
           height: auto;
         }
 
-        .creator-sidebar-menu {
+        .sidebar-nav {
           flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          min-height: 0;
         }
 
-        .creator-nav-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
+        .sidebar-nav::-webkit-scrollbar {
+          width: 6px;
         }
 
-        .creator-nav-item {
+        .sidebar-nav::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb {
+          background: rgba(217, 42, 99, 0.5);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb:hover {
+          background: rgba(217, 42, 99, 0.7);
+        }
+
+        .sidebar-nav-item {
           display: flex;
           align-items: center;
           gap: 1rem;
@@ -364,56 +538,69 @@ export default function CreatorDashboard() {
           text-decoration: none;
           transition: all 0.3s;
           cursor: pointer;
-          background: transparent;
-          border: none;
-          width: 100%;
-          text-align: left;
-          font-family: inherit;
-          font-size: 1rem;
         }
 
-        .creator-nav-item:hover {
+        .sidebar-nav-item:hover {
           background: rgba(255, 255, 255, 0.1);
         }
 
-        .creator-nav-item.active {
-          background: linear-gradient(135deg, rgba(217, 42, 99, 0.3) 0%, rgba(255, 101, 75, 0.3) 100%);
+        .sidebar-nav-item.active {
+          background: rgba(217, 42, 99, 0.2);
           border-left: 3px solid #D92A63;
-          color: #fff;
         }
 
-        .creator-nav-item.active .creator-nav-icon {
-          opacity: 1;
-        }
-
-        .creator-nav-icon {
+        .sidebar-nav-item img {
           width: 20px;
           height: 20px;
-          opacity: 0.8;
         }
 
-        .creator-nav-text {
-          font-weight: 500;
-        }
-
-        .creator-logout-btn {
+        .sidebar-footer {
           margin-top: auto;
           padding-top: 2rem;
           border-top: 1px solid rgba(255, 255, 255, 0.1);
+          flex-shrink: 0;
         }
 
-        .creator-nav-overlay {
+        .sidebar-footer .sidebar-nav-item {
+          background: rgba(217, 42, 99, 0.1);
+          border-left: 3px solid #D92A63;
+        }
+
+        .sidebar-footer .sidebar-nav-item:hover {
+          background: rgba(217, 42, 99, 0.2);
+        }
+
+        /* Hamburger for mobile */
+        .hamburger {
           display: none;
+          flex-direction: column;
+          gap: 5px;
+          cursor: pointer;
+          padding: 0.5rem;
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          top: 1rem;
+          left: 1rem;
+          z-index: 1001;
           background: rgba(0, 0, 0, 0.5);
-          z-index: 998;
+          border-radius: 8px;
+        }
+
+        .hamburger-line {
+          width: 25px;
+          height: 3px;
+          background: #fff;
+          border-radius: 3px;
+          transition: all 0.3s;
         }
 
         /* Main Content */
+        .main-content {
+          margin-left: 280px;
+          flex: 1;
+          padding: 2rem;
+          min-height: 100vh;
+        }
+
         .creator-content-wrapper {
           margin-left: 280px;
           flex: 1;
@@ -447,22 +634,6 @@ export default function CreatorDashboard() {
           font-size: 0.875rem;
         }
 
-        .creator-notification-icon {
-          width: 44px;
-          height: 44px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.25rem;
-          cursor: pointer;
-          transition: all 0.3s;
-        }
-
-        .creator-notification-icon:hover {
-          background: rgba(255, 255, 255, 0.2);
-        }
 
         /* Section Titles */
         .creator-section-title {
@@ -598,60 +769,107 @@ export default function CreatorDashboard() {
         /* Form Styles */
         .creator-form-container {
           background: rgba(255, 255, 255, 0.05);
-          padding: 1.5rem;
-          border-radius: 12px;
+          padding: 2.5rem;
+          border-radius: 16px;
+          max-width: 900px;
+          margin: 0 auto;
         }
 
         .creator-form {
           display: flex;
           flex-direction: column;
-          gap: 1.25rem;
+          gap: 0;
+        }
+
+        .creator-form-section {
+          margin-bottom: 3rem;
+          padding-bottom: 2.5rem;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .creator-form-section:last-of-type {
+          border-bottom: none;
+          margin-bottom: 2rem;
         }
 
         .creator-form-heading {
-          font-size: 1.125rem;
+          font-size: 1.25rem;
           font-weight: 700;
           color: #fff;
-          margin-top: 1.5rem;
-          margin-bottom: 0.75rem;
+          margin-bottom: 1.5rem;
+          padding-bottom: 0.75rem;
+          border-bottom: 2px solid rgba(217, 42, 99, 0.3);
         }
 
-        .creator-form-heading:first-child {
-          margin-top: 0;
+        .creator-form-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1.5rem;
+          margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+          .creator-form-grid {
+            grid-template-columns: 1fr;
+          }
         }
 
         .creator-form-group {
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
+          gap: 0.75rem;
         }
 
         .creator-field-label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: rgba(255, 255, 255, 0.95);
+          letter-spacing: 0.3px;
+        }
+
+        .creator-field-hint {
           font-size: 0.75rem;
-          font-weight: 500;
-          color: rgba(255, 255, 255, 0.9);
+          color: rgba(255, 255, 255, 0.5);
+          margin-top: -0.5rem;
+          font-style: italic;
         }
 
         .creator-form-input,
-        .creator-select,
         .creator-textarea {
           width: 100%;
-          padding: 8px 12px;
+          padding: 12px 16px;
           background: rgba(255, 255, 255, 0.1);
           border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 6px;
+          border-radius: 8px;
           color: #fff;
-          font-size: 0.875rem;
+          font-size: 0.9375rem;
+          font-family: inherit;
+          transition: all 0.3s;
+        }
+
+        .creator-select {
+          width: 100%;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 8px;
+          color: #000;
+          font-size: 0.9375rem;
           font-family: inherit;
           transition: all 0.3s;
         }
 
         .creator-form-input:focus,
-        .creator-select:focus,
         .creator-textarea:focus {
           outline: none;
           border-color: #D92A63;
           background: rgba(255, 255, 255, 0.15);
+        }
+
+        .creator-select:focus {
+          outline: none;
+          border-color: #D92A63;
+          background: #fff;
         }
 
         .creator-form-input::placeholder,
@@ -661,22 +879,32 @@ export default function CreatorDashboard() {
 
         .creator-select {
           appearance: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.762L10.825 4z'/%3E%3C/svg%3E");
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23000' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.762L10.825 4z'/%3E%3C/svg%3E");
           background-repeat: no-repeat;
           background-position: right 16px center;
           background-size: 12px;
           padding-right: 40px;
         }
 
+        .creator-select option {
+          background: #fff;
+          color: #000;
+          padding: 8px;
+        }
+
         .creator-textarea {
           resize: vertical;
-          min-height: 100px;
+          min-height: 120px;
+          line-height: 1.6;
         }
 
         .creator-radio-group {
           display: flex;
-          gap: 2rem;
-          margin-bottom: 1rem;
+          gap: 2.5rem;
+          margin-bottom: 2rem;
+          padding: 1rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 8px;
         }
 
         .creator-radio-wrap {
@@ -702,12 +930,18 @@ export default function CreatorDashboard() {
           display: flex;
           flex-direction: column;
           gap: 1.5rem;
+          margin-top: 1.5rem;
+          padding: 1.5rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .creator-pill-wrap {
           display: flex;
           flex-wrap: wrap;
-          gap: 0.75rem;
+          gap: 0.875rem;
+          margin-top: 0.5rem;
         }
 
         .creator-pill-item {
@@ -721,12 +955,13 @@ export default function CreatorDashboard() {
         }
 
         .creator-pill-label {
-          padding: 0.5rem 1rem;
+          padding: 0.625rem 1.25rem;
           background: rgba(255, 255, 255, 0.1);
           border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 20px;
+          border-radius: 24px;
           color: rgba(255, 255, 255, 0.7);
           font-size: 0.875rem;
+          font-weight: 500;
           transition: all 0.3s;
           cursor: pointer;
         }
@@ -737,18 +972,43 @@ export default function CreatorDashboard() {
           color: #fff;
         }
 
+        .creator-form-actions {
+          margin-top: 2rem;
+          padding-top: 2rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         .creator-submit-btn {
           background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
           color: white;
           border: none;
-          padding: 14px 32px;
-          border-radius: 8px;
-          font-size: 1rem;
+          padding: 16px 40px;
+          border-radius: 10px;
+          font-size: 1.0625rem;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s;
+          width: 100%;
+          max-width: 300px;
+        }
+
+        .creator-message {
           margin-top: 1rem;
-          align-self: flex-start;
+          padding: 1rem 1.25rem;
+          border-radius: 8px;
+          font-size: 0.9375rem;
+        }
+
+        .creator-message-success {
+          background-color: rgba(212, 237, 218, 0.15);
+          color: #d4edda;
+          border: 1px solid rgba(195, 230, 203, 0.3);
+        }
+
+        .creator-message-error {
+          background-color: rgba(248, 215, 218, 0.15);
+          color: #f8d7da;
+          border: 1px solid rgba(245, 198, 203, 0.3);
         }
 
         .creator-submit-btn:hover {
@@ -1256,7 +1516,20 @@ export default function CreatorDashboard() {
             padding-top: 80px;
           }
 
-          .creator-mobile-nav {
+          .main-content {
+            margin-left: 0;
+          }
+
+          .sidebar {
+            transform: translateX(-100%);
+            transition: transform 0.3s;
+          }
+
+          .sidebar.open {
+            transform: translateX(0);
+          }
+
+          .hamburger {
             display: flex;
           }
 
@@ -1282,49 +1555,84 @@ export default function CreatorDashboard() {
         }
       `}</style>
 
-      <div className="creator-dashboard-container">
+      <div className="dashboard-container">
         <CreatorSidebar
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           onLogout={handleLogout}
         />
 
-        <div className="creator-content-wrapper">
+        <div className="main-content">
           <div className="creator-content">
             {/* Dashboard Header */}
             <div className="creator-dashboard-header">
               <div className="creator-welcome-section">
-                <h2>Welcome back, Teacher!</h2>
+                <h2>Welcome back, {user?.displayName || user?.email?.split('@')[0] || 'Creator'}!</h2>
                 <p>Continue your teaching journey</p>
-              </div>
-              <div className="creator-notification-icon">
-                <div>🔔</div>
               </div>
             </div>
 
             {/* Dashboard Section */}
             {activeSection === 'dashboard' && (
               <div id="dashboard" className="creator-section">
-                <h2 className="creator-section-title">Total Classes Created</h2>
-                <div className="creator-course-grid">
-                  {mockCourses.map((course) => (
-                    <CreatorCourseCard key={course.id} course={course} />
-                  ))}
-                </div>
+                <h2 className="creator-section-title">My Approved Classes</h2>
+                {loadingClasses ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    Loading classes...
+                  </div>
+                ) : approvedClasses.length > 0 ? (
+                  <div className="creator-course-grid">
+                    {approvedClasses.map((classItem) => {
+                      const course = {
+                        id: classItem.classId,
+                        slug: classItem.classId,
+                        title: classItem.title,
+                        instructor: classItem.creatorName || 'Creator',
+                        instructorImage: '',
+                        image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b861_course-12.jpg',
+                        price: classItem.price,
+                        originalPrice: classItem.price,
+                        sections: classItem.numberSessions,
+                        duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
+                        students: 0,
+                      };
+                      return <CreatorCourseCard key={classItem.classId} course={course} />;
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    No approved classes yet. Create a class and wait for admin approval.
+                  </div>
+                )}
+              </div>
+            )}
 
-                <h2 className="creator-section-title">Total Students Enrolled</h2>
-                <div className="creator-course-grid">
-                  {mockCourses.slice(0, 3).map((course) => (
-                    <CreatorCourseCard key={course.id} course={course} />
-                  ))}
+            {/* Notifications Section */}
+            {activeSection === 'notifications' && (
+              <div id="notifications" className="creator-section">
+                <h2 className="creator-section-title">Notifications</h2>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '16px',
+                  padding: '2rem',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem', color: '#fff' }}>Notifications Center</h3>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '1rem' }}>
+                    Class reminders and updates are sent via email and WhatsApp through n8n automation.
+                  </p>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
+                    You'll receive notifications about class approvals, student enrollments, and important updates.
+                  </p>
                 </div>
+              </div>
+            )}
 
-                <h2 className="creator-section-title">Total Batches</h2>
-                <div className="creator-course-grid">
-                  {mockCourses.slice(0, 3).map((course) => (
-                    <CreatorCourseCard key={course.id} course={course} />
-                  ))}
-                </div>
+            {/* Analytics Section */}
+            {activeSection === 'analytics' && (
+              <div id="analytics" className="creator-section">
+                <Analytics />
               </div>
             )}
 
@@ -1341,7 +1649,62 @@ export default function CreatorDashboard() {
             {/* Manage Classes Section */}
             {activeSection === 'manage-classes' && (
               <div id="manage-classes" className="creator-section">
-                <ManageClasses />
+                {viewingEnrollmentsClassId ? (
+                  <EnrollmentList
+                    classId={viewingEnrollmentsClassId}
+                    className={viewingEnrollmentsClassName || undefined}
+                    onBack={() => {
+                      setViewingEnrollmentsClassId(null);
+                      setViewingEnrollmentsClassName(null);
+                    }}
+                  />
+                ) : viewingClassId ? (
+                  <ViewClass
+                    classId={viewingClassId}
+                    onBack={() => setViewingClassId(null)}
+                    onEdit={() => {
+                      setEditingClassId(viewingClassId);
+                      setViewingClassId(null);
+                    }}
+                  />
+                ) : editingClassId ? (
+                  <EditClassForm
+                    classId={editingClassId}
+                    onCancel={() => setEditingClassId(null)}
+                    onSuccess={() => {
+                      setEditingClassId(null);
+                      // Optionally refresh the class list
+                    }}
+                  />
+                ) : selectedClassId ? (
+                  <ManageBatches
+                    classId={selectedClassId}
+                    className={selectedClassName || undefined}
+                    onBack={() => {
+                      setSelectedClassId(null);
+                      setSelectedClassName(null);
+                    }}
+                  />
+                ) : (
+                  <ManageClasses
+                    onEditClass={(classId) => setEditingClassId(classId)}
+                    onViewClass={(classId) => setViewingClassId(classId)}
+                    onManageBatches={(classId, className) => {
+                      setSelectedClassId(classId);
+                      setSelectedClassName(className);
+                    }}
+                    onViewEnrollments={(classId, className) => {
+                      setViewingEnrollmentsClassId(classId);
+                      setViewingEnrollmentsClassName(className);
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
+            {activeSection === 'enrollments' && (
+              <div id="enrollments" className="creator-section">
+                <EnrollmentList />
               </div>
             )}
 
@@ -1353,9 +1716,9 @@ export default function CreatorDashboard() {
             )}
 
             {/* Class Details Section */}
-            {activeSection === 'class-details' && (
+            {activeSection === 'class-details' && viewingClassId && (
               <div id="class-details" className="creator-section">
-                <ClassDetails />
+                <ClassDetails classId={viewingClassId} onBack={() => setViewingClassId(null)} />
               </div>
             )}
 

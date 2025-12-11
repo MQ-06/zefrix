@@ -1,9 +1,20 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNotification } from '@/contexts/NotificationContext';
+
+declare global {
+  interface Window {
+    firebaseDb: any;
+    collection: any;
+    addDoc: any;
+    serverTimestamp: any;
+  }
+}
 
 export default function ContactUsPage() {
+  const { showError, showSuccess, showInfo } = useNotification();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -11,11 +22,148 @@ export default function ContactUsPage() {
     subject: '',
     message: '',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [firebaseReady, setFirebaseReady] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    // Load Firebase if not already loaded
+    const initializeFirebase = async () => {
+      // Check if already initialized
+      if (window.firebaseDb && window.collection && window.addDoc && window.serverTimestamp) {
+        setFirebaseReady(true);
+        return;
+      }
+
+      // Load Firebase App script first
+      const appScript = document.createElement('script');
+      appScript.src = "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      appScript.type = "module";
+      
+      appScript.onload = () => {
+        // Then load Firestore
+        const firestoreScript = document.createElement('script');
+        firestoreScript.type = "module";
+        firestoreScript.innerHTML = `
+          import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+          import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          
+          const firebaseConfig = {
+            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+            authDomain: "zefrix-custom.firebaseapp.com",
+            projectId: "zefrix-custom",
+            storageBucket: "zefrix-custom.firebasestorage.app",
+            messagingSenderId: "50732408558",
+            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+            measurementId: "G-27HS1SWB5X"
+          };
+          
+          const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+          window.firebaseDb = getFirestore(app);
+          window.collection = collection;
+          window.addDoc = addDoc;
+          window.serverTimestamp = serverTimestamp;
+          
+          console.log('✅ Contact form Firebase initialized');
+          window.dispatchEvent(new CustomEvent('firebaseReady'));
+        `;
+        document.body.appendChild(firestoreScript);
+      };
+
+      document.body.appendChild(appScript);
+
+      // Listen for Firebase ready event
+      const handleFirebaseReady = () => {
+        setFirebaseReady(true);
+      };
+      window.addEventListener('firebaseReady', handleFirebaseReady);
+
+      return () => {
+        window.removeEventListener('firebaseReady', handleFirebaseReady);
+      };
+    };
+
+    initializeFirebase();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission here
-    console.log('Form submitted:', formData);
+
+    // Validation
+    if (!formData.name.trim()) {
+      showError('Please enter your name');
+      return;
+    }
+    if (!formData.email.trim()) {
+      showError('Please enter your email');
+      return;
+    }
+    if (!formData.subject.trim()) {
+      showError('Please enter a subject');
+      return;
+    }
+    if (!formData.message.trim()) {
+      showError('Please enter your message');
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      showError('Please enter a valid email address');
+      return;
+    }
+
+    // Check if Firebase is ready
+    if (!firebaseReady || !window.firebaseDb || !window.collection || !window.addDoc || !window.serverTimestamp) {
+      showError('System is initializing. Please wait a moment and try again.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitMessage(null);
+
+    try {
+      // Save to Firestore
+      const contactsRef = window.collection(window.firebaseDb, 'contacts');
+      const docRef = await window.addDoc(contactsRef, {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim() || '',
+        subject: formData.subject.trim(),
+        message: formData.message.trim(),
+        status: 'new',
+        createdAt: window.serverTimestamp(),
+        read: false
+      });
+
+      console.log('✅ Contact message saved to Firestore with ID:', docRef.id);
+
+      showSuccess('Thank you! Your message has been sent successfully. We\'ll get back to you soon!');
+      setSubmitMessage({
+        type: 'success',
+        text: 'Thank you! Your message has been sent successfully. We\'ll get back to you soon!'
+      });
+
+      // Reset form
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        subject: '',
+        message: '',
+      });
+    } catch (error: any) {
+      console.error('Error submitting contact form:', error);
+      const errorMessage = error.message || 'Sorry, there was an error sending your message. Please try again.';
+      showError(errorMessage);
+      setSubmitMessage({
+        type: 'error',
+        text: errorMessage
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -31,14 +179,14 @@ export default function ContactUsPage() {
       <section className="hero-inner pt-24 pb-16 md:pt-32 md:pb-20 relative overflow-hidden">
         {/* Background Gradient */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A2E] via-[#2D1B3D] to-[#E91E63]"></div>
-        
+
         <div className="container relative z-10">
           <div className="text-center position-relative">
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="text-3xl md:text-4xl lg:text-5xl font-bold text-[#2D2D44] mb-4 relative"
+              className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 relative"
             >
               <span className="relative">
                 We're here to help!
@@ -140,12 +288,28 @@ export default function ContactUsPage() {
                       onChange={handleChange}
                     />
                   </div>
+
+                  {submitMessage && (
+                    <div
+                      className={`p-4 rounded-lg ${submitMessage.type === 'success'
+                          ? 'bg-green-100 text-green-800 border border-green-300'
+                          : 'bg-red-100 text-red-800 border border-red-300'
+                        }`}
+                    >
+                      {submitMessage.text}
+                    </div>
+                  )}
+
                   <input
                     type="submit"
+                    disabled={isSubmitting || !firebaseReady}
                     data-wait="Please wait..."
-                    className="button-primary-1 button-full w-button w-full bg-gradient-to-r from-[#E91E63] to-[#FF6B9D] text-white px-8 py-4 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300 cursor-pointer"
-                    value="Send Message"
+                    className="button-primary-1 button-full w-button w-full bg-gradient-to-r from-[#E91E63] to-[#FF6B9D] text-white px-8 py-4 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    value={isSubmitting ? 'Sending...' : !firebaseReady ? 'Initializing...' : 'Send Message'}
                   />
+                  {!firebaseReady && (
+                    <p className="text-sm text-gray-500 mt-2">Please wait while we initialize the system...</p>
+                  )}
                 </form>
               </div>
             </motion.div>

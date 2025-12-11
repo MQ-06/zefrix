@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useNotification } from '@/contexts/NotificationContext';
 import Link from 'next/link';
 import { courses } from '@/lib/data';
 
@@ -10,14 +11,64 @@ declare global {
     firebaseAuth: any;
     firebaseDb: any;
     logout: any;
+    collection: any;
+    query: any;
+    where: any;
+    getDocs: any;
+    doc: any;
+    getDoc: any;
+    setDoc: any;
+    updateDoc: any;
+    addDoc: any;
+    Timestamp: any;
   }
 }
 
+interface ApprovedClass {
+  classId: string;
+  title: string;
+  subtitle?: string;
+  category: string;
+  subCategory: string;
+  creatorName: string;
+  price: number;
+  scheduleType: 'one-time' | 'recurring';
+  numberSessions: number;
+  videoLink?: string;
+  createdAt: any;
+  [key: string]: any;
+}
+
 export default function StudentDashboard() {
+  const { showError } = useNotification();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [activeSection, setActiveSection] = useState('student-panel-top');
+  const [activeView, setActiveView] = useState('dashboard');
+  const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+  const [loadingEnrollments, setLoadingEnrollments] = useState(false);
+
+  // Profile state
+  const [profileName, setProfileName] = useState('');
+  const [profileInterests, setProfileInterests] = useState('');
+  const [profileImage, setProfileImage] = useState('');
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileMessage, setProfileMessage] = useState('');
+
+  // New features state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [selectedClassForRating, setSelectedClassForRating] = useState<any>(null);
+  const [rating, setRating] = useState(0);
+  const [feedback, setFeedback] = useState('');
+
   const router = useRouter();
+  const userInitial = ((user?.displayName || user?.email || 'S')[0] || 'S').toUpperCase();
 
   useEffect(() => {
     // Load Firebase SDKs dynamically
@@ -31,7 +82,7 @@ export default function StudentDashboard() {
         firebaseAuthConfig.innerHTML = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -46,6 +97,15 @@ export default function StudentDashboard() {
           const app = initializeApp(firebaseConfig);
           window.firebaseAuth = getAuth(app);
           window.firebaseDb = getFirestore(app);
+          window.doc = doc;
+          window.getDoc = getDoc;
+          window.setDoc = setDoc;
+          window.collection = collection;
+          window.query = query;
+          window.where = where;
+          window.getDocs = getDocs;
+          window.addDoc = addDoc;
+          window.updateDoc = updateDoc;
 
           window.logout = async () => {
             try {
@@ -53,7 +113,7 @@ export default function StudentDashboard() {
               location.replace('/signup-login');
             } catch (error) {
               console.error('Logout failed:', error);
-              alert('Logout failed, please try again.');
+              showError('Logout failed, please try again.');
             }
           };
 
@@ -102,25 +162,77 @@ export default function StudentDashboard() {
     };
   }, []);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const sections = ['student-panel-top', 'my-enrollments', 'browse-classes', 'profile'];
-      const scrollPosition = window.scrollY + 200; // Offset for better UX
 
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const element = document.getElementById(sections[i]);
-        if (element && element.offsetTop <= scrollPosition) {
-          setActiveSection(sections[i]);
-          break;
-        }
+  // Fetch enrollments from Firestore
+  useEffect(() => {
+    const fetchEnrollments = async () => {
+      if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        return;
+      }
+
+      setLoadingEnrollments(true);
+      try {
+        const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+        const q = window.query(enrollmentsRef, window.where('studentId', '==', user.uid));
+        const querySnapshot = await window.getDocs(q);
+
+        const fetchedEnrollments: any[] = [];
+        querySnapshot.forEach((doc: any) => {
+          fetchedEnrollments.push({ id: doc.id, ...doc.data() });
+        });
+
+        // Sort by enrollment date (newest first)
+        fetchedEnrollments.sort((a, b) => {
+          const aTime = a.enrolledAt?.toMillis?.() || 0;
+          const bTime = b.enrolledAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setEnrollments(fetchedEnrollments);
+      } catch (error) {
+        console.error('Error fetching enrollments:', error);
+      } finally {
+        setLoadingEnrollments(false);
       }
     };
 
-    window.addEventListener('scroll', handleScroll);
-    handleScroll(); // Initial check
+    if (user) {
+      fetchEnrollments();
+    }
+  }, [user]);
 
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  // Load user profile data
+  useEffect(() => {
+    const loadProfileData = async () => {
+      if (!user || !window.firebaseDb || !window.doc || !window.getDoc) {
+        return;
+      }
+
+      try {
+        const userRef = window.doc(window.firebaseDb, 'users', user.uid);
+        const userSnap = await window.getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          setProfileName(userData.displayName || user.displayName || '');
+          setProfileInterests(userData.interests || '');
+          setProfileImage(userData.photoURL || user.photoURL || '');
+          setProfileImagePreview(userData.photoURL || user.photoURL || '');
+        } else {
+          // Set defaults from Firebase Auth
+          setProfileName(user.displayName || '');
+          setProfileImage(user.photoURL || '');
+          setProfileImagePreview(user.photoURL || '');
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      }
+    };
+
+    if (user) {
+      loadProfileData();
+    }
+  }, [user]);
 
   const handleLogout = () => {
     if (confirm('Log out of Zefrix?')) {
@@ -130,23 +242,211 @@ export default function StudentDashboard() {
     }
   };
 
-  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, view: string) => {
     e.preventDefault();
     setIsMenuOpen(false);
-    const element = document.getElementById(targetId.replace('#', ''));
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActiveView(view);
+    // Scroll to top when switching views
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+
+  // Fetch approved classes from Firestore
+  useEffect(() => {
+    const fetchApprovedClasses = async () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        setTimeout(fetchApprovedClasses, 500);
+        return;
+      }
+
+      setLoadingClasses(true);
+      try {
+        const classesRef = window.collection(window.firebaseDb, 'classes');
+        const q = window.query(classesRef, window.where('status', '==', 'approved'));
+        const querySnapshot = await window.getDocs(q);
+
+        const classes: ApprovedClass[] = [];
+        querySnapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
+
+        // Sort by creation date (newest first)
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setApprovedClasses(classes);
+      } catch (error) {
+        console.error('Error fetching approved classes:', error);
+      } finally {
+        setLoadingClasses(false);
+      }
+    };
+
+    fetchApprovedClasses();
+  }, []);
+
+  // Fetch upcoming sessions for enrolled classes
+  useEffect(() => {
+    const fetchUpcomingSessions = async () => {
+      if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        return;
+      }
+
+      try {
+        const batchesRef = window.collection(window.firebaseDb, 'batches');
+        const allBatchesSnapshot = await window.getDocs(batchesRef);
+        
+        const sessions: any[] = [];
+        const now = new Date();
+
+        allBatchesSnapshot.forEach((doc: any) => {
+          const batch = { id: doc.id, ...doc.data() };
+          const batchDate = batch.batchDate?.toDate ? batch.batchDate.toDate() : new Date(batch.batchDate);
+          
+          // Only include future sessions
+          if (batchDate > now && batch.status === 'scheduled') {
+            // Check if student is enrolled in this class
+            const isEnrolled = enrollments.some(e => e.classId === batch.classId);
+            if (isEnrolled) {
+              sessions.push({
+                ...batch,
+                className: batch.className || 'Class',
+                sessionDate: batchDate,
+                sessionTime: batch.batchTime,
+                meetingLink: batch.meetingLink
+              });
+            }
+          }
+        });
+
+        // Sort by date (earliest first)
+        sessions.sort((a, b) => {
+          const aTime = a.sessionDate?.getTime() || 0;
+          const bTime = b.sessionDate?.getTime() || 0;
+          return aTime - bTime;
+        });
+
+        setUpcomingSessions(sessions.slice(0, 10)); // Limit to 10 upcoming
+      } catch (error) {
+        console.error('Error fetching upcoming sessions:', error);
+      }
+    };
+
+    if (user && enrollments.length > 0) {
+      fetchUpcomingSessions();
+    }
+  }, [user, enrollments]);
+
+  // Filter classes based on search and category
+  const filteredClasses = approvedClasses.filter((cls) => {
+    const matchesSearch = !searchQuery || 
+      cls.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cls.creatorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cls.category.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesCategory = !selectedCategory || cls.category === selectedCategory;
+    
+    return matchesSearch && matchesCategory;
+  });
+
+  // Handle rating submission
+  const handleRatingSubmit = async () => {
+    if (!selectedClassForRating || !rating || !user) return;
+
+    try {
+      if (!window.firebaseDb || !window.collection || !window.addDoc) {
+        showError('Firebase not ready. Please try again.');
+        return;
+      }
+
+      const ratingsRef = window.collection(window.firebaseDb, 'ratings');
+      await window.addDoc(ratingsRef, {
+        classId: selectedClassForRating.classId || selectedClassForRating.id,
+        studentId: user.uid,
+        studentName: user.displayName || user.email?.split('@')[0],
+        rating: rating,
+        feedback: feedback,
+        createdAt: new Date()
+      });
+
+      // Update enrollment with rating
+      const enrollment = enrollments.find(e => e.classId === (selectedClassForRating.classId || selectedClassForRating.id));
+      if (enrollment && window.updateDoc && window.doc) {
+        const enrollmentRef = window.doc(window.firebaseDb, 'enrollments', enrollment.id);
+        await window.updateDoc(enrollmentRef, {
+          rating: rating,
+          feedback: feedback,
+          ratedAt: new Date()
+        });
+      }
+
+      setShowRatingModal(false);
+      setRating(0);
+      setFeedback('');
+      setSelectedClassForRating(null);
+      // Refresh enrollments
+      if (user) {
+        const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+        const q = window.query(enrollmentsRef, window.where('studentId', '==', user.uid));
+        const querySnapshot = await window.getDocs(q);
+        const fetchedEnrollments: any[] = [];
+        querySnapshot.forEach((doc: any) => {
+          fetchedEnrollments.push({ id: doc.id, ...doc.data() });
+        });
+        setEnrollments(fetchedEnrollments);
+      }
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      showError('Failed to submit rating. Please try again.');
     }
   };
 
-  const enrolledCourses = courses.slice(0, 3);
-  const upcomingCourses = courses.slice(0, 3);
-  const completedCourses = courses.slice(0, 3);
-  const browseCourses = courses;
+  // Format date helper
+  const formatDate = (date: any) => {
+    if (!date) return 'N/A';
+    try {
+      const d = date.toDate ? date.toDate() : new Date(date);
+      return d.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return 'Invalid Date';
+    }
+  };
 
-  return (
-    <>
-      <style jsx global>{`
+  // Format time helper
+  const formatTime = (time: string) => {
+    if (!time) return 'N/A';
+    try {
+      const [hours, minutes] = time.split(':');
+      const hour = parseInt(hours);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour % 12 || 12;
+      return `${displayHour}:${minutes} ${ampm}`;
+    } catch {
+      return time;
+    }
+  };
+
+  // Check if class is live (within 30 minutes of start time)
+  const isClassLive = (sessionDate: Date, sessionTime: string) => {
+    if (!sessionDate || !sessionTime) return false;
+    const now = new Date();
+    const [hours, minutes] = sessionTime.split(':');
+    const sessionDateTime = new Date(sessionDate);
+    sessionDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
+    const diffMinutes = (sessionDateTime.getTime() - now.getTime()) / (1000 * 60);
+    return diffMinutes >= -30 && diffMinutes <= 120; // Live if within 30 min before to 2 hours after
+  };
+
+  const dashboardStyles = `
         * {
           margin: 0;
           padding: 0;
@@ -154,7 +454,7 @@ export default function StudentDashboard() {
         }
 
         body {
-          font-family: 'Inter', sans-serif;
+          font-family: 'Poppins', sans-serif;
           background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
           color: #fff;
           overflow-x: hidden;
@@ -178,10 +478,12 @@ export default function StudentDashboard() {
           top: 0;
           z-index: 1000;
           border-right: 1px solid rgba(255, 255, 255, 0.1);
+          overflow: hidden;
         }
 
         .sidebar-logo {
           margin-bottom: 3rem;
+          flex-shrink: 0;
         }
 
         .sidebar-logo img {
@@ -191,6 +493,27 @@ export default function StudentDashboard() {
 
         .sidebar-nav {
           flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          min-height: 0;
+        }
+
+        .sidebar-nav::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb {
+          background: rgba(217, 42, 99, 0.5);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb:hover {
+          background: rgba(217, 42, 99, 0.7);
         }
 
         .sidebar-nav-item {
@@ -223,6 +546,17 @@ export default function StudentDashboard() {
         .sidebar-footer {
           margin-top: auto;
           padding-top: 2rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          flex-shrink: 0;
+        }
+
+        .sidebar-footer .sidebar-nav-item {
+          background: rgba(217, 42, 99, 0.1);
+          border-left: 3px solid #D92A63;
+        }
+
+        .sidebar-footer .sidebar-nav-item:hover {
+          background: rgba(217, 42, 99, 0.2);
         }
 
         /* Main Content */
@@ -251,16 +585,51 @@ export default function StudentDashboard() {
           font-size: 1rem;
         }
 
-        .notification-icon {
-          width: 50px;
-          height: 50px;
-          background: rgba(255, 255, 255, 0.1);
+        .user-summary {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.75rem 1rem;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.1);
           border-radius: 12px;
+          min-width: 220px;
+        }
+
+        .user-avatar {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #D92A63, #6C63FF);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 1.5rem;
-          cursor: pointer;
+          font-weight: 700;
+          color: #fff;
+          overflow: hidden;
+        }
+
+        .user-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .user-meta {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .user-name {
+          color: #fff;
+          font-weight: 700;
+          line-height: 1.1;
+        }
+
+        .user-email {
+          color: rgba(255, 255, 255, 0.7);
+          font-size: 0.9rem;
+          line-height: 1.1;
         }
 
         /* Course Grid */
@@ -484,6 +853,31 @@ export default function StudentDashboard() {
           border-color: #D92A63;
         }
 
+        /* Select dropdown styling */
+        select.form-input {
+          color: #000 !important;
+          background: #fff !important;
+          cursor: pointer;
+        }
+
+        select.form-input:focus {
+          color: #fff !important;
+          background: rgba(255, 255, 255, 0.1) !important;
+        }
+
+        select.form-input option {
+          color: #000 !important;
+          background: #fff !important;
+          padding: 0.5rem;
+        }
+
+        /* When select is open (active), show white text */
+        select.form-input:active,
+        select.form-input:focus {
+          color: #fff !important;
+          background: rgba(255, 255, 255, 0.1) !important;
+        }
+
         /* Responsive */
         .hamburger {
           display: none;
@@ -542,7 +936,84 @@ export default function StudentDashboard() {
             flex-direction: column;
           }
         }
-      `}</style>
+
+        /* Rating Modal */
+        .rating-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10000;
+          padding: 1rem;
+        }
+
+        .rating-modal-content {
+          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+          border-radius: 16px;
+          padding: 2rem;
+          max-width: 500px;
+          width: 100%;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          max-height: 90vh;
+          overflow: auto;
+        }
+
+        /* Search and Filter */
+        .search-filter-container {
+          display: flex;
+          gap: 1rem;
+          margin-bottom: 2rem;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+
+        .search-input {
+          flex: 1;
+          min-width: 250px;
+          max-width: 400px;
+        }
+
+        .filter-select {
+          min-width: 150px;
+        }
+
+        /* Session Card */
+        .session-card {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 1.5rem;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 1rem;
+        }
+
+        .session-card.live {
+          background: rgba(217, 42, 99, 0.2);
+          border: 2px solid #D92A63;
+        }
+
+        .live-badge {
+          background: #D92A63;
+          color: #fff;
+          padding: 0.5rem 1rem;
+          border-radius: 20px;
+          font-size: 0.875rem;
+          font-weight: 600;
+        }
+      }
+  `;
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{__html: dashboardStyles}} />
 
       <div className="dashboard-container">
         {/* Sidebar */}
@@ -551,19 +1022,27 @@ export default function StudentDashboard() {
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f9_6907f6cf8f1c1a9c8e68ea5c_logo.png" alt="Zefrix" />
           </div>
           <nav className="sidebar-nav">
-            <a href="#student-panel-top" onClick={(e) => handleNavClick(e, '#student-panel-top')} className={`sidebar-nav-item ${activeSection === 'student-panel-top' ? 'active' : ''}`}>
+            <a href="#" onClick={(e) => handleNavClick(e, 'dashboard')} className={`sidebar-nav-item ${activeView === 'dashboard' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Dashboard</div>
             </a>
-            <a href="#my-enrollments" onClick={(e) => handleNavClick(e, '#my-enrollments')} className={`sidebar-nav-item ${activeSection === 'my-enrollments' ? 'active' : ''}`}>
+            <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeView === 'notifications' ? 'active' : ''}`}>
+              <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+              <div>Notifications</div>
+            </a>
+            <a href="#" onClick={(e) => handleNavClick(e, 'upcoming-sessions')} className={`sidebar-nav-item ${activeView === 'upcoming-sessions' ? 'active' : ''}`}>
+              <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+              <div>Upcoming Sessions</div>
+            </a>
+            <a href="#" onClick={(e) => handleNavClick(e, 'my-enrollments')} className={`sidebar-nav-item ${activeView === 'my-enrollments' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>My Enrollments</div>
             </a>
-            <a href="#browse-classes" onClick={(e) => handleNavClick(e, '#browse-classes')} className={`sidebar-nav-item ${activeSection === 'browse-classes' ? 'active' : ''}`}>
+            <a href="#" onClick={(e) => handleNavClick(e, 'browse-classes')} className={`sidebar-nav-item ${activeView === 'browse-classes' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Browse Classes</div>
             </a>
-            <a href="#profile" onClick={(e) => handleNavClick(e, '#profile')} className={`sidebar-nav-item ${activeSection === 'profile' ? 'active' : ''}`}>
+            <a href="#" onClick={(e) => handleNavClick(e, 'profile')} className={`sidebar-nav-item ${activeView === 'profile' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>My Profile</div>
             </a>
@@ -585,265 +1064,820 @@ export default function StudentDashboard() {
             <div className="hamburger-line"></div>
           </div>
 
-          {/* Dashboard Header */}
-          <div id="student-panel-top" className="dashboard-header">
+          {/* Render Active View */}
+          {activeView === 'dashboard' && (
+            <>
+              {/* Dashboard Header */}
+              <div className="dashboard-header">
             <div className="welcome-section">
               <h2>Welcome back, {user?.displayName || 'Student'}!</h2>
               <p>Continue your learning journey</p>
             </div>
-            <div className="notification-icon">
-              🔔
+            <div className="user-summary">
+              <div className="user-avatar">
+                {user?.photoURL ? (
+                  <img src={user.photoURL} alt={user?.displayName || 'Student'} />
+                ) : (
+                  userInitial
+                )}
+              </div>
+              <div className="user-meta">
+                <div className="user-name">{user?.displayName || user?.email?.split('@')[0] || 'Student'}</div>
+                <div className="user-email">{user?.email || 'Student account'}</div>
+              </div>
             </div>
           </div>
 
-          {/* Total Classes Enrolled */}
-          <div className="section">
-            <h2 className="section-title">Total Classes Enrolled</h2>
-            <div className="course-grid">
-              {enrolledCourses.map((course) => (
-                <Link key={course.id} href={`/product/${course.slug}`} className="course-card">
-                  <div className="course-image-wrap">
-                    <img src={course.image} alt={course.title} className="course-image" />
-                    <div className="course-teacher-wrap">
-                      <img src={course.instructorImage} alt={course.instructor} className="course-instructor-image-rounded" />
-                      <div>{course.instructor}</div>
-                    </div>
-                  </div>
-                  <div className="course-info">
-                    <h3 className="course-title">{course.title}</h3>
-                    <div className="course-meta">
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                        <div>{course.sections} Sections</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                        <div>{course.duration} Days</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
-                        <div>{course.students} Students</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="course-bottom">
-                    <div className="course-price-wrap">
-                      <h4 className="course-price">$ {course.price.toFixed(2)} USD</h4>
-                      {course.comparePrice && (
-                        <div className="course-price-compare">$ {course.comparePrice.toFixed(2)} USD</div>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
+            </>
+          )}
 
-          {/* Upcoming Classes */}
-          <div className="section" style={{ marginTop: '4rem' }}>
-            <h2 className="section-title">Upcoming Classes</h2>
-            <div className="course-grid">
-              {upcomingCourses.map((course) => (
-                <Link key={course.id} href={`/product/${course.slug}`} className="course-card">
-                  <div className="course-image-wrap">
-                    <img src={course.image} alt={course.title} className="course-image" />
-                    <div className="course-teacher-wrap">
-                      <img src={course.instructorImage} alt={course.instructor} className="course-instructor-image-rounded" />
-                      <div>{course.instructor}</div>
-                    </div>
-                  </div>
-                  <div className="course-info">
-                    <h3 className="course-title">{course.title}</h3>
-                    <div className="course-meta">
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                        <div>{course.sections} Sections</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                        <div>{course.duration} Days</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
-                        <div>{course.students} Students</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="course-bottom">
-                    <div className="course-price-wrap">
-                      <h4 className="course-price">$ {course.price.toFixed(2)} USD</h4>
-                      {course.comparePrice && (
-                        <div className="course-price-compare">$ {course.comparePrice.toFixed(2)} USD</div>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              ))}
+          {activeView === 'notifications' && (
+            <>
+              {/* Notifications Placeholder */}
+              <div className="section" style={{ marginTop: '2rem' }}>
+            <h2 className="section-title">Notifications</h2>
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '16px',
+              padding: '2rem',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>Notifications Center</h3>
+              <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '1rem' }}>
+                Class reminders and updates are sent via email and WhatsApp through n8n automation.
+              </p>
+              <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
+                You'll receive notifications 24 hours and 1 hour before each class starts.
+              </p>
             </div>
-          </div>
+              </div>
+            </>
+          )}
 
-          {/* Completed Classes */}
-          <div className="section" style={{ marginTop: '4rem' }}>
-            <h2 className="section-title">Completed Classes</h2>
-            <div className="course-grid">
-              {completedCourses.map((course) => (
-                <Link key={course.id} href={`/product/${course.slug}`} className="course-card">
-                  <div className="course-image-wrap">
-                    <img src={course.image} alt={course.title} className="course-image" />
-                    <div className="course-teacher-wrap">
-                      <img src={course.instructorImage} alt={course.instructor} className="course-instructor-image-rounded" />
-                      <div>{course.instructor}</div>
-                    </div>
+          {activeView === 'upcoming-sessions' && (
+            <>
+              {/* Upcoming Sessions */}
+              <div className="section" style={{ marginTop: '2rem' }}>
+                <h2 className="section-title">Upcoming Sessions ({upcomingSessions.length})</h2>
+                {upcomingSessions.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {upcomingSessions.map((session) => {
+                      const isLive = isClassLive(session.sessionDate, session.sessionTime);
+                      return (
+                        <div key={session.id} style={{
+                          background: isLive ? 'rgba(217, 42, 99, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          borderRadius: '12px',
+                          padding: '1.5rem',
+                          border: isLive ? '2px solid #D92A63' : '1px solid rgba(255, 255, 255, 0.1)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '1rem'
+                        }}>
+                          <div style={{ flex: 1, minWidth: '200px' }}>
+                            <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                              {session.className}
+                            </h3>
+                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                              <span>📅 {formatDate(session.sessionDate)}</span>
+                              <span>🕐 {formatTime(session.sessionTime)}</span>
+                              {session.duration && <span>⏱️ {session.duration} min</span>}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            {isLive && (
+                              <span style={{
+                                background: '#D92A63',
+                                color: '#fff',
+                                padding: '0.5rem 1rem',
+                                borderRadius: '20px',
+                                fontSize: '0.875rem',
+                                fontWeight: '600'
+                              }}>
+                                🔴 LIVE NOW
+                              </span>
+                            )}
+                            {session.meetingLink ? (
+                              <a
+                                href={session.meetingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="button-dark"
+                                style={{ fontSize: '0.875rem', padding: '0.75rem 1.5rem', textDecoration: 'none' }}
+                              >
+                                {isLive ? 'Join Live Class' : 'Join Session'}
+                              </a>
+                            ) : (
+                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
+                                Link will be sent via email
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="course-info">
-                    <h3 className="course-title">{course.title}</h3>
-                    <div className="course-meta">
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                        <div>{course.sections} Sections</div>
+                ) : (
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '2rem',
+                    textAlign: 'center',
+                    color: 'rgba(255, 255, 255, 0.7)'
+                  }}>
+                    No upcoming sessions scheduled. Check your email for class schedules.
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {activeView === 'my-enrollments' && (
+            <>
+              {/* My Enrollments */}
+              <div className="my-enrollments" style={{ marginTop: '2rem' }}>
+                <h2 className="section-title">My Enrollments</h2>
+            {loadingEnrollments ? (
+              <div className="text-white text-center py-8">Loading enrollments...</div>
+            ) : enrollments.length > 0 ? (
+              <div className="course-grid">
+                {enrollments.map((course) => (
+                  <Link key={course.id} href={`/product/${course.classId}`} className="course-card">
+                    <div className="course-image-wrap">
+                      <img
+                        src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"
+                        alt={course.className}
+                        className="course-image"
+                      />
+                      <div className="course-teacher-wrap">
+                        <div style={{
+                          width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
+                        }}>
+                          Z
+                        </div>
+                        <div className="ml-2">Zefrix</div>
                       </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                        <div>{course.duration} Days</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
-                        <div>{course.students} Students</div>
+                    </div>
+                    <div className="course-info">
+                      <h3 className="course-title">{course.className}</h3>
+                      <div className="course-meta">
+                        <div className="course-meta-item">
+                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
+                          <div>{course.numberOfSessions || 1} Sessions</div>
+                        </div>
+                        <div className="course-meta-item">
+                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
+                          <div>{course.classType || 'One-time'}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="course-bottom">
-                    <div className="course-price-wrap">
-                      <h4 className="course-price">$ {course.price.toFixed(2)} USD</h4>
-                      {course.comparePrice && (
-                        <div className="course-price-compare">$ {course.comparePrice.toFixed(2)} USD</div>
-                      )}
+                    <div className="course-bottom">
+                      <div className="course-price-wrap">
+                        <h4 className="course-price">₹{(course.classPrice || 0).toFixed(2)}</h4>
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-400 py-8">
+                You haven't enrolled in any classes yet. <Link href="#browse-classes" style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse classes</Link> to get started!
+              </div>
+            )}
+              </div>
+            </>
+          )}
 
-          {/* Action Buttons */}
-          <div className="section" style={{ marginTop: '4rem' }}>
-            <div className="section-title-inline button-inline-flex-style">
-              <Link href="/courses" className="button-dark">Browse Classes</Link>
-              <Link href="#my-enrollments" className="button-dark">View all Enrollments</Link>
-            </div>
-          </div>
-
-          {/* My Enrollments */}
-          <div id="my-enrollments" className="my-enrollments">
-            <h2 className="section-title">My Enrollments</h2>
-            <div className="enrollment-list">
-              {[1, 2, 3, 4].map((item) => (
-                <div key={item} className="enrollment-item">
-                  <img 
-                    src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b7c7_avatar-10.jpg" 
-                    alt="Avatar" 
-                    className="enrollment-avatar" 
-                  />
-                  <div className="enrollment-info">
-                    <h1>Title</h1>
-                  </div>
-                  <div className="enrollment-info">
-                    <h1>John Doe</h1>
-                  </div>
-                  <div className="enrollment-info">
-                    <h1>Status</h1>
-                  </div>
-                  <div className="enrollment-status">
-                    next Session Date/Time
-                  </div>
-                  <div className="enrollment-actions">
-                    <button className="button-dark">Join Class</button>
-                    <button className="button-dark">View Details</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Browse Classes */}
-          <div id="browse-classes" className="section" style={{ marginTop: '4rem' }}>
+          {activeView === 'browse-classes' && (
+            <>
+              {/* Browse Classes with Search/Filter */}
+              <div className="section" style={{ marginTop: '2rem' }}>
             <h2 className="section-title">Browse Classes</h2>
-            <div className="course-grid">
-              {browseCourses.map((course) => (
-                <Link key={course.id} href={`/product/${course.slug}`} className="course-card">
-                  <div className="course-image-wrap">
-                    <img src={course.image} alt={course.title} className="course-image" />
-                    <div className="course-teacher-wrap">
-                      <img src={course.instructorImage} alt={course.instructor} className="course-instructor-image-rounded" />
-                      <div>{course.instructor}</div>
+            
+            {/* Search and Filter */}
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              marginBottom: '2rem',
+              flexWrap: 'wrap',
+              alignItems: 'center'
+            }}>
+              <input
+                type="text"
+                placeholder="Search by title, creator, or category..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="form-input"
+                style={{ flex: '1', minWidth: '250px', maxWidth: '400px' }}
+              />
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="form-input"
+                style={{ minWidth: '150px' }}
+              >
+                <option value="">All Categories</option>
+                {Array.from(new Set(approvedClasses.map(c => c.category))).map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              {(searchQuery || selectedCategory) && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedCategory('');
+                  }}
+                  className="button-dark"
+                  style={{ fontSize: '0.875rem', padding: '0.75rem 1rem' }}
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+
+            {loadingClasses ? (
+              <div className="text-white text-center py-8">Loading classes...</div>
+            ) : filteredClasses.length > 0 ? (
+              <>
+                <div style={{ marginBottom: '1rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                  Showing {filteredClasses.length} of {approvedClasses.length} classes
+                </div>
+                <div className="course-grid">
+                  {filteredClasses.map((course) => (
+                    <Link key={course.classId} href={`/product/${course.classId}`} className="course-card">
+                      <div className="course-image-wrap">
+                        <img src={course.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} alt={course.title} className="course-image" />
+                        <div className="course-teacher-wrap">
+                          <div style={{
+                            width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'
+                          }}>
+                            {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
+                          </div>
+                          <div>{course.creatorName || 'Instructor'}</div>
+                        </div>
+                      </div>
+                      <div className="course-info">
+                        <h3 className="course-title">{course.title}</h3>
+                        <div className="course-meta">
+                          <div className="course-meta-item">
+                            <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
+                            <div>{course.numberSessions || 1} Sessions</div>
+                          </div>
+                          <div className="course-meta-item">
+                            <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
+                            <div>{course.scheduleType === 'recurring' ? 'Batch' : 'One-time'}</div>
+                          </div>
+                          <div className="course-meta-item">
+                            <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
+                            <div>{course.category || 'General'}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="course-bottom">
+                        <div className="course-price-wrap">
+                          <h4 className="course-price">₹{(course.price || 0).toFixed(2)}</h4>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-gray-400 py-8 text-center" style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '2rem' }}>
+                {searchQuery || selectedCategory ? (
+                  <>
+                    No classes found matching your filters.
+                    <br />
+                    <button
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSelectedCategory('');
+                      }}
+                      className="button-dark"
+                      style={{ marginTop: '1rem', fontSize: '0.875rem', padding: '0.75rem 1.5rem' }}
+                    >
+                      Clear Filters
+                    </button>
+                  </>
+                ) : (
+                  'No classes available at the moment.'
+                )}
+              </div>
+            )}
+          </div>
+            </>
+          )}
+
+          {activeView === 'profile' && (
+            <>
+              {/* My Profile */}
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                minHeight: '80vh',
+                padding: '2rem 1rem',
+                marginTop: '2rem'
+              }}>
+                <div style={{ 
+                  width: '100%', 
+                  maxWidth: '600px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '20px',
+                  padding: '3rem 2.5rem',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+                }}>
+                  <h2 style={{ 
+                    fontSize: '2rem', 
+                    fontWeight: '700', 
+                    marginBottom: '2rem',
+                    textAlign: 'center',
+                    background: 'linear-gradient(135deg, #D92A63 0%, #FF6B35 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text'
+                  }}>
+                    My Profile
+                  </h2>
+                  
+                  {profileMessage && (
+                    <div style={{
+                      padding: '1rem',
+                      marginBottom: '2rem',
+                      borderRadius: '12px',
+                      background: profileMessage.includes('success') ? 'rgba(76, 175, 80, 0.15)' : 'rgba(244, 67, 54, 0.15)',
+                      border: `2px solid ${profileMessage.includes('success') ? '#4CAF50' : '#F44336'}`,
+                      color: profileMessage.includes('success') ? '#4CAF50' : '#F44336',
+                      textAlign: 'center',
+                      fontWeight: '600'
+                    }}>
+                      {profileMessage}
                     </div>
-                  </div>
-                  <div className="course-info">
-                    <h3 className="course-title">{course.title}</h3>
-                    <div className="course-meta">
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                        <div>{course.sections} Sections</div>
+                  )}
+
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setProfileLoading(true);
+                    setProfileMessage('');
+
+                    try {
+                      if (!user) {
+                        throw new Error('User not logged in');
+                      }
+
+                      // Wait for Firebase to be ready (with retry)
+                      let retries = 0;
+                      while ((!window.firebaseDb || !window.doc || !window.setDoc) && retries < 6) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        retries++;
+                      }
+
+                      if (!window.firebaseDb || !window.doc || !window.setDoc) {
+                        throw new Error('Firebase not initialized. Please refresh the page.');
+                      }
+
+                      let finalImageUrl = profileImage;
+
+                      // Handle image upload if file is selected
+                      if (profileImageFile) {
+                        // Convert file to base64 for storage (or upload to Firebase Storage if available)
+                        const reader = new FileReader();
+                        finalImageUrl = await new Promise((resolve, reject) => {
+                          reader.onloadend = () => {
+                            resolve(reader.result as string);
+                          };
+                          reader.onerror = reject;
+                          reader.readAsDataURL(profileImageFile);
+                        });
+                      }
+
+                      // Update/create user document in Firestore
+                      const userRef = window.doc(window.firebaseDb, 'users', user.uid);
+                      await window.setDoc(userRef, {
+                        displayName: profileName,
+                        interests: profileInterests,
+                        photoURL: finalImageUrl,
+                        email: user.email,
+                        role: 'student',
+                        updatedAt: new Date()
+                      }, { merge: true });
+
+                      // Update local state
+                      setProfileImage(finalImageUrl);
+                      setProfileImagePreview(finalImageUrl);
+                      setProfileImageFile(null);
+
+                      setProfileMessage('✅ Profile updated successfully!');
+                      setTimeout(() => setProfileMessage(''), 3000);
+                    } catch (error) {
+                      console.error('Error updating profile:', error);
+                      const errorMessage = error instanceof Error ? error.message : 'Failed to update profile. Please try again.';
+                      setProfileMessage(`❌ ${errorMessage}`);
+                    } finally {
+                      setProfileLoading(false);
+                    }
+                  }}>
+                    {/* Profile Image Upload Section */}
+                    <div style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      marginBottom: '2.5rem' 
+                    }}>
+                      <div style={{
+                        position: 'relative',
+                        width: '150px',
+                        height: '150px',
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #D92A63, #6C63FF)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '1rem',
+                        overflow: 'hidden',
+                        border: '4px solid rgba(255, 255, 255, 0.2)',
+                        boxShadow: '0 4px 20px rgba(217, 42, 99, 0.3)'
+                      }}>
+                        {profileImagePreview ? (
+                          <img
+                            src={profileImagePreview}
+                            alt="Profile"
+                            style={{ 
+                              width: '100%', 
+                              height: '100%', 
+                              objectFit: 'cover',
+                              borderRadius: '50%'
+                            }}
+                            onError={(e) => { 
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              setProfileImagePreview('');
+                            }}
+                          />
+                        ) : (
+                          <div style={{ 
+                            fontSize: '3rem', 
+                            fontWeight: '700', 
+                            color: '#fff' 
+                          }}>
+                            {userInitial}
+                          </div>
+                        )}
                       </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                        <div>{course.duration} Days</div>
-                      </div>
-                      <div className="course-meta-item">
-                        <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
-                        <div>{course.students} Students</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="course-bottom">
-                    <div className="course-price-wrap">
-                      <h4 className="course-price">$ {course.price.toFixed(2)} USD</h4>
-                      {course.comparePrice && (
-                        <div className="course-price-compare">$ {course.comparePrice.toFixed(2)} USD</div>
+                      
+                      <label
+                        htmlFor="profileImageUpload"
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          border: '2px dashed rgba(255, 255, 255, 0.3)',
+                          borderRadius: '12px',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                          transition: 'all 0.3s',
+                          textAlign: 'center',
+                          minWidth: '200px'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                          e.currentTarget.style.borderColor = 'rgba(217, 42, 99, 0.5)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                        }}
+                      >
+                        📷 {profileImageFile ? 'Change Photo' : 'Upload Photo'}
+                      </label>
+                      <input
+                        type="file"
+                        id="profileImageUpload"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            // Validate file size (max 5MB)
+                            if (file.size > 5 * 1024 * 1024) {
+                              setProfileMessage('❌ Image size must be less than 5MB');
+                              return;
+                            }
+                            // Validate file type
+                            if (!file.type.startsWith('image/')) {
+                              setProfileMessage('❌ Please select a valid image file');
+                              return;
+                            }
+                            setProfileImageFile(file);
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setProfileImagePreview(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                            setProfileMessage('');
+                          }
+                        }}
+                      />
+                      {profileImageFile && (
+                        <p style={{ 
+                          marginTop: '0.5rem', 
+                          fontSize: '0.875rem', 
+                          color: 'rgba(255, 255, 255, 0.7)' 
+                        }}>
+                          {profileImageFile.name}
+                        </p>
                       )}
                     </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
 
-          {/* My Profile */}
-          <div id="profile" className="section" style={{ marginTop: '4rem' }}>
-            <h2 className="section-title">My Profile</h2>
-            <div className="profile-form">
-              <form onSubmit={(e) => { e.preventDefault(); alert('Profile updated!'); }}>
-                <div className="form-group">
-                  <label htmlFor="name" className="form-label">Name</label>
-                  <input 
-                    type="text" 
-                    id="name" 
-                    className="form-input" 
-                    placeholder={user?.displayName || 'Enter your name'} 
+                    <div className="form-group" style={{ marginBottom: '1.75rem' }}>
+                      <label htmlFor="name" className="form-label" style={{ 
+                        fontSize: '0.95rem', 
+                        fontWeight: '600',
+                        marginBottom: '0.75rem',
+                        display: 'block'
+                      }}>
+                        Full Name *
+                      </label>
+                      <input
+                        type="text"
+                        id="name"
+                        className="form-input"
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        placeholder="Enter your full name"
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '0.875rem 1.25rem',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '12px',
+                          color: '#fff',
+                          fontSize: '1rem',
+                          transition: 'all 0.3s'
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = '#D92A63';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '1.75rem' }}>
+                      <label htmlFor="interests" className="form-label" style={{ 
+                        fontSize: '0.95rem', 
+                        fontWeight: '600',
+                        marginBottom: '0.75rem',
+                        display: 'block'
+                      }}>
+                        Interests & Skills
+                      </label>
+                      <input
+                        type="text"
+                        id="interests"
+                        className="form-input"
+                        value={profileInterests}
+                        onChange={(e) => setProfileInterests(e.target.value)}
+                        placeholder="e.g., Photography, Web Development, Design"
+                        style={{
+                          width: '100%',
+                          padding: '0.875rem 1.25rem',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '12px',
+                          color: '#fff',
+                          fontSize: '1rem',
+                          transition: 'all 0.3s'
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = '#D92A63';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        }}
+                      />
+                      <p style={{ 
+                        marginTop: '0.5rem', 
+                        fontSize: '0.8rem', 
+                        color: 'rgba(255, 255, 255, 0.5)' 
+                      }}>
+                        Separate multiple interests with commas
+                      </p>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '1.75rem' }}>
+                      <label htmlFor="email" className="form-label" style={{ 
+                        fontSize: '0.95rem', 
+                        fontWeight: '600',
+                        marginBottom: '0.75rem',
+                        display: 'block'
+                      }}>
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        id="email"
+                        className="form-input"
+                        value={user?.email || ''}
+                        disabled
+                        style={{
+                          width: '100%',
+                          padding: '0.875rem 1.25rem',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '12px',
+                          color: 'rgba(255, 255, 255, 0.6)',
+                          fontSize: '1rem',
+                          cursor: 'not-allowed'
+                        }}
+                      />
+                      <p style={{ 
+                        marginTop: '0.5rem', 
+                        fontSize: '0.8rem', 
+                        color: 'rgba(255, 255, 255, 0.5)' 
+                      }}>
+                        Email cannot be changed
+                      </p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="button-dark"
+                      disabled={profileLoading}
+                      style={{ 
+                        width: '100%',
+                        padding: '1rem',
+                        fontSize: '1rem',
+                        fontWeight: '600',
+                        marginTop: '1rem',
+                        opacity: profileLoading ? 0.6 : 1,
+                        cursor: profileLoading ? 'not-allowed' : 'pointer',
+                        borderRadius: '12px',
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #D92A63 0%, #FF6B35 100%)',
+                        color: '#fff',
+                        transition: 'all 0.3s'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!profileLoading) {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 6px 20px rgba(217, 42, 99, 0.4)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      {profileLoading ? '⏳ Updating Profile...' : ' Save Changes'}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Rating Modal - Always visible when open */}
+          {showRatingModal && selectedClassForRating && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10000,
+              padding: '1rem'
+            }}
+            onClick={() => {
+              setShowRatingModal(false);
+              setSelectedClassForRating(null);
+              setRating(0);
+              setFeedback('');
+            }}
+            >
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+                  borderRadius: '16px',
+                  padding: '2rem',
+                  maxWidth: '500px',
+                  width: '100%',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  maxHeight: '90vh',
+                  overflow: 'auto'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1rem' }}>
+                  Rate & Review: {selectedClassForRating.className || 'Class'}
+                </h2>
+                
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label className="form-label">Rating *</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setRating(star)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '2rem',
+                          color: star <= rating ? '#FFD700' : 'rgba(255, 255, 255, 0.3)',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (star > rating) {
+                            e.currentTarget.style.color = 'rgba(255, 215, 0, 0.5)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (star > rating) {
+                            e.currentTarget.style.color = 'rgba(255, 255, 255, 0.3)';
+                          }
+                        }}
+                      >
+                        ⭐
+                      </button>
+                    ))}
+                  </div>
+                  {rating > 0 && (
+                    <p style={{ marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                      {rating === 1 && 'Poor'}
+                      {rating === 2 && 'Fair'}
+                      {rating === 3 && 'Good'}
+                      {rating === 4 && 'Very Good'}
+                      {rating === 5 && 'Excellent'}
+                    </p>
+                  )}
+                </div>
+
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label htmlFor="feedback" className="form-label">Feedback (Optional)</label>
+                  <textarea
+                    id="feedback"
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    className="form-input"
+                    placeholder="Share your experience with this class..."
+                    rows={4}
+                    style={{ resize: 'vertical', fontFamily: 'inherit' }}
                   />
                 </div>
-                <div className="form-group">
-                  <label htmlFor="interests" className="form-label">Interest/Skills</label>
-                  <input 
-                    type="text" 
-                    id="interests" 
-                    className="form-input" 
-                    placeholder="Enter your interests or skills" 
-                  />
+
+                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRatingModal(false);
+                      setSelectedClassForRating(null);
+                      setRating(0);
+                      setFeedback('');
+                    }}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRatingSubmit}
+                    disabled={!rating}
+                    className="button-dark"
+                    style={{
+                      opacity: rating ? 1 : 0.5,
+                      cursor: rating ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    Submit Rating
+                  </button>
                 </div>
-                <div className="form-group">
-                  <label htmlFor="profileImage" className="form-label">Profile Image</label>
-                  <input 
-                    type="text" 
-                    id="profileImage" 
-                    className="form-input" 
-                    placeholder="Enter image URL" 
-                  />
-                </div>
-                <button type="submit" className="button-dark">Submit</button>
-              </form>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </>

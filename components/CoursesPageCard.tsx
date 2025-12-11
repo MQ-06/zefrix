@@ -63,29 +63,38 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
             {course.title}
           </h2>
 
-          <div className="flex items-center gap-6 text-gray-400 mb-5">
+          <div className="flex items-center gap-4 md:gap-6 text-gray-400 mb-5 flex-wrap">
             <div className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5" />
-              <span className="text-base">{course.sections} Sections</span>
+              <BookOpen className="w-5 h-5 text-gray-400" />
+              <span className="text-base">
+                <span className="font-bold text-white text-lg">{course.sections}</span>{' '}
+                <span className="text-gray-400">Sections</span>
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              <span className="text-base">{course.duration} Days</span>
+              <Clock className="w-5 h-5 text-gray-400" />
+              <span className="text-base">
+                <span className="font-bold text-white text-lg">{course.duration}</span>{' '}
+                <span className="text-gray-400">Days</span>
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              <span className="text-base">{course.students} Students</span>
+              <Users className="w-5 h-5 text-gray-400" />
+              <span className="text-base">
+                <span className="font-bold text-white text-lg">{course.students}</span>{' '}
+                <span className="text-gray-400">Students</span>
+              </span>
             </div>
           </div>
 
           <div className="flex items-center justify-between pt-5 border-t border-gray-700">
             <div>
               <h3 className="text-yellow-400 font-bold text-2xl mb-1">
-                $ {course.price.toFixed(2)} USD
+                ₹{course.price.toFixed(2)}
               </h3>
               {course.comparePrice && course.comparePrice > course.price && (
                 <div className="text-gray-500 text-base line-through">
-                  $ {course.comparePrice.toFixed(2)} USD
+                  ₹{course.comparePrice.toFixed(2)}
                 </div>
               )}
             </div>

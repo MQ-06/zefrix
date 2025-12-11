@@ -7,14 +7,161 @@
     margin-bottom: 1.5rem;
 }
 
+.backButton {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-bottom: 1rem;
+}
+
+.backButton:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
 .title {
     font-size: 1.5rem;
     font-weight: 700;
     color: #fff;
     margin: 0;
-    text-align: center;
 }
 
+/* Form Styles */
+.formContainer {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 1.5rem;
+}
+
+.formTitle {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #fff;
+    margin: 0 0 1.25rem 0;
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.formRow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.formGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.input {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 0.875rem;
+    font-family: inherit;
+    transition: all 0.3s;
+}
+
+.input:focus {
+    outline: none;
+    border-color: #D92A63;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.formActions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.submitButton {
+    background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 2px 8px rgba(217, 42, 99, 0.3);
+}
+
+.submitButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(217, 42, 99, 0.4);
+}
+
+.cancelButton {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.cancelButton:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Create Button */
+.createSection {
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.createButton {
+    background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 2px 8px rgba(217, 42, 99, 0.3);
+}
+
+.createButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(217, 42, 99, 0.4);
+}
+
+/* Batch List */
 .batchList {
     display: flex;
     flex-direction: column;
@@ -37,9 +184,15 @@
 
 .batchGrid {
     display: grid;
-    grid-template-columns: 1fr 1fr auto auto;
+    grid-template-columns: 2fr auto auto;
     gap: 1.5rem;
     align-items: center;
+}
+
+.batchInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
 .batchDateTime {
@@ -49,19 +202,47 @@
     margin: 0;
 }
 
+.batchMeta {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.batchLink {
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.batchLink a {
+    color: #4FC3F7;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.batchLink a:hover {
+    color: #81D4FA;
+    text-decoration: underline;
+}
+
 .batchStatus {
     font-size: 0.9375rem;
     font-weight: 600;
-    color: #fff;
     margin: 0;
+    white-space: nowrap;
+}
+
+.batchActions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
 }
 
 .button {
     background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
     color: white;
     border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
+    padding: 8px 16px;
+    border-radius: 6px;
     font-size: 0.8125rem;
     font-weight: 600;
     cursor: pointer;
@@ -70,29 +251,81 @@
     box-shadow: 0 2px 8px rgba(217, 42, 99, 0.3);
 }
 
-.button:hover {
+.button:hover:not(:disabled) {
     opacity: 0.9;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(217, 42, 99, 0.4);
 }
 
-.createSection {
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    display: flex;
-    justify-content: center;
+.button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.deleteButton {
+    background: linear-gradient(135deg, #F44336 0%, #E91E63 100%);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+
+.deleteButton:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+}
+
+.deleteButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 /* Responsive */
 @media (max-width: 991px) {
+    .formRow {
+        grid-template-columns: 1fr;
+    }
+
     .batchGrid {
         grid-template-columns: 1fr;
         gap: 1rem;
-        text-align: center;
     }
 
-    .button {
+    .batchActions {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .button,
+    .deleteButton {
+        flex: 1;
+        min-width: 120px;
+    }
+}
+
+@media (max-width: 767px) {
+    .formActions {
+        flex-direction: column;
+    }
+
+    .submitButton,
+    .cancelButton {
+        width: 100%;
+    }
+
+    .batchActions {
+        flex-direction: column;
+    }
+
+    .button,
+    .deleteButton {
         width: 100%;
     }
 }

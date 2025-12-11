@@ -8,25 +8,14 @@ export default function Footer() {
   const quickLinks = [
     { href: '/', label: 'Home' },
     { href: '/courses', label: 'Courses' },
-    { href: '/categories', label: 'Courses Categories' },
+    { href: '/categories', label: 'Categories' },
     { href: '/instructor', label: 'Instructors' },
     { href: '/contact-us', label: 'Contact Us' },
   ];
 
   const otherLinks = [
-    { href: '/classes', label: 'Classes' },
-    { href: '/signup-login', label: 'Student Login' },
-    { href: '/signup-login', label: 'Teacher Login' },
-    { href: '/blog', label: 'Blog' },
-    { href: '/signup-login', label: 'Sign Up' },
-  ];
-
-  const userPages = [
-    { href: '/getting-started', label: 'Getting started' },
-    { href: '/help-center', label: 'Help center' },
-    { href: '/server-status', label: 'Server status' },
-    { href: '/report-bug', label: 'Report a bug' },
-    { href: '/chat-support', label: 'Chat support' },
+    { href: '/signup-login', label: 'Sign Up / Login' },
+    { href: '/user-pages/become-a-creator', label: 'Become a Creator' },
   ];
 
   const socialLinks = [
@@ -61,17 +50,16 @@ export default function Footer() {
           {marqueeItems.map((item, i) => (
             <Link
               key={i}
-              href="/user-pages/sign-up"
+              href="/signup-login"
               className="footer-contact-marquee-item flex-shrink-0 px-6 py-2 border border-white/30 rounded-lg text-white font-medium text-sm hover:border-[#FF6B9D] hover:text-[#FF6B9D] transition-all duration-300 whitespace-nowrap"
             >
               {item}
             </Link>
           ))}
-          {/* Duplicate for seamless loop */}
           {marqueeItems.map((item, i) => (
             <Link
               key={`dup-${i}`}
-              href="/user-pages/sign-up"
+              href="/signup-login"
               className="footer-contact-marquee-item flex-shrink-0 px-6 py-2 border border-white/30 rounded-lg text-white font-medium text-sm hover:border-[#FF6B9D] hover:text-[#FF6B9D] transition-all duration-300 whitespace-nowrap"
             >
               {item}
@@ -82,7 +70,7 @@ export default function Footer() {
 
       {/* Main Footer Content */}
       <div className="container py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-12">
           {/* Logo and Social */}
           <div>
             <Link href="/" className="inline-block mb-6">
@@ -106,6 +94,7 @@ export default function Footer() {
                     src={social.icon}
                     alt={social.name}
                     className="w-5 h-5"
+                    style={{ filter: 'brightness(0) invert(1)' }}
                   />
                 </a>
               ))}
@@ -138,23 +127,6 @@ export default function Footer() {
             <ul className="space-y-3">
               {otherLinks.map((link, index) => (
                 <li key={`${link.href}-${link.label}-${index}`}>
-                  <Link
-                    href={link.href}
-                    className="text-gray-400 hover:text-[#FF6B9D] transition-colors duration-200"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* User Pages */}
-          <div>
-            <h3 className="text-white font-bold text-lg mb-6">User Pages</h3>
-            <ul className="space-y-3">
-              {userPages.map((link) => (
-                <li key={link.href}>
                   <Link
                     href={link.href}
                     className="text-gray-400 hover:text-[#FF6B9D] transition-colors duration-200"

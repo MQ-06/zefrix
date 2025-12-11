@@ -3,39 +3,79 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/contexts/CartContext';
+import { useNotification } from '@/contexts/NotificationContext';
 import { Trash2, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 
 declare global {
     interface Window {
         Razorpay: any;
+        firebaseAuth: any;
+        firebaseDb: any;
+        collection: any;
+        addDoc: any;
+        serverTimestamp: any;
     }
 }
 
 export default function CheckoutPage() {
     const router = useRouter();
     const { cart, removeFromCart, clearCart, cartTotal } = useCart();
+    const { showError, showSuccess } = useNotification();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [userEmail, setUserEmail] = useState('');
     const [loading, setLoading] = useState(true);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+    const [isRedirecting, setIsRedirecting] = useState(false);
+    const [user, setUser] = useState<any>(null);
 
     useEffect(() => {
+        // Load Firebase - ensure addDoc is available
+        if (typeof window !== 'undefined' && (!window.firebaseAuth || !window.addDoc)) {
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.innerHTML = `
+                import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+                import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+                import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+                
+                const firebaseConfig = {
+                    apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+                    authDomain: "zefrix-custom.firebaseapp.com",
+                    projectId: "zefrix-custom",
+                    storageBucket: "zefrix-custom.firebasestorage.app",
+                    messagingSenderId: "50732408558",
+                    appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+                    measurementId: "G-27HS1SWB5X"
+                };
+
+                // Check if app already exists
+                const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+                window.firebaseAuth = getAuth(app);
+                window.firebaseDb = getFirestore(app);
+                window.collection = collection;
+                window.addDoc = addDoc;
+                console.log('✅ Firebase initialized in checkout with addDoc');
+            `;
+            document.body.appendChild(script);
+        }
+
         // Check authentication
         const checkAuth = async () => {
             try {
                 // Check if Firebase auth is available
                 if (typeof window !== 'undefined' && window.firebaseAuth) {
-                    const user = window.firebaseAuth.currentUser;
-                    if (user) {
+                    const currentUser = window.firebaseAuth.currentUser;
+                    if (currentUser) {
                         setIsAuthenticated(true);
-                        setUserEmail(user.email || '');
+                        setUserEmail(currentUser.email || '');
+                        setUser(currentUser);
                     } else {
-                        // Redirect to login
                         router.push('/signup-login?redirect=/checkout');
                         return;
                     }
                 } else {
-                    // Wait for Firebase to load
                     setTimeout(checkAuth, 500);
                     return;
                 }
@@ -51,52 +91,90 @@ export default function CheckoutPage() {
 
     const handlePayment = async () => {
         if (cart.length === 0) {
-            alert('Your cart is empty!');
+            showError('Your cart is empty!');
             return;
         }
 
-        // Load Razorpay script
-        const script = document.createElement('script');
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        script.async = true;
-        document.body.appendChild(script);
+        // Show confirmation dialog first
+        setShowConfirmDialog(true);
+    };
 
-        script.onload = () => {
-            const options = {
-                key: 'rzp_test_RbORWjnwK5rV3J', // Razorpay test key
-                amount: cartTotal * 100, // Amount in paise
-                currency: 'USD',
-                name: 'Zefrix',
-                description: 'Course Purchase',
-                image: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/69111edc833f0aade04d058d_6907f6cf8f1c1a9c8e68ea5c_logo.png',
-                handler: function (response: any) {
-                    // Payment successful
-                    alert('Payment successful! Payment ID: ' + response.razorpay_payment_id);
+    const confirmPayment = async () => {
+        setShowConfirmDialog(false);
+        setIsProcessing(true);
 
-                    // Here you would typically:
-                    // 1. Send payment details to your backend
-                    // 2. Enroll user in courses
-                    // 3. Send confirmation email
+        if (cart.length === 0) {
+            showError('Your cart is empty!');
+            setIsProcessing(false);
+            return;
+        }
 
-                    clearCart();
-                    router.push('/student-dashboard');
-                },
-                prefill: {
-                    email: userEmail,
-                },
-                theme: {
-                    color: '#D92A63',
-                },
-                modal: {
-                    ondismiss: function () {
-                        console.log('Payment cancelled');
-                    }
+        try {
+            // Get current user
+            const currentUser = window.firebaseAuth?.currentUser;
+            if (!currentUser) {
+                showError('User not found. Please login again.');
+                router.push('/signup-login?redirect=/checkout');
+                return;
+            }
+
+            // Generate a mock payment ID
+            const mockPaymentId = `PAY_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+            // Process each item in cart
+            const enrollmentPromises = cart.map(async (item) => {
+                // Create enrollment in Firestore directly (bypass payment)
+                console.log('🔍 Firebase check:', {
+                    firebaseDb: !!window.firebaseDb,
+                    collection: !!window.collection,
+                    addDoc: !!window.addDoc
+                });
+
+                if (window.firebaseDb && window.collection && window.addDoc) {
+                    console.log('📝 Creating enrollment for:', item.title);
+                    const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+                    const docRef = await window.addDoc(enrollmentsRef, {
+                        studentId: currentUser.uid,
+                        studentEmail: currentUser.email,
+                        studentName: currentUser.displayName || currentUser.email?.split('@')[0],
+                        classId: item.id,
+                        className: item.title,
+                        classPrice: item.price,
+                        paymentId: mockPaymentId,
+                        orderId: 'DIRECT_ENROLLMENT',
+                        paymentStatus: 'completed',
+                        enrolledAt: new Date(),
+                        classType: 'one-time',
+                        numberOfSessions: 1,
+                        attended: 0,
+                        status: 'active'
+                    });
+                    console.log('✅ Enrollment created with ID:', docRef.id);
+                } else {
+                    console.error('❌ Firebase not initialized properly!');
                 }
-            };
+            });
 
-            const razorpay = new window.Razorpay(options);
-            razorpay.open();
-        };
+            await Promise.all(enrollmentPromises);
+            console.log('✅ All enrollments processed successfully');
+
+            // Small delay to ensure Firestore writes complete
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Set redirecting state immediately to prevent empty cart UI
+            setIsRedirecting(true);
+            
+            // Clear cart first (but UI won't show empty cart because isRedirecting is true)
+            clearCart();
+            
+            // Use window.location for instant redirect (no React re-render delay)
+            window.location.href = `/thank-you?payment_id=${mockPaymentId}&status=success`;
+        } catch (error) {
+            console.error('Error processing enrollment:', error);
+            showError('Enrollment failed. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     if (loading) {
@@ -111,7 +189,19 @@ export default function CheckoutPage() {
         return null; // Will redirect
     }
 
-    if (cart.length === 0) {
+    // Show loading/processing state during redirect to prevent empty cart flash
+    if (isRedirecting || (isProcessing && cart.length === 0)) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#1A1A2E] to-[#0F3460]">
+                <div className="text-center">
+                    <div className="text-white text-xl mb-4">Processing your payment...</div>
+                    <div className="w-16 h-16 border-4 border-[#D92A63] border-t-transparent rounded-full animate-spin mx-auto"></div>
+                </div>
+            </div>
+        );
+    }
+
+    if (cart.length === 0 && !isProcessing && !isRedirecting) {
         return (
             <div className="min-h-screen pt-32 pb-16 bg-gradient-to-b from-[#1A1A2E] to-[#0F3460]">
                 <div className="container max-w-4xl mx-auto px-4">
@@ -133,10 +223,54 @@ export default function CheckoutPage() {
         );
     }
 
+    const userInitial = user ? ((user.displayName || user.email || 'S')[0] || 'S').toUpperCase() : '';
+
     return (
-        <div className="min-h-screen pt-32 pb-16 bg-gradient-to-b from-[#1A1A2E] to-[#0F3460]">
-            <div className="container max-w-6xl mx-auto px-4">
-                <h1 className="text-4xl font-bold text-white mb-8">Checkout</h1>
+        <div className="min-h-screen bg-gradient-to-b from-[#1A1A2E] to-[#0F3460]">
+            {/* Student Header */}
+            {user && (
+                <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-[#1A1A2E] to-[#2D1B3D] border-b border-white/10 shadow-lg">
+                    <div className="container max-w-7xl mx-auto px-4 py-3">
+                        <div className="flex items-center justify-between">
+                            <Link href="/student-dashboard" className="text-white font-semibold hover:text-[#FF654B] transition-colors">
+                                ← Back to Dashboard
+                            </Link>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] flex items-center justify-center text-white font-bold">
+                                        {user.photoURL ? (
+                                            <img src={user.photoURL} alt={user.displayName || 'Student'} className="w-full h-full rounded-full object-cover" />
+                                        ) : (
+                                            userInitial
+                                        )}
+                                    </div>
+                                    <div>
+                                        <div className="text-white font-semibold text-sm">
+                                            {user.displayName || user.email?.split('@')[0] || 'Student'}
+                                        </div>
+                                        <div className="text-gray-300 text-xs">
+                                            {user.email || 'Student account'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className={`${user ? 'pt-24' : 'pt-32'} pb-16`}>
+                <div className="container max-w-6xl mx-auto px-4">
+                    <h1 className="text-4xl font-bold text-white mb-8">Checkout</h1>
+
+                {/* Cart Preview Section */}
+                <div className="mb-8 bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+                    <h2 className="text-2xl font-bold text-white mb-4">Cart Preview</h2>
+                    <p className="text-gray-300 mb-4">Review your items before proceeding to payment</p>
+                    <div className="text-white">
+                        <span className="font-semibold">{cart.length}</span> {cart.length === 1 ? 'item' : 'items'} in your cart
+                    </div>
+                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Cart Items */}
@@ -156,7 +290,7 @@ export default function CheckoutPage() {
                                     <p className="text-gray-400 mb-4">by {item.instructor}</p>
                                     <div className="flex items-center justify-between">
                                         <p className="text-2xl font-bold text-white">
-                                            ${item.price.toFixed(2)} USD
+                                            ₹{item.price.toFixed(2)} INR
                                         </p>
                                         <button
                                             onClick={() => removeFromCart(item.id)}
@@ -178,25 +312,26 @@ export default function CheckoutPage() {
                             <div className="space-y-4 mb-6">
                                 <div className="flex justify-between text-gray-300">
                                     <span>Subtotal</span>
-                                    <span>${cartTotal.toFixed(2)} USD</span>
+                                    <span>₹{cartTotal.toFixed(2)} INR</span>
                                 </div>
                                 <div className="flex justify-between text-gray-300">
                                     <span>Tax</span>
-                                    <span>$0.00 USD</span>
+                                    <span>₹0.00 INR</span>
                                 </div>
                                 <div className="border-t border-white/10 pt-4">
                                     <div className="flex justify-between text-white text-xl font-bold">
                                         <span>Total</span>
-                                        <span>${cartTotal.toFixed(2)} USD</span>
+                                        <span>₹{cartTotal.toFixed(2)} INR</span>
                                     </div>
                                 </div>
                             </div>
 
                             <button
                                 onClick={handlePayment}
-                                className="w-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-8 py-4 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-[#D92A63]/30 mb-4"
+                                disabled={isProcessing || cart.length === 0}
+                                className="w-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-8 py-4 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-[#D92A63]/30 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Proceed to Payment
+                                {isProcessing ? 'Processing...' : 'Proceed to Payment'}
                             </button>
 
                             <Link
@@ -214,7 +349,40 @@ export default function CheckoutPage() {
                         </div>
                     </div>
                 </div>
+                </div>
             </div>
+
+            {/* Confirmation Dialog */}
+            {showConfirmDialog && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+                    <div className="bg-gradient-to-b from-[#1A1A2E] to-[#2D1B3D] rounded-xl p-8 border border-white/10 max-w-md w-full">
+                        <h3 className="text-2xl font-bold text-white mb-4">Confirm Payment</h3>
+                        <p className="text-gray-300 mb-6">
+                            You are about to proceed with payment for <strong className="text-white">{cart.length}</strong> {cart.length === 1 ? 'item' : 'items'}.
+                        </p>
+                        <div className="bg-white/5 rounded-lg p-4 mb-6">
+                            <div className="flex justify-between text-white mb-2">
+                                <span>Total Amount:</span>
+                                <span className="font-bold text-xl">₹{cartTotal.toFixed(2)} INR</span>
+                            </div>
+                        </div>
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => setShowConfirmDialog(false)}
+                                className="flex-1 border-2 border-white/20 px-6 py-3 rounded-lg text-white font-medium hover:bg-white/5 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmPayment}
+                                className="flex-1 bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-6 py-3 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity"
+                            >
+                                Confirm Payment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
