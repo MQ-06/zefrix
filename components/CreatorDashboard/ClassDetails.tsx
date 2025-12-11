@@ -77,7 +77,7 @@ interface ClassDetailsProps {
 }
 
 export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: ClassDetailsProps) {
-  const { showError, showInfo } = useNotification();
+  const { showError, showInfo, showSuccess } = useNotification();
   const [classData, setClassData] = useState<ClassData | null>(null);
   const [batches, setBatches] = useState<BatchData[]>([]);
   const [enrollments, setEnrollments] = useState<EnrollmentData[]>([]);

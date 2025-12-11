@@ -180,7 +180,7 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
     if (!window.firebaseDb || !window.doc || !window.getDoc) return;
 
     const studentsMap: Record<string, StudentInfo> = {};
-    const uniqueStudentIds = [...new Set(enrollmentsList.map(e => e.studentId))];
+    const uniqueStudentIds = Array.from(new Set(enrollmentsList.map(e => e.studentId)));
 
     for (const studentId of uniqueStudentIds) {
       try {
