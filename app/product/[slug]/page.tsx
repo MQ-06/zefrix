@@ -33,6 +33,7 @@ export default function ProductPage({ params }: PageProps) {
   const [relatedCourses, setRelatedCourses] = useState<any[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(true);
   const [creatorProfile, setCreatorProfile] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
     // Load Firebase if not already loaded
@@ -118,6 +119,21 @@ export default function ProductPage({ params }: PageProps) {
 
     fetchCourse();
   }, [params.slug]);
+
+  // Fetch current user
+  useEffect(() => {
+    const checkUser = () => {
+      if (window.firebaseAuth) {
+        const currentUser = window.firebaseAuth.currentUser;
+        if (currentUser) {
+          setUser(currentUser);
+        }
+      } else {
+        setTimeout(checkUser, 500);
+      }
+    };
+    checkUser();
+  }, []);
 
   useEffect(() => {
     if (course) {
@@ -246,10 +262,44 @@ export default function ProductPage({ params }: PageProps) {
     router.push('/checkout');
   };
 
+  const userInitial = user ? ((user.displayName || user.email || 'S')[0] || 'S').toUpperCase() : '';
+
   return (
     <>
+      {/* Student Header - Show if logged in */}
+      {user && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-[#1A1A2E] to-[#2D1B3D] border-b border-white/10 shadow-lg">
+          <div className="container max-w-7xl mx-auto px-4 py-3">
+            <div className="flex items-center justify-between">
+              <Link href="/student-dashboard" className="text-white font-semibold hover:text-[#FF654B] transition-colors">
+                ← Back to Dashboard
+              </Link>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] flex items-center justify-center text-white font-bold">
+                    {user.photoURL ? (
+                      <img src={user.photoURL} alt={user.displayName || 'Student'} className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                      userInitial
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold text-sm">
+                      {user.displayName || user.email?.split('@')[0] || 'Student'}
+                    </div>
+                    <div className="text-gray-300 text-xs">
+                      {user.email || 'Student account'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
-      <section className="pt-32 pb-12 bg-gradient-to-b from-[#1A1A2E] to-[#16213E]">
+      <section className={`${user ? 'pt-24' : 'pt-32'} pb-12 bg-gradient-to-b from-[#1A1A2E] to-[#16213E]`}>
         <div className="container max-w-6xl mx-auto px-4">
           <div className="grid grid-cols-1 gap-8">
             <div>

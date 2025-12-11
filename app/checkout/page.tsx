@@ -28,6 +28,7 @@ export default function CheckoutPage() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [isRedirecting, setIsRedirecting] = useState(false);
+    const [user, setUser] = useState<any>(null);
 
     useEffect(() => {
         // Load Firebase - ensure addDoc is available
@@ -65,10 +66,11 @@ export default function CheckoutPage() {
             try {
                 // Check if Firebase auth is available
                 if (typeof window !== 'undefined' && window.firebaseAuth) {
-                    const user = window.firebaseAuth.currentUser;
-                    if (user) {
+                    const currentUser = window.firebaseAuth.currentUser;
+                    if (currentUser) {
                         setIsAuthenticated(true);
-                        setUserEmail(user.email || '');
+                        setUserEmail(currentUser.email || '');
+                        setUser(currentUser);
                     } else {
                         router.push('/signup-login?redirect=/checkout');
                         return;
@@ -221,10 +223,45 @@ export default function CheckoutPage() {
         );
     }
 
+    const userInitial = user ? ((user.displayName || user.email || 'S')[0] || 'S').toUpperCase() : '';
+
     return (
-        <div className="min-h-screen pt-32 pb-16 bg-gradient-to-b from-[#1A1A2E] to-[#0F3460]">
-            <div className="container max-w-6xl mx-auto px-4">
-                <h1 className="text-4xl font-bold text-white mb-8">Checkout</h1>
+        <div className="min-h-screen bg-gradient-to-b from-[#1A1A2E] to-[#0F3460]">
+            {/* Student Header */}
+            {user && (
+                <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-[#1A1A2E] to-[#2D1B3D] border-b border-white/10 shadow-lg">
+                    <div className="container max-w-7xl mx-auto px-4 py-3">
+                        <div className="flex items-center justify-between">
+                            <Link href="/student-dashboard" className="text-white font-semibold hover:text-[#FF654B] transition-colors">
+                                ← Back to Dashboard
+                            </Link>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] flex items-center justify-center text-white font-bold">
+                                        {user.photoURL ? (
+                                            <img src={user.photoURL} alt={user.displayName || 'Student'} className="w-full h-full rounded-full object-cover" />
+                                        ) : (
+                                            userInitial
+                                        )}
+                                    </div>
+                                    <div>
+                                        <div className="text-white font-semibold text-sm">
+                                            {user.displayName || user.email?.split('@')[0] || 'Student'}
+                                        </div>
+                                        <div className="text-gray-300 text-xs">
+                                            {user.email || 'Student account'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className={`${user ? 'pt-24' : 'pt-32'} pb-16`}>
+                <div className="container max-w-6xl mx-auto px-4">
+                    <h1 className="text-4xl font-bold text-white mb-8">Checkout</h1>
 
                 {/* Cart Preview Section */}
                 <div className="mb-8 bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
@@ -311,6 +348,7 @@ export default function CheckoutPage() {
                             </div>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
 
