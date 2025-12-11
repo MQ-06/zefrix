@@ -51,26 +51,89 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const normalizeEmail = (email?: string | null) => (email || '').toLowerCase();
 
-  // Check if Firebase is already initialized (from HTML head script)
+  // Initialize Firebase immediately on client mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // If Firebase is already initialized from HTML head, set up auth listener immediately
+    // Check if Firebase is already initialized
     if (window.firebaseAuth && window.firebaseDb && window.onAuthStateChanged) {
-      console.log('✅ Firebase already initialized from HTML head');
+      console.log('✅ Firebase already initialized');
       setLoading(false);
       return;
     }
 
-    // If not ready, wait for firebaseReady event (from HTML head script)
+    // Check if script is already being loaded
+    if (document.querySelector('script[data-firebase-init]')) {
+      // Script already exists, wait for it
+      const handleFirebaseReady = () => {
+        console.log('✅ Firebase ready event received');
+        setLoading(false);
+      };
+      window.addEventListener('firebaseReady', handleFirebaseReady);
+      return () => window.removeEventListener('firebaseReady', handleFirebaseReady);
+    }
+
+    // Load Firebase initialization script immediately
+    const initScript = document.createElement('script');
+    initScript.setAttribute('data-firebase-init', 'true');
+    initScript.type = 'module';
+    initScript.textContent = `
+      import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+      import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      
+      const firebaseConfig = {
+        apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+        authDomain: "zefrix-custom.firebaseapp.com",
+        projectId: "zefrix-custom",
+        storageBucket: "zefrix-custom.firebasestorage.app",
+        messagingSenderId: "50732408558",
+        appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+        measurementId: "G-27HS1SWB5X"
+      };
+      
+      try {
+        // Check if app is already initialized
+        const existingApps = getApps();
+        const app = existingApps.length > 0 ? existingApps[0] : initializeApp(firebaseConfig);
+        
+        window.firebaseAuth = getAuth(app);
+        window.firebaseDb = getFirestore(app);
+        window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.signOut = signOut;
+        window.updateProfile = updateProfile;
+        window.GoogleAuthProvider = GoogleAuthProvider;
+        window.signInWithPopup = signInWithPopup;
+        window.onAuthStateChanged = onAuthStateChanged;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.getDoc = getDoc;
+        window.updateDoc = updateDoc;
+        window.serverTimestamp = serverTimestamp;
+        
+        console.log('✅ Firebase initialized successfully');
+        console.log('Firebase Auth:', !!window.firebaseAuth);
+        console.log('Firebase Firestore:', !!window.firebaseDb);
+        
+        // Dispatch ready event
+        window.dispatchEvent(new CustomEvent('firebaseReady'));
+      } catch (error) {
+        console.error('Firebase initialization error:', error);
+        window.dispatchEvent(new CustomEvent('firebaseError', { detail: error }));
+      }
+    `;
+    document.head.appendChild(initScript);
+
+    // Wait for Firebase to initialize
     const handleFirebaseReady = () => {
-      console.log('✅ Firebase ready event received from HTML head');
+      console.log('✅ Firebase ready event received');
       setLoading(false);
     };
 
     window.addEventListener('firebaseReady', handleFirebaseReady);
 
-    // Also poll as fallback (in case event was missed)
+    // Also poll as fallback
     const checkFirebase = setInterval(() => {
       if (window.firebaseAuth && window.firebaseDb && window.onAuthStateChanged) {
         clearInterval(checkFirebase);
