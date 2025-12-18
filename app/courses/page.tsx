@@ -153,7 +153,7 @@ export default function CoursesPage() {
     instructor: classItem.creatorName || 'Creator',
     instructorId: '',
     instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
-    image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg',
+    image: (classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg',
     price: classItem.price,
     originalPrice: classItem.price * 1.2,
     sections: classItem.numberSessions,
