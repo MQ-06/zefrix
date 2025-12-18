@@ -233,14 +233,9 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
       return;
     }
 
-    if (!window.firebaseStorage || !window.ref || !window.uploadBytes || !window.getDownloadURL) {
-      showError('Firebase Storage is not initialized. Please refresh the page.');
-      return;
-    }
-
     setUploadingRecording(batchId);
     try {
-      const { uploadVideo, getClassRecordingPath, validateFile } = await import('@/lib/utils/firebaseStorage');
+      const { uploadVideo, getClassRecordingPath, validateFile } = await import('@/lib/utils/serverStorage');
       
       // Validate file
       const validation = validateFile(file, 'video');

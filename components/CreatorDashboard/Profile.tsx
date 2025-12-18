@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNotification } from '@/contexts/NotificationContext';
-import { uploadImage, getProfileImagePath, validateFile } from '@/lib/utils/firebaseStorage';
+import { uploadImage, getProfileImagePath, validateFile } from '@/lib/utils/serverStorage';
 
 declare global {
   interface Window {

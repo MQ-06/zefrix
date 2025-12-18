@@ -1,6 +1,8 @@
 /**
- * Firebase Storage Utility Functions
- * Handles file uploads, image optimization, and validation
+ * Server Storage Utility - Uses Hostinger server storage
+ * Uploads files to your Next.js server's public/uploads directory
+ * 
+ * This is a free alternative to Firebase Storage using your existing hosting
  */
 
 // File validation constants
@@ -32,7 +34,7 @@ export function validateFile(file: File, type: 'image' | 'video'): { valid: bool
 }
 
 /**
- * Compresses/resizes image using canvas
+ * Compresses/resizes image using canvas (same as Firebase version)
  */
 export function compressImage(file: File, maxWidth: number = 1920, maxHeight: number = 1920, quality: number = 0.8): Promise<File> {
   return new Promise((resolve, reject) => {
@@ -93,47 +95,49 @@ export function compressImage(file: File, maxWidth: number = 1920, maxHeight: nu
 }
 
 /**
- * Uploads file to Firebase Storage
+ * Uploads file to server storage
  */
 export async function uploadFile(
   file: File,
   path: string,
   onProgress?: (progress: number) => void
 ): Promise<string> {
-  if (!window.firebaseStorage || !window.ref || !window.uploadBytes || !window.getDownloadURL) {
-    throw new Error('Firebase Storage is not initialized. Please refresh the page.');
-  }
-
   try {
-    // Create storage reference
-    const storageRef = window.ref(window.firebaseStorage, path);
+    // Parse path to extract folder and subfolder
+    // Path format: "classes/CLASS_123/thumbnail.png" or "profiles/user123/profile.png"
+    const pathParts = path.split('/');
+    const folder = pathParts[0] || 'uploads'; // e.g., 'classes', 'profiles', 'recordings'
+    const subfolder = pathParts.slice(1, -1).join('/'); // Everything except last part (filename)
+
+    // Create FormData
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', folder);
+    if (subfolder) {
+      formData.append('subfolder', subfolder);
+    }
+
+    // Upload to server
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to upload file');
+    }
+
+    const result = await response.json();
     
-    // Upload file
-    const snapshot = await window.uploadBytes(storageRef, file);
-    
-    // Get download URL
-    const downloadURL = await window.getDownloadURL(snapshot.ref);
-    
-    return downloadURL;
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+    return result.url;
   } catch (error: any) {
     console.error('Upload error:', error);
-    
-    // Provide user-friendly error messages
-    if (error.code === 'storage/unauthorized') {
-      throw new Error('Permission denied. Please check Firebase Storage security rules.');
-    } else if (error.code === 'storage/canceled') {
-      throw new Error('Upload was canceled.');
-    } else if (error.code === 'storage/unknown') {
-      // CORS errors often show up as unknown errors
-      if (error.message?.includes('CORS') || error.message?.includes('network')) {
-        throw new Error('CORS error: Firebase Storage is not properly configured. Please enable Storage in Firebase Console and configure CORS rules. See FIREBASE_STORAGE_SETUP.md for instructions.');
-      }
-      throw new Error(`Upload failed: ${error.message || 'Unknown error. Please check Firebase Storage is enabled.'}`);
-    } else if (error.message?.includes('CORS') || error.message?.includes('blocked')) {
-      throw new Error('CORS error: Firebase Storage CORS rules are not configured. Please enable Storage in Firebase Console and add CORS rules for https://zefrix.com. See FIREBASE_STORAGE_SETUP.md for instructions.');
-    } else {
-      throw new Error(`Failed to upload file: ${error.message || 'Unknown error'}`);
-    }
+    throw new Error(`Failed to upload file: ${error.message}`);
   }
 }
 
@@ -163,7 +167,7 @@ export async function uploadImage(
     }
   }
 
-  // Upload to Firebase Storage
+  // Upload to server storage
   return await uploadFile(fileToUpload, path, onProgress);
 }
 
@@ -181,21 +185,23 @@ export async function uploadVideo(
     throw new Error(validation.error);
   }
 
-  // Upload to Firebase Storage
+  // Upload to server storage
   return await uploadFile(file, path, onProgress);
 }
 
 /**
- * Deletes file from Firebase Storage
+ * Deletes file from server storage
  */
 export async function deleteFile(path: string): Promise<void> {
-  if (!window.firebaseStorage || !window.ref || !window.deleteObject) {
-    throw new Error('Firebase Storage is not initialized');
-  }
-
   try {
-    const storageRef = window.ref(window.firebaseStorage, path);
-    await window.deleteObject(storageRef);
+    const response = await fetch(`/api/upload?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete file');
+    }
   } catch (error: any) {
     console.error('Delete error:', error);
     throw new Error(`Failed to delete file: ${error.message}`);

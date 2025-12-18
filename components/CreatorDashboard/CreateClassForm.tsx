@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { uploadImage, getClassThumbnailPath, validateFile } from '@/lib/utils/firebaseStorage';
+import { uploadImage, getClassThumbnailPath, validateFile } from '@/lib/utils/serverStorage';
 
 declare global {
   interface Window {
