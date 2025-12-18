@@ -15,8 +15,7 @@ export default function VideoSection() {
             Watch our demo video
           </h2>
           <p className="text-gray-400 text-xl md:text-2xl max-w-3xl mx-auto leading-relaxed">
-            Which is the same as saying through shrinking from toil and pain.
-            These cases are perfectly simple and easy to distinguish.
+            See how Zefrix makes live learning simple and engaging. Watch creators host interactive sessions, students join seamlessly, and discover why thousands choose Zefrix for skill-sharing.
           </p>
         </div>
 

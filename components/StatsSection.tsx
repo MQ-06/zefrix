@@ -85,7 +85,7 @@ export default function StatsSection() {
                 className="w-12 h-12 rounded-full"
               />
               <p className="text-white text-xl md:text-2xl italic leading-relaxed">
-                "All courses are help people to achieve their goals"
+                "Zefrix makes learning fun and interactive. The live sessions with creators have helped me learn new skills I never thought I could master."
               </p>
             </div>
           </motion.div>

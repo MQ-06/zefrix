@@ -10,6 +10,8 @@ service cloud.firestore {
       // Admins can read all users
       allow read: if request.auth != null && 
                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Anyone can read creator profiles (for public instructor page)
+      allow read: if resource.data.role == 'creator';
     }
     
     // Classes collection

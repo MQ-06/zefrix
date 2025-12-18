@@ -6,9 +6,9 @@ import { Search, DollarSign, Monitor } from 'lucide-react';
 const steps = [
   {
     icon: Search,
-    title: 'Browse our courses',
+    title: 'Browse and discover classes',
     description:
-      'Annoying consequences, or one who avoids a pain that produces no resultant pleasure',
+      'Explore live classes and batches across categories like Design, Music, Tech, Wellness, and Business. Filter by creator, category, or skill level to find the perfect learning experience for you.',
     bgColor: 'bg-purple-200',
     borderColor: 'border-yellow-400',
   },
@@ -16,15 +16,15 @@ const steps = [
     icon: DollarSign,
     title: 'Purchase quickly and securely',
     description:
-      'Insipidity the sufficient discretion imprudence resolution sir him decisively.',
+      'Complete your enrollment with our secure Razorpay payment gateway. Choose from one-time classes or multi-session batches. Get instant confirmation with class details and Google Meet links.',
     bgColor: 'bg-green-200',
     borderColor: 'border-pink-400',
   },
   {
     icon: Monitor,
-    title: 'Start learning right away',
+    title: 'Join live sessions and learn',
     description:
-      'Affronting imprudence do he he everything.  lasted dinner wanted indeed wished. right any other thing in place of it.',
+      'Attend interactive live classes via Google Meet, participate in real-time discussions, ask questions, and connect with creators. Receive automated reminders and access recordings after sessions.',
     bgColor: 'bg-yellow-200',
     borderColor: 'border-pink-400',
   },

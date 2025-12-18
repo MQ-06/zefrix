@@ -23,7 +23,7 @@ export default function FAQSection() {
             </span>
           </h2>
           <p className="text-gray-600 text-xl">
-            We've got answers to help you.
+            Find answers about classes, batches, payments, and how to get started on Zefrix.
           </p>
         </div>
 
