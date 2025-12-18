@@ -24,7 +24,7 @@ interface Creator {
   totalClasses?: number;
 }
 
-export default function InstructorPage() {
+export default function InstructorsPage() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loading, setLoading] = useState(true);
 

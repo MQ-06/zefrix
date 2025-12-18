@@ -24,8 +24,7 @@ export default function TestimonialsSection() {
             What students say about our platform
           </h2>
           <p className="text-gray-400 text-xl md:text-2xl max-w-3xl mx-auto leading-relaxed">
-            No one rejects, dislikes, or avoids pleasure itself, because it is
-            pleasure, but because those who do not know.
+            Hear from students who have transformed their skills through live interactive classes with expert creators on Zefrix.
           </p>
         </div>
 

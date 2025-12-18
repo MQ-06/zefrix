@@ -38,7 +38,7 @@ export default function HeroSection() {
             </motion.div>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              Find suitable courses from the best mentors
+              Join Your First Live Class on Zefrix
               <motion.div 
                 className="inline-flex items-center gap-2 ml-3"
                 initial={{ opacity: 0, x: -20 }}
@@ -66,9 +66,7 @@ export default function HeroSection() {
             </h1>
 
             <p className="text-gray-300 text-base md:text-lg mb-10 leading-relaxed">
-              The good gathering doesn't bearing day stars over open behold may
-              male tree replenish don't blessed beast days earth fifth let
-              multiply and he every blessed.
+              Join interactive live sessions with expert creators. Learn new skills, connect with mentors, and grow in a fun, casual learning environment. Discover classes in design, music, tech, wellness, and more—all in real-time.
             </p>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">

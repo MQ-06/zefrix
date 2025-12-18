@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 
-export default function ThankYouPage() {
+function ThankYouContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const [paymentId, setPaymentId] = useState('');
@@ -170,5 +170,17 @@ export default function ThankYouPage() {
                 </div>
             </motion.div>
         </div>
+    );
+}
+
+export default function ThankYouPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen pt-32 pb-16 bg-gradient-to-b from-[#1A1A2E] to-[#0F3460] flex items-center justify-center px-4">
+                <div className="text-white text-xl">Loading...</div>
+            </div>
+        }>
+            <ThankYouContent />
+        </Suspense>
     );
 }
