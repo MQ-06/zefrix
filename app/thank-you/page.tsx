@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -171,6 +171,17 @@ function ThankYouContent() {
             </motion.div>
         </div>
     );
+
+import { Suspense } from "react";
+import ThankYouContent from "./ThankYouContent";
+
+export default function ThankYouPageWrapper() {
+  return (
+    <Suspense fallback={<div className="text-white p-10">Loading...</div>}>
+      <ThankYouContent />
+    </Suspense>
+  );
+
 }
 
 export default function ThankYouPage() {

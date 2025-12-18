@@ -1,4 +1,5 @@
-'use client';
+"use client";
+const showSuccess = (msg: string) => { alert(msg); };
 
 import { useState, useEffect } from 'react';
 import { useNotification } from '@/contexts/NotificationContext';
