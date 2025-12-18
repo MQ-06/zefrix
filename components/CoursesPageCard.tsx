@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { BookOpen, Clock, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 
 interface Course {
   id: string;
@@ -23,7 +24,19 @@ interface CoursesPageCardProps {
   course: Course;
 }
 
+const DEFAULT_IMAGE = 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg';
+
 export default function CoursesPageCard({ course }: CoursesPageCardProps) {
+  const [imageError, setImageError] = useState(false);
+  const [imageSrc, setImageSrc] = useState(course.image || DEFAULT_IMAGE);
+
+  const handleImageError = () => {
+    if (!imageError) {
+      setImageError(true);
+      setImageSrc(DEFAULT_IMAGE);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -39,9 +52,10 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
         {/* Course Image */}
         <div className="relative h-56 overflow-hidden">
           <img
-            src={course.image}
+            src={imageSrc}
             alt={course.title}
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+            onError={handleImageError}
           />
           
           {/* Instructor Badge */}

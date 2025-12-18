@@ -1309,7 +1309,14 @@ export default function StudentDashboard() {
                   {filteredClasses.map((course) => (
                     <Link key={course.classId} href={`/product/${course.classId}`} className="course-card">
                       <div className="course-image-wrap">
-                        <img src={course.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} alt={course.title} className="course-image" />
+                        <img 
+                          src={(course.videoLink && course.videoLink.trim() !== '') ? course.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} 
+                          alt={course.title} 
+                          className="course-image"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                          }}
+                        />
                         <div className="course-teacher-wrap">
                           <div style={{
                             width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',

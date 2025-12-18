@@ -210,9 +210,12 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
             <div key={classItem.classId} className={styles.classItem}>
               <div className={styles.classGrid}>
                 <img
-                  src={classItem.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b7c7_avatar-10.jpg"}
+                  src={(classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"}
                   alt={classItem.title}
                   className={styles.thumbnail}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                  }}
                 />
                 <h3 className={styles.classTitle}>{classItem.title}</h3>
                 <h3

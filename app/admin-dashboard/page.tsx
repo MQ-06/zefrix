@@ -1075,9 +1075,12 @@ export default function AdminDashboard() {
               <div key={classItem.classId} className="class-card-modern">
                 <div className="class-card-image-wrapper">
                   <img
-                    src={classItem.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"}
+                    src={(classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"}
                     alt={classItem.title}
                     className="class-card-image"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                    }}
                   />
                   <div className="class-card-status-badge pending-badge">
                     <Clock size={14} />
@@ -1164,9 +1167,12 @@ export default function AdminDashboard() {
               <div key={classItem.classId} className="class-card-modern approved">
                 <div className="class-card-image-wrapper">
                   <img
-                    src={classItem.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"}
+                    src={(classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"}
                     alt={classItem.title}
                     className="class-card-image"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                    }}
                   />
                   <div className="class-card-status-badge approved-badge">
                     <CheckCircle size={14} />

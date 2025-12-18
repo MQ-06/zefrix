@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { BookOpen, Clock, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 
 interface CourseCardProps {
   course: {
@@ -20,7 +21,12 @@ interface CourseCardProps {
   };
 }
 
+const DEFAULT_IMAGE = 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg';
+
 export default function CourseCard({ course }: CourseCardProps) {
+  const [imageError, setImageError] = useState(false);
+  const [imageSrc, setImageSrc] = useState(course.image || DEFAULT_IMAGE);
+
   // Determine card color based on course
   const getCardColor = (slug: string) => {
     if (slug.includes('graphic-design')) return 'bg-green-100';
@@ -30,6 +36,13 @@ export default function CourseCard({ course }: CourseCardProps) {
     if (slug.includes('figma')) return 'bg-blue-200';
     if (slug.includes('cms')) return 'bg-pink-200';
     return 'bg-gray-200';
+  };
+
+  const handleImageError = () => {
+    if (!imageError) {
+      setImageError(true);
+      setImageSrc(DEFAULT_IMAGE);
+    }
   };
 
   return (
@@ -47,9 +60,10 @@ export default function CourseCard({ course }: CourseCardProps) {
         {/* Colored Header Section */}
         <div className={`relative h-56 ${getCardColor(course.slug)} overflow-hidden`}>
           <img
-            src={course.image}
+            src={imageSrc}
             alt={course.title}
             className="w-full h-full object-cover opacity-90 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
+            onError={handleImageError}
           />
           
           {/* Instructor Badge - Top Right */}
