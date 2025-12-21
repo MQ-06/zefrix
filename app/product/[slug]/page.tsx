@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { notFound, useRouter } from 'next/navigation';
-import { BookOpen, Clock, Users, Globe, Award } from 'lucide-react';
+import { BookOpen, Clock, Users, Globe, Award, Calendar, Tag } from 'lucide-react';
 import Link from 'next/link';
 import Footer from '@/components/Footer';
 import { useCart } from '@/contexts/CartContext';
@@ -34,6 +34,7 @@ export default function ProductPage({ params }: PageProps) {
   const [loadingRelated, setLoadingRelated] = useState(true);
   const [creatorProfile, setCreatorProfile] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const [earliestBatchDate, setEarliestBatchDate] = useState<string | null>(null);
 
   useEffect(() => {
     // Load Firebase if not already loaded
@@ -100,6 +101,10 @@ export default function ProductPage({ params }: PageProps) {
               duration: data.duration || 1,
               students: 0,
               originalPrice: data.price || 0,
+              category: data.category || '',
+              subCategory: data.subCategory || data.subcategory || '',
+              maxSeats: data.maxSeats || undefined,
+              scheduleType: data.scheduleType || '',
             });
           } else {
             // Class exists but not approved
@@ -221,6 +226,76 @@ export default function ProductPage({ params }: PageProps) {
     }
   }, [course]);
 
+  // Fetch batches to get earliest batch date
+  useEffect(() => {
+    const fetchBatches = async () => {
+      if (!course?.id || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        return;
+      }
+
+      try {
+        const batchesRef = window.collection(window.firebaseDb, 'batches');
+        const q = window.query(batchesRef, window.where('classId', '==', course.id));
+        const querySnapshot = await window.getDocs(q);
+
+        const batches: any[] = [];
+        querySnapshot.forEach((doc: any) => {
+          const batchData = doc.data();
+          batches.push({ id: doc.id, ...batchData });
+        });
+
+        console.log(`Found ${batches.length} batches for course ${course.id}`);
+
+        // Find earliest batch (upcoming preferred, but show any if no upcoming)
+        const now = new Date();
+        let earliestUpcomingDate: Date | null = null;
+        let earliestAnyDate: Date | null = null;
+
+        batches.forEach((batch: any) => {
+          let batchDate: Date | null = null;
+          if (batch.batchDate) {
+            batchDate = batch.batchDate.toDate ? batch.batchDate.toDate() : new Date(batch.batchDate);
+          } else if (batch.date) {
+            batchDate = batch.date.toDate ? batch.date.toDate() : new Date(batch.date);
+          } else if (batch.startDate) {
+            batchDate = batch.startDate.toDate ? batch.startDate.toDate() : new Date(batch.startDate);
+          }
+
+          if (batchDate) {
+            // Track earliest upcoming
+            if (batchDate >= now) {
+              if (!earliestUpcomingDate || batchDate < earliestUpcomingDate) {
+                earliestUpcomingDate = batchDate;
+              }
+            }
+            // Track earliest any
+            if (!earliestAnyDate || batchDate < earliestAnyDate) {
+              earliestAnyDate = batchDate;
+            }
+          }
+        });
+
+        // Prefer upcoming, but show earliest if no upcoming batches
+        const dateToShow = earliestUpcomingDate || earliestAnyDate;
+        if (dateToShow) {
+          const date = dateToShow as Date;
+          const formattedDate = date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          });
+          setEarliestBatchDate(formattedDate);
+        }
+      } catch (error) {
+        console.error('Error fetching batches:', error);
+      }
+    };
+
+    if (course) {
+      fetchBatches();
+    }
+  }, [course]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#1A1A2E] to-[#0F3460] flex items-center justify-center">
@@ -299,8 +374,9 @@ export default function ProductPage({ params }: PageProps) {
       )}
 
       {/* Hero Section */}
-      <section className={`${user ? 'pt-24' : 'pt-32'} pb-12 bg-gradient-to-b from-[#1A1A2E] to-[#16213E]`}>
-        <div className="container max-w-6xl mx-auto px-4">
+      <section className={`${user ? 'pt-24' : 'pt-32'} pb-12 relative overflow-hidden`}>
+        <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A2E] via-[#2D1B3D] to-[#E91E63]"></div>
+        <div className="container max-w-6xl mx-auto px-4 relative z-10">
           <div className="grid grid-cols-1 gap-8">
             <div>
               <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
@@ -317,7 +393,7 @@ export default function ProductPage({ params }: PageProps) {
       </section>
 
       {/* Main Content */}
-      <section className="py-12 bg-gradient-to-b from-[#16213E] to-[#0F3460]">
+      <section className="py-12 bg-gradient-to-b from-[#1A1A2E] to-[#16213E]">
         <div className="container max-w-6xl mx-auto px-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Content - Tabs */}
@@ -374,6 +450,16 @@ export default function ProductPage({ params }: PageProps) {
                         </div>
                       </div>
                     )}
+
+                    {/* Testimonials Section - Coming Soon */}
+                    <div>
+                      <h2 className="text-2xl font-bold text-white mb-4">Reviews & Testimonials</h2>
+                      <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                        <p className="text-gray-400 italic">
+                          Reviews and testimonials will be available soon. Be the first to leave a review after completing this course!
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -518,6 +604,54 @@ export default function ProductPage({ params }: PageProps) {
                     </div>
                     <span className="text-white font-semibold">Yes</span>
                   </div>
+
+                  {course.category && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Tag className="w-5 h-5" />
+                        <span>Category</span>
+                      </div>
+                      <span className="text-white font-semibold">{course.category}</span>
+                    </div>
+                  )}
+
+                  {course.subCategory && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Tag className="w-5 h-5" />
+                        <span>Sub Category</span>
+                      </div>
+                      <span className="text-white font-semibold">{course.subCategory}</span>
+                    </div>
+                  )}
+
+                  {earliestBatchDate ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Calendar className="w-5 h-5" />
+                        <span>Batch Starts</span>
+                      </div>
+                      <span className="text-white font-semibold">{earliestBatchDate}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Calendar className="w-5 h-5" />
+                        <span>Batch Starts</span>
+                      </div>
+                      <span className="text-gray-500 text-sm">TBA</span>
+                    </div>
+                  )}
+
+                  {course.maxSeats && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Users className="w-5 h-5" />
+                        <span>Max Seats</span>
+                      </div>
+                      <span className="text-white font-semibold">{course.maxSeats}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Add to Cart Button */}
