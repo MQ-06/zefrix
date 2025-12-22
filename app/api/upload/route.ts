@@ -52,7 +52,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Create upload directory structure
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', folder, subfolder);
+    // For Hostinger: Use public/uploads for public access
+    // Alternative: Use storage/uploads (outside public) for better security
+    const usePublicDir = process.env.UPLOAD_TO_PUBLIC !== 'false'; // Default to true for Hostinger
+    const baseDir = usePublicDir 
+      ? path.join(process.cwd(), 'public', 'uploads', folder, subfolder)
+      : path.join(process.cwd(), 'storage', 'uploads', folder, subfolder);
+    
+    const uploadDir = baseDir;
     
     // Ensure directory exists
     if (!existsSync(uploadDir)) {
@@ -74,8 +81,8 @@ export async function POST(request: NextRequest) {
     await writeFile(filePath, buffer);
 
     // Generate public URL
-    // Adjust this based on your domain
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://zefrix.com';
+    // For Hostinger: Use your domain
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://zefrix.com';
     const relativePath = `uploads/${folder}${subfolder ? `/${subfolder}` : ''}/${uniqueFileName}`;
     const publicUrl = `${baseUrl}/${relativePath}`;
 
@@ -129,7 +136,10 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const fullPath = path.join(process.cwd(), 'public', filePath);
+    // Support both public/uploads and storage/uploads
+    const usePublicDir = process.env.UPLOAD_TO_PUBLIC !== 'false';
+    const baseDir = usePublicDir ? 'public' : 'storage';
+    const fullPath = path.join(process.cwd(), baseDir, filePath);
     
     // Check if file exists
     if (!existsSync(fullPath)) {

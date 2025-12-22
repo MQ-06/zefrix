@@ -292,16 +292,86 @@ export default function StudentDashboard() {
   useEffect(() => {
     const fetchUpcomingSessions = async () => {
       if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        console.log('📋 Cannot fetch sessions - missing Firebase or user');
+        return;
+      }
+
+      if (enrollments.length === 0) {
+        console.log('📋 No enrollments found, skipping session fetch');
+        setUpcomingSessions([]);
         return;
       }
 
       try {
-        const batchesRef = window.collection(window.firebaseDb, 'batches');
-        const allBatchesSnapshot = await window.getDocs(batchesRef);
-        
+        console.log('🔍 Fetching sessions for enrollments:', enrollments.map(e => e.classId));
         const sessions: any[] = [];
         const now = new Date();
 
+        // Fetch from sessions collection
+        const sessionsRef = window.collection(window.firebaseDb, 'sessions');
+        const sessionsSnapshot = await window.getDocs(sessionsRef);
+        
+        console.log(`📊 Found ${sessionsSnapshot.size} total sessions in collection`);
+        
+        sessionsSnapshot.forEach((doc: any) => {
+          const session = { id: doc.id, ...doc.data() };
+          console.log('📅 Processing session:', {
+            classId: session.classId,
+            className: session.className,
+            sessionDate: session.sessionDate,
+            hasDate: !!session.sessionDate
+          });
+          
+          // Handle different date formats
+          let sessionDate: Date;
+          if (session.sessionDate?.toDate) {
+            sessionDate = session.sessionDate.toDate();
+          } else if (session.sessionDate) {
+            sessionDate = new Date(session.sessionDate);
+          } else {
+            console.log('⚠️ Session missing date, skipping:', session.id);
+            return; // Skip if no date
+          }
+          
+          // Only include future sessions (or past sessions within last hour for debugging)
+          const isFuture = sessionDate > now;
+          const isRecent = (now.getTime() - sessionDate.getTime()) < 3600000; // Last hour
+          
+          if (isFuture || isRecent) {
+            // Check if student is enrolled in this class
+            const enrollmentIds = enrollments.map(e => e.classId);
+            const isEnrolled = enrollmentIds.includes(session.classId);
+            
+            console.log('✅ Session check:', {
+              classId: session.classId,
+              isEnrolled,
+              enrollmentIds,
+              isFuture,
+              isRecent
+            });
+            
+            if (isEnrolled) {
+              sessions.push({
+                ...session,
+                className: session.className || 'Class',
+                sessionDate: sessionDate,
+                sessionTime: session.sessionTime || session.startTime || '',
+                meetingLink: session.meetingLink || session.meetLink,
+                recordingLink: session.recordingLink || session.recording || null,
+                status: session.status || 'scheduled',
+                sessionNumber: session.sessionNumber,
+                classId: session.classId
+              });
+            }
+          }
+        });
+
+        // Also fetch from batches (for backward compatibility)
+        const batchesRef = window.collection(window.firebaseDb, 'batches');
+        const allBatchesSnapshot = await window.getDocs(batchesRef);
+        
+        console.log(`📊 Found ${allBatchesSnapshot.size} total batches`);
+        
         allBatchesSnapshot.forEach((doc: any) => {
           const batch = { id: doc.id, ...doc.data() };
           const batchDate = batch.batchDate?.toDate ? batch.batchDate.toDate() : new Date(batch.batchDate);
@@ -329,13 +399,14 @@ export default function StudentDashboard() {
           return aTime - bTime;
         });
 
+        console.log(`✅ Found ${sessions.length} upcoming sessions for enrolled classes`);
         setUpcomingSessions(sessions.slice(0, 10)); // Limit to 10 upcoming
       } catch (error) {
-        console.error('Error fetching upcoming sessions:', error);
+        console.error('❌ Error fetching upcoming sessions:', error);
       }
     };
 
-    if (user && enrollments.length > 0) {
+    if (user) {
       fetchUpcomingSessions();
     }
   }, [user, enrollments]);
@@ -1123,13 +1194,15 @@ export default function StudentDashboard() {
                 {upcomingSessions.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {upcomingSessions.map((session) => {
-                      const isLive = isClassLive(session.sessionDate, session.sessionTime);
+                      const isLiveFromStatus = session.status === 'live';
+                      const isCompleted = session.status === 'completed';
+                      const isLive = isLiveFromStatus || isClassLive(session.sessionDate, session.sessionTime);
                       return (
                         <div key={session.id} style={{
-                          background: isLive ? 'rgba(217, 42, 99, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          background: isLive ? 'rgba(217, 42, 99, 0.2)' : isCompleted ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 255, 255, 0.05)',
                           borderRadius: '12px',
                           padding: '1.5rem',
-                          border: isLive ? '2px solid #D92A63' : '1px solid rgba(255, 255, 255, 0.1)',
+                          border: isLive ? '2px solid #D92A63' : isCompleted ? '1px solid rgba(76, 175, 80, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
@@ -1138,7 +1211,7 @@ export default function StudentDashboard() {
                         }}>
                           <div style={{ flex: 1, minWidth: '200px' }}>
                             <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-                              {session.className}
+                              {session.className} {session.sessionNumber && `- Session ${session.sessionNumber}`}
                             </h3>
                             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
                               <span>📅 {formatDate(session.sessionDate)}</span>
@@ -1159,20 +1232,71 @@ export default function StudentDashboard() {
                                 🔴 LIVE NOW
                               </span>
                             )}
-                            {session.meetingLink ? (
+                            {isCompleted && (
+                              <span style={{
+                                background: '#4CAF50',
+                                color: '#fff',
+                                padding: '0.5rem 1rem',
+                                borderRadius: '20px',
+                                fontSize: '0.875rem',
+                                fontWeight: '600'
+                              }}>
+                                ✓ Completed
+                              </span>
+                            )}
+                            {isCompleted && session.recordingLink ? (
+                              <a
+                                href={session.recordingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="button-dark"
+                                style={{ 
+                                  fontSize: '0.875rem', 
+                                  padding: '0.75rem 1.5rem', 
+                                  textDecoration: 'none',
+                                  background: 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)'
+                                }}
+                              >
+                                📹 Watch Recording
+                              </a>
+                            ) : session.meetingLink ? (
                               <a
                                 href={session.meetingLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="button-dark"
-                                style={{ fontSize: '0.875rem', padding: '0.75rem 1.5rem', textDecoration: 'none' }}
+                                style={{ 
+                                  fontSize: '0.875rem', 
+                                  padding: '0.75rem 1.5rem', 
+                                  textDecoration: 'none',
+                                  background: isLive ? '#D92A63' : 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)'
+                                }}
                               >
                                 {isLive ? 'Join Live Class' : 'Join Session'}
                               </a>
                             ) : (
                               <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
-                                Link will be sent via email
+                                {isCompleted ? 'Recording coming soon' : 'Link will be sent via email'}
                               </span>
+                            )}
+                            {isCompleted && (
+                              <button
+                                onClick={() => {
+                                  setSelectedClassForRating({ classId: session.classId, className: session.className });
+                                  setShowRatingModal(true);
+                                }}
+                                style={{
+                                  fontSize: '0.875rem',
+                                  padding: '0.75rem 1.5rem',
+                                  background: 'rgba(255, 255, 255, 0.1)',
+                                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                                  color: '#fff',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ⭐ Rate & Review
+                              </button>
                             )}
                           </div>
                         </div>

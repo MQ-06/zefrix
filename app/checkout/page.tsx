@@ -123,6 +123,20 @@ export default function CheckoutPage() {
 
             // Process each item in cart
             const enrollmentPromises = cart.map(async (item) => {
+                // Fetch class data to get correct details
+                let classData: any = null;
+                if (window.firebaseDb && window.doc && window.getDoc) {
+                    try {
+                        const classRef = window.doc(window.firebaseDb, 'classes', item.id);
+                        const classSnap = await window.getDoc(classRef);
+                        if (classSnap.exists()) {
+                            classData = classSnap.data();
+                        }
+                    } catch (error) {
+                        console.error('Error fetching class data:', error);
+                    }
+                }
+
                 // Create enrollment in Firestore directly (bypass payment)
                 console.log('🔍 Firebase check:', {
                     firebaseDb: !!window.firebaseDb,
@@ -144,8 +158,8 @@ export default function CheckoutPage() {
                         orderId: 'DIRECT_ENROLLMENT',
                         paymentStatus: 'completed',
                         enrolledAt: new Date(),
-                        classType: 'one-time',
-                        numberOfSessions: 1,
+                        classType: classData?.scheduleType || 'one-time',
+                        numberOfSessions: classData?.numberSessions || 1,
                         attended: 0,
                         status: 'active'
                     });

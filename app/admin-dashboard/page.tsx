@@ -103,6 +103,10 @@ export default function AdminDashboard() {
   // Modal state
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedClassDetails, setSelectedClassDetails] = useState<any>(null);
+  const [classSessions, setClassSessions] = useState<any[]>([]);
+  const [classBankDetails, setClassBankDetails] = useState<any>(null);
+  const [loadingClassDetails, setLoadingClassDetails] = useState(false);
 
   const router = useRouter();
 
@@ -226,6 +230,60 @@ export default function AdminDashboard() {
       showError('Failed to load pending classes. Please refresh the page.');
     } finally {
       setLoadingClasses(false);
+    }
+  };
+
+  // Handle view class details
+  const handleViewClassDetails = async (classId: string) => {
+    if (!window.firebaseDb || !window.collection || !window.doc || !window.getDoc || !window.query || !window.where || !window.getDocs) {
+      showError('Firebase not initialized');
+      return;
+    }
+
+    setLoadingClassDetails(true);
+    try {
+      // Get class data
+      const classRef = window.doc(window.firebaseDb, 'classes', classId);
+      const classSnap = await window.getDoc(classRef);
+      if (classSnap.exists()) {
+        setSelectedClassDetails({ classId, ...classSnap.data() });
+      }
+
+      // Get sessions
+      const sessionsRef = window.collection(window.firebaseDb, 'sessions');
+      const sessionsQuery = window.query(sessionsRef, window.where('classId', '==', classId));
+      const sessionsSnapshot = await window.getDocs(sessionsQuery);
+      const sessions: any[] = [];
+      sessionsSnapshot.forEach((doc: any) => {
+        sessions.push({ id: doc.id, ...doc.data() });
+      });
+      sessions.sort((a, b) => {
+        const aDate = a.sessionDate?.toDate ? a.sessionDate.toDate() : new Date(a.sessionDate);
+        const bDate = b.sessionDate?.toDate ? b.sessionDate.toDate() : new Date(b.sessionDate);
+        return aDate.getTime() - bDate.getTime();
+      });
+      setClassSessions(sessions);
+
+      // Get bank details from class creator
+      if (classSnap.exists()) {
+        const classData = classSnap.data();
+        const creatorRef = window.doc(window.firebaseDb, 'users', classData.creatorId);
+        const creatorSnap = await window.getDoc(creatorRef);
+        if (creatorSnap.exists()) {
+          const creatorData = creatorSnap.data();
+          setClassBankDetails({
+            accountHolderName: creatorData.bankAccountHolderName || creatorData.accountHolderName,
+            accountNumber: creatorData.bankAccountNumber || creatorData.accountNumber,
+            ifscCode: creatorData.bankIFSC || creatorData.ifscCode,
+            bankName: creatorData.bankName
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching class details:', error);
+      showError('Failed to load class details');
+    } finally {
+      setLoadingClassDetails(false);
     }
   };
 
@@ -1216,6 +1274,15 @@ export default function AdminDashboard() {
                       <div className="creator-email-mini">{classItem.creatorEmail || ''}</div>
                     </div>
                   </div>
+
+                  <button
+                    onClick={() => handleViewClassDetails(classItem.classId)}
+                    className="class-action-btn"
+                    style={{ marginTop: '1rem', width: '100%', background: 'rgba(255, 255, 255, 0.1)' }}
+                  >
+                    <Eye size={16} />
+                    <span>View Details</span>
+                  </button>
                 </div>
               </div>
             );
@@ -1224,6 +1291,132 @@ export default function AdminDashboard() {
       ) : (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
           No approved classes yet.
+        </div>
+      )}
+
+      {/* Class Details Modal */}
+      {selectedClassDetails && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '2rem'
+        }}>
+          <div style={{
+            background: '#1A1A2E',
+            borderRadius: '16px',
+            padding: '2rem',
+            maxWidth: '800px',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            width: '100%',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ color: '#fff', fontSize: '1.5rem' }}>{selectedClassDetails.title}</h2>
+              <button
+                onClick={() => {
+                  setSelectedClassDetails(null);
+                  setClassSessions([]);
+                  setClassBankDetails(null);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '1.5rem'
+                }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {loadingClassDetails ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>Loading...</div>
+            ) : (
+              <>
+                {/* Sessions */}
+                <div style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.25rem' }}>Sessions ({classSessions.length})</h3>
+                  {classSessions.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {classSessions.map((session, idx) => (
+                        <div key={idx} style={{
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          padding: '1rem',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}>
+                          <div style={{ color: '#fff', marginBottom: '0.5rem', fontWeight: '600' }}>
+                            Session {idx + 1}
+                          </div>
+                          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                            Date: {session.sessionDate?.toDate ? new Date(session.sessionDate.toDate()).toLocaleString() : 'N/A'}
+                          </div>
+                          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                            Time: {session.sessionTime || session.startTime || 'N/A'}
+                          </div>
+                          {session.meetingLink && (
+                            <div style={{ marginTop: '0.5rem' }}>
+                              <a href={session.meetingLink} target="_blank" rel="noopener noreferrer" style={{
+                                color: '#D92A63',
+                                textDecoration: 'none',
+                                fontSize: '0.875rem'
+                              }}>
+                                Meeting Link →
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color: 'rgba(255, 255, 255, 0.5)', padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px' }}>
+                      No sessions configured yet
+                    </div>
+                  )}
+                </div>
+
+                {/* Bank Details */}
+                <div>
+                  <h3 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.25rem' }}>Bank Details</h3>
+                  {classBankDetails ? (
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      padding: '1rem',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        <strong style={{ color: '#fff' }}>Account Holder:</strong> {classBankDetails.accountHolderName || 'N/A'}
+                      </div>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        <strong style={{ color: '#fff' }}>Account Number:</strong> {classBankDetails.accountNumber || 'N/A'}
+                      </div>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        <strong style={{ color: '#fff' }}>IFSC:</strong> {classBankDetails.ifscCode || 'N/A'}
+                      </div>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        <strong style={{ color: '#fff' }}>Bank Name:</strong> {classBankDetails.bankName || 'N/A'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ color: 'rgba(255, 255, 255, 0.5)', padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px' }}>
+                      Bank details not provided yet
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

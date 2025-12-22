@@ -142,6 +142,7 @@ export default function CreatorDashboard() {
   const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
   const [viewingEnrollmentsClassId, setViewingEnrollmentsClassId] = useState<string | null>(null);
   const [viewingEnrollmentsClassName, setViewingEnrollmentsClassName] = useState<string | null>(null);
+  const [liveClassData, setLiveClassData] = useState<{classId: string; sessionId: string; sessionData: any} | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -1666,6 +1667,11 @@ export default function CreatorDashboard() {
                       setEditingClassId(viewingClassId);
                       setViewingClassId(null);
                     }}
+                    onStartLiveClass={(classId, sessionId, sessionData) => {
+                      setLiveClassData({ classId, sessionId, sessionData });
+                      setActiveSection('live-class');
+                      setViewingClassId(null);
+                    }}
                   />
                 ) : editingClassId ? (
                   <EditClassForm
@@ -1723,10 +1729,40 @@ export default function CreatorDashboard() {
             )}
 
             {/* Live Class Section */}
-            {activeSection === 'live-class' && (
+            {activeSection === 'live-class' && liveClassData && (
               <div id="live-class" className="creator-section">
-                <h2 className="creator-section-title">Live Class</h2>
-                <LiveClass />
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <button
+                    onClick={() => {
+                      setLiveClassData(null);
+                      setActiveSection('manage-classes');
+                      setViewingClassId(liveClassData.classId);
+                    }}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      color: '#fff',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      marginBottom: '1rem'
+                    }}
+                  >
+                    ← Back to Class
+                  </button>
+                </div>
+                <LiveClass
+                  classId={liveClassData.classId}
+                  sessionId={liveClassData.sessionId}
+                  sessionNumber={liveClassData.sessionData.sessionNumber}
+                  meetingLink={liveClassData.sessionData.meetingLink || liveClassData.sessionData.meetLink || ''}
+                  className={liveClassData.sessionData.className || 'Class'}
+                  onEndClass={() => {
+                    setLiveClassData(null);
+                    setActiveSection('manage-classes');
+                    setViewingClassId(liveClassData.classId);
+                  }}
+                />
               </div>
             )}
 
