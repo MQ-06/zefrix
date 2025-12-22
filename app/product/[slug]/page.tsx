@@ -373,8 +373,22 @@ export default function ProductPage({ params }: PageProps) {
         </div>
       )}
 
+      {/* Back Button - Show if not logged in or for all users */}
+      {!user && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-[#1A1A2E] to-[#2D1B3D] border-b border-white/10 shadow-lg">
+          <div className="container max-w-7xl mx-auto px-4 py-3">
+            <Link 
+              href="/courses" 
+              className="text-white font-semibold hover:text-[#FF654B] transition-colors inline-flex items-center gap-2"
+            >
+              ← Back to Courses
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
-      <section className={`${user ? 'pt-24' : 'pt-32'} pb-12 relative overflow-hidden`}>
+      <section className={`${user ? 'pt-24' : 'pt-24'} pb-12 relative overflow-hidden`}>
         <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A2E] via-[#2D1B3D] to-[#E91E63]"></div>
         <div className="container max-w-6xl mx-auto px-4 relative z-10">
           <div className="grid grid-cols-1 gap-8">

@@ -1597,7 +1597,16 @@ export default function CreatorDashboard() {
                         duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
                         students: 0,
                       };
-                      return <CreatorCourseCard key={classItem.classId} course={course} />;
+                      return (
+                        <CreatorCourseCard 
+                          key={classItem.classId} 
+                          course={course}
+                          onViewClass={(classId) => {
+                            setViewingClassId(classId);
+                            setActiveSection('manage-classes');
+                          }}
+                        />
+                      );
                     })}
                   </div>
                 ) : (

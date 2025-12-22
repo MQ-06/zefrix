@@ -5,7 +5,7 @@ import Link from 'next/link';
 import CoursesPageCard from '@/components/CoursesPageCard';
 import FooterCTA from '@/components/FooterCTA';
 import { motion } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -174,6 +174,13 @@ export default function CoursesPage() {
     }
   };
 
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   return (
     <>
       {/* Hero Section - Matching Original Design */}
@@ -258,6 +265,20 @@ export default function CoursesPage() {
           {/* Pagination */}
           {allCourses.length > 0 && totalPages > 1 && (
             <div className="flex items-center justify-center gap-4 mt-12">
+              {currentPage > 1 && (
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <button
+                    onClick={handlePrevPage}
+                    className="flex items-center gap-2 bg-gradient-to-r from-primary to-secondary px-6 py-3 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity duration-200 shadow-lg"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                    <span>Previous</span>
+                  </button>
+                </motion.div>
+              )}
               <div className="text-white text-lg font-medium">
                 {currentPage} / {totalPages}
               </div>

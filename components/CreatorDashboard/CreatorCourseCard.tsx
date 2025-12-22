@@ -16,9 +16,20 @@ interface CreatorCourseCardProps {
   };
 }
 
-export default function CreatorCourseCard({ course }: CreatorCourseCardProps) {
+interface CreatorCourseCardPropsWithHandler extends CreatorCourseCardProps {
+  onViewClass?: (classId: string) => void;
+}
+
+export default function CreatorCourseCard({ course, onViewClass }: CreatorCourseCardPropsWithHandler) {
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onViewClass) {
+      onViewClass(course.id);
+    }
+  };
+
   return (
-    <a href={`/product/${course.slug}`} className="creator-course-card">
+    <div onClick={handleClick} className="creator-course-card" style={{ cursor: onViewClass ? 'pointer' : 'default' }}>
       <div className="creator-course-image-wrap">
         <img
           alt={course.title}
@@ -71,10 +82,9 @@ export default function CreatorCourseCard({ course }: CreatorCourseCardProps) {
       <div className="creator-course-bottom">
         <div className="creator-course-price-wrap">
           <h4 className="creator-course-price">₹{course.price.toFixed(2)}</h4>
-          <div className="creator-course-price-compare">₹{course.originalPrice.toFixed(2)}</div>
         </div>
       </div>
-    </a>
+    </div>
   );
 }
 

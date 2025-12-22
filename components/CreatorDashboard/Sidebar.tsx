@@ -44,17 +44,9 @@ export default function CreatorSidebar({ activeSection, onSectionChange, onLogou
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
             <div>Manage Classes</div>
           </a>
-          <a href="#" onClick={(e) => handleNavClick(e, 'manage-batches')} className={`sidebar-nav-item ${activeSection === 'manage-batches' ? 'active' : ''}`}>
-            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
-            <div>Manage Batches</div>
-          </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'enrollments')} className={`sidebar-nav-item ${activeSection === 'enrollments' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
             <div>All Enrollments</div>
-          </a>
-          <a href="#" onClick={(e) => handleNavClick(e, 'live-class')} className={`sidebar-nav-item ${activeSection === 'live-class' ? 'active' : ''}`}>
-            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
-            <div>Live Class</div>
           </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'profile')} className={`sidebar-nav-item ${activeSection === 'profile' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />

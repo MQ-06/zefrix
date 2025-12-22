@@ -759,16 +759,6 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                         ✏️ Edit Class
                     </button>
                 )}
-                {classData.videoLink && (
-                    <a
-                        href={classData.videoLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={styles.actionButton}
-                    >
-                        🎥 View Media
-                    </a>
-                )}
                 <button onClick={onBack} className={styles.secondaryButton}>
                     Close
                 </button>
