@@ -382,10 +382,10 @@ export default function ContactUsPage() {
                 Email us:
               </h3>
               <a
-                href="mailto:info@example.com"
+                href="mailto:contact@zefrix.com"
                 className="text-[#1A1A2E] underline hover:text-[#E91E63] transition-colors"
               >
-                info@example.com
+                contact@zefrix.com
               </a>
             </motion.div>
 
@@ -407,8 +407,7 @@ export default function ContactUsPage() {
                 Address:
               </h3>
               <div className="text-[#1A1A2E]">
-                Chicago HQ Estica Cop. Macomb, MI 48042
-              </div>
+              Malviya Nagar, Jaipur Rajasthan India 302017              </div>
             </motion.div>
           </div>
         </div>

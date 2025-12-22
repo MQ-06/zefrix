@@ -34,11 +34,10 @@ interface ClassItem {
 interface ManageClassesProps {
   onEditClass?: (classId: string) => void;
   onViewClass?: (classId: string) => void;
-  onManageBatches?: (classId: string, className: string) => void;
   onViewEnrollments?: (classId: string, className: string) => void;
 }
 
-export default function ManageClasses({ onEditClass, onViewClass, onManageBatches, onViewEnrollments }: ManageClassesProps) {
+export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollments }: ManageClassesProps) {
   const { showSuccess, showError, showInfo } = useNotification();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,13 +150,6 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
     }
   };
 
-  const handleManageBatches = (classId: string, className: string) => {
-    if (onManageBatches) {
-      onManageBatches(classId, className);
-    } else {
-      showInfo(`Manage Batches for "${className}" - Batch management functionality coming soon! You'll be able to create recurring sessions, schedule multiple dates, and manage batch enrollments.`);
-    }
-  };
 
   const handleViewEnrollments = (classId: string, className: string) => {
     if (onViewEnrollments) {
@@ -238,12 +230,6 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
                   onClick={() => handleViewClass(classItem.classId)}
                 >
                   View Class
-                </button>
-                <button
-                  className={styles.button}
-                  onClick={() => handleManageBatches(classItem.classId, classItem.title)}
-                >
-                  Manage Batches
                 </button>
                 <button
                   className={styles.button}

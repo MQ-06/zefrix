@@ -43,16 +43,6 @@ interface ClassData {
     [key: string]: any;
 }
 
-interface BatchData {
-    id: string;
-    batchDate: any;
-    batchTime: string;
-    duration: number;
-    maxStudents: number;
-    enrolledStudents: number;
-    status: string;
-    meetingLink?: string;
-}
 
 interface EnrollmentData {
     id: string;
@@ -73,15 +63,13 @@ interface ViewClassProps {
 export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }: ViewClassProps) {
     const { showError, showSuccess } = useNotification();
     const [classData, setClassData] = useState<ClassData | null>(null);
-    const [batches, setBatches] = useState<BatchData[]>([]);
     const [enrollments, setEnrollments] = useState<EnrollmentData[]>([]);
     const [sessions, setSessions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'batches' | 'students'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'students'>('overview');
 
     useEffect(() => {
         fetchClassData();
-        fetchBatches();
         fetchEnrollments();
         fetchSessions();
     }, [classId]);
@@ -112,33 +100,6 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
         }
     };
 
-    const fetchBatches = async () => {
-        if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-            return;
-        }
-
-        try {
-            const batchesRef = window.collection(window.firebaseDb, 'batches');
-            const q = window.query(batchesRef, window.where('classId', '==', classId));
-            const querySnapshot = await window.getDocs(q);
-
-            const batchesList: BatchData[] = [];
-            querySnapshot.forEach((doc: any) => {
-                batchesList.push({ id: doc.id, ...doc.data() });
-            });
-
-            // Sort by batch date
-            batchesList.sort((a, b) => {
-                const aTime = a.batchDate?.toMillis?.() || 0;
-                const bTime = b.batchDate?.toMillis?.() || 0;
-                return bTime - aTime;
-            });
-
-            setBatches(batchesList);
-        } catch (error) {
-            console.error('Error fetching batches:', error);
-        }
-    };
 
     const fetchEnrollments = async () => {
         if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
@@ -334,12 +295,6 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                         Session Details
                     </button>
                 )}
-                <button
-                    className={`${styles.tab} ${activeTab === 'batches' ? styles.activeTab : ''}`}
-                    onClick={() => setActiveTab('batches')}
-                >
-                    Batches ({batches.length})
-                </button>
                 <button
                     className={`${styles.tab} ${activeTab === 'students' ? styles.activeTab : ''}`}
                     onClick={() => setActiveTab('students')}
@@ -676,50 +631,6 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                         }}
                                     />
                                 </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Batches Tab */}
-                {activeTab === 'batches' && (
-                    <div className={styles.batchesContent}>
-                        {batches.length === 0 ? (
-                            <div className={styles.emptyState}>
-                                <p>No batches scheduled for this class yet.</p>
-                                <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.5rem' }}>
-                                    Go to Manage Classes → Manage Batches to create batches.
-                                </p>
-                            </div>
-                        ) : (
-                            <div className={styles.batchList}>
-                                {batches.map((batch) => (
-                                    <div key={batch.id} className={styles.batchCard}>
-                                        <div className={styles.batchHeader}>
-                                            <div className={styles.batchInfo}>
-                                                <div className={styles.batchDate}>
-                                                    📅 {formatDate(batch.batchDate)} at {batch.batchTime}
-                                                </div>
-                                                <div className={styles.batchMeta}>
-                                                    ⏱️ {batch.duration} min | 👥 {batch.enrolledStudents}/{batch.maxStudents} students
-                                                </div>
-                                            </div>
-                                            <div
-                                                className={styles.batchStatus}
-                                                style={{ color: getStatusColor(batch.status) }}
-                                            >
-                                                {getStatusLabel(batch.status)}
-                                            </div>
-                                        </div>
-                                        {batch.meetingLink && (
-                                            <div className={styles.batchLink}>
-                                                🔗 <a href={batch.meetingLink} target="_blank" rel="noopener noreferrer">
-                                                    Join Meeting
-                                                </a>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
                             </div>
                         )}
                     </div>

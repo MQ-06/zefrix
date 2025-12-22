@@ -8,7 +8,6 @@ import CreatorCourseCard from '@/components/CreatorDashboard/CreatorCourseCard';
 import CreateClassForm from '@/components/CreatorDashboard/CreateClassForm';
 import EditClassForm from '@/components/CreatorDashboard/EditClassForm';
 import ManageClasses from '@/components/CreatorDashboard/ManageClasses';
-import ManageBatches from '@/components/CreatorDashboard/ManageBatches';
 import ViewClass from '@/components/CreatorDashboard/ViewClass';
 import ClassDetails from '@/components/CreatorDashboard/ClassDetails';
 import LiveClass from '@/components/CreatorDashboard/LiveClass';
@@ -138,8 +137,6 @@ export default function CreatorDashboard() {
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [viewingClassId, setViewingClassId] = useState<string | null>(null);
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
   const [viewingEnrollmentsClassId, setViewingEnrollmentsClassId] = useState<string | null>(null);
   const [viewingEnrollmentsClassName, setViewingEnrollmentsClassName] = useState<string | null>(null);
   const [liveClassData, setLiveClassData] = useState<{classId: string; sessionId: string; sessionData: any} | null>(null);
@@ -1691,23 +1688,10 @@ export default function CreatorDashboard() {
                       // Optionally refresh the class list
                     }}
                   />
-                ) : selectedClassId ? (
-                  <ManageBatches
-                    classId={selectedClassId}
-                    className={selectedClassName || undefined}
-                    onBack={() => {
-                      setSelectedClassId(null);
-                      setSelectedClassName(null);
-                    }}
-                  />
                 ) : (
                   <ManageClasses
                     onEditClass={(classId) => setEditingClassId(classId)}
                     onViewClass={(classId) => setViewingClassId(classId)}
-                    onManageBatches={(classId, className) => {
-                      setSelectedClassId(classId);
-                      setSelectedClassName(className);
-                    }}
                     onViewEnrollments={(classId, className) => {
                       setViewingEnrollmentsClassId(classId);
                       setViewingEnrollmentsClassName(className);
@@ -1720,13 +1704,6 @@ export default function CreatorDashboard() {
             {activeSection === 'enrollments' && (
               <div id="enrollments" className="creator-section">
                 <EnrollmentList />
-              </div>
-            )}
-
-            {/* Manage Batches Section */}
-            {activeSection === 'manage-batches' && (
-              <div id="manage-batches" className="creator-section">
-                <ManageBatches />
               </div>
             )}
 

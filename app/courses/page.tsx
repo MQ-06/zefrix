@@ -204,7 +204,7 @@ export default function CoursesPage() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-gray-300 text-sm md:text-base max-w-2xl mx-auto"
             >
-              Also it great have set behold land third he great years midst.
+              Discover live, interactive classes taught by expert creators. Learn new skills, connect with mentors, and grow in real-time.
             </motion.p>
             
             {/* Decorative Elements */}
