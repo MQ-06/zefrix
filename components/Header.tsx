@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Menu, X, LogOut } from 'lucide-react';
+import { useCart } from '@/contexts/CartContext';
+import { Menu, X, LogOut, ShoppingCart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Header() {
@@ -13,6 +14,7 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, signOut } = useAuth();
+  const { cartCount } = useCart();
   const isLoginPage = pathname === '/signup-login';
 
   useEffect(() => {
@@ -73,6 +75,21 @@ export default function Header() {
 
           {/* Right Side Actions */}
           <div className="hidden md:flex items-center space-x-6">
+            {/* Cart Icon */}
+            {isAuthenticated && (
+              <Link
+                href="/checkout"
+                className="relative text-white hover:text-primary transition-colors duration-200"
+                aria-label="View Cart"
+              >
+                <ShoppingCart size={24} />
+                {cartCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-[#D92A63] text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {cartCount > 9 ? '9+' : cartCount}
+                  </span>
+                )}
+              </Link>
+            )}
             {isAuthenticated ? null : (
               <>
                 {!isLoginPage && (
@@ -131,6 +148,22 @@ export default function Header() {
                       <p className="text-white text-sm font-medium">{user?.name || 'User'}</p>
                       <p className="text-gray-400 text-xs">{user?.email}</p>
                     </div>
+                    {/* Mobile Cart Link */}
+                    <Link
+                      href="/checkout"
+                      className="flex items-center justify-between px-3 py-2 text-white hover:text-primary transition-colors duration-200"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="flex items-center space-x-2">
+                        <ShoppingCart size={20} />
+                        <span>View Cart</span>
+                      </span>
+                      {cartCount > 0 && (
+                        <span className="bg-[#D92A63] text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                          {cartCount > 9 ? '9+' : cartCount}
+                        </span>
+                      )}
+                    </Link>
                     {user?.role === 'admin' && (
                       <Link
                         href="/admin-dashboard"

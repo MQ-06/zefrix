@@ -157,7 +157,18 @@ export default function CheckoutPage() {
 
             if (!createOrderResponse.ok) {
                 const errorData = await createOrderResponse.json();
-                throw new Error(errorData.error || 'Failed to create order');
+                const errorMsg = errorData.error || 'Failed to create order';
+
+                // Provide specific guidance based on error type
+                if (createOrderResponse.status === 406) {
+                    throw new Error('Razorpay account may not be activated. Please check your Razorpay dashboard and ensure your test account is fully activated.');
+                } else if (createOrderResponse.status === 401) {
+                    throw new Error('Invalid Razorpay credentials. Please check your API keys.');
+                } else if (createOrderResponse.status === 500) {
+                    throw new Error(errorMsg);
+                }
+
+                throw new Error(errorMsg);
             }
 
             const orderData = await createOrderResponse.json();
@@ -263,7 +274,7 @@ export default function CheckoutPage() {
                         const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', item.id));
                         const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
                         const currentEnrollments = enrollmentsSnapshot.size;
-                        
+
                         if (currentEnrollments >= classData.maxSeats) {
                             throw new Error(`Class "${item.title}" is full. Maximum ${classData.maxSeats} seats are already enrolled.`);
                         }
@@ -312,23 +323,21 @@ export default function CheckoutPage() {
                 return window.addDoc(enrollmentsRef, enrollmentData);
             });
 
+            // Create enrollments (this is fast, usually < 200ms)
             await Promise.all(enrollmentPromises);
             console.log('✅ All enrollments created successfully');
 
-            // Small delay to ensure Firestore writes complete
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // Set redirecting state
+            // Set redirecting state and clear cart immediately
             setIsRedirecting(true);
             clearCart();
 
-            // Redirect to thank you page
+            // Redirect to thank you page immediately (no artificial delay)
             window.location.href = `/thank-you?payment_id=${paymentResponse.razorpay_payment_id}&order_id=${paymentResponse.razorpay_order_id}&status=success`;
         } catch (error: any) {
             console.error('Error handling payment success:', error);
             const errorMessage = error.message || 'Failed to complete enrollment. Please contact support.';
             showError(errorMessage);
-            
+
             // If class is full, remove it from cart
             if (errorMessage.includes('full') || errorMessage.includes('Maximum')) {
                 const fullClassTitle = errorMessage.match(/"([^"]+)"/)?.[1];
@@ -339,7 +348,7 @@ export default function CheckoutPage() {
                     }
                 }
             }
-            
+
             setIsProcessing(false);
             throw error; // Re-throw to be caught by handler
         }
@@ -431,92 +440,86 @@ export default function CheckoutPage() {
                 <div className="container max-w-6xl mx-auto px-4">
                     <h1 className="text-4xl font-bold text-white mb-8">Checkout</h1>
 
-                {/* Cart Preview Section */}
-                <div className="mb-8 bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
-                    <h2 className="text-2xl font-bold text-white mb-4">Cart Preview</h2>
-                    <p className="text-gray-300 mb-4">Review your items before proceeding to payment</p>
-                    <div className="text-white">
-                        <span className="font-semibold">{cart.length}</span> {cart.length === 1 ? 'item' : 'items'} in your cart
+                    {/* Cart Preview Section */}
+                    <div className="mb-8 bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+                        <h2 className="text-2xl font-bold text-white mb-4">Cart Preview</h2>
+                        <p className="text-gray-300 mb-4">Review your items before proceeding to payment</p>
+                        <div className="text-white">
+                            <span className="font-semibold">{cart.length}</span> {cart.length === 1 ? 'item' : 'items'} in your cart
+                        </div>
                     </div>
-                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Cart Items */}
-                    <div className="lg:col-span-2 space-y-4">
-                        {cart.map((item) => (
-                            <div
-                                key={item.id}
-                                className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 flex gap-6"
-                            >
-                                <img
-                                    src={item.image}
-                                    alt={item.title}
-                                    className="w-32 h-32 rounded-lg object-cover"
-                                />
-                                <div className="flex-1">
-                                    <h3 className="text-xl font-bold text-white mb-2">{item.title}</h3>
-                                    <p className="text-gray-400 mb-4">by {item.instructor}</p>
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-2xl font-bold text-white">
-                                            ₹{item.price.toFixed(2)} INR
-                                        </p>
-                                        <button
-                                            onClick={() => removeFromCart(item.id)}
-                                            className="text-red-400 hover:text-red-300 transition-colors"
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* Cart Items */}
+                        <div className="lg:col-span-2 space-y-4">
+                            {cart.map((item) => (
+                                <div
+                                    key={item.id}
+                                    className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 flex gap-6"
+                                >
+                                    <img
+                                        src={item.image}
+                                        alt={item.title}
+                                        className="w-32 h-32 rounded-lg object-cover"
+                                    />
+                                    <div className="flex-1">
+                                        <h3 className="text-xl font-bold text-white mb-2">{item.title}</h3>
+                                        <p className="text-gray-400 mb-4">by {item.instructor}</p>
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-2xl font-bold text-white">
+                                                ₹{item.price.toFixed(2)} INR
+                                            </p>
+                                            <button
+                                                onClick={() => removeFromCart(item.id)}
+                                                className="text-red-400 hover:text-red-300 transition-colors"
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
 
-                    {/* Order Summary */}
-                    <div className="lg:col-span-1">
-                        <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 sticky top-24">
-                            <h2 className="text-2xl font-bold text-white mb-6">Order Summary</h2>
+                        {/* Order Summary */}
+                        <div className="lg:col-span-1">
+                            <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 sticky top-24">
+                                <h2 className="text-2xl font-bold text-white mb-6">Order Summary</h2>
 
-                            <div className="space-y-4 mb-6">
-                                <div className="flex justify-between text-gray-300">
-                                    <span>Subtotal</span>
-                                    <span>₹{cartTotal.toFixed(2)} INR</span>
-                                </div>
-                                <div className="flex justify-between text-gray-300">
-                                    <span>Tax</span>
-                                    <span>₹0.00 INR</span>
-                                </div>
-                                <div className="border-t border-white/10 pt-4">
-                                    <div className="flex justify-between text-white text-xl font-bold">
-                                        <span>Total</span>
+                                <div className="space-y-4 mb-6">
+                                    <div className="flex justify-between text-gray-300">
+                                        <span>Subtotal</span>
                                         <span>₹{cartTotal.toFixed(2)} INR</span>
                                     </div>
+                                    <div className="flex justify-between text-gray-300">
+                                        <span>Tax</span>
+                                        <span>₹0.00 INR</span>
+                                    </div>
+                                    <div className="border-t border-white/10 pt-4">
+                                        <div className="flex justify-between text-white text-xl font-bold">
+                                            <span>Total</span>
+                                            <span>₹{cartTotal.toFixed(2)} INR</span>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
 
-                            <button
-                                onClick={handlePayment}
-                                disabled={isProcessing || cart.length === 0}
-                                className="w-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-8 py-4 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-[#D92A63]/30 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isProcessing ? 'Processing...' : 'Proceed to Payment'}
-                            </button>
+                                <button
+                                    onClick={handlePayment}
+                                    disabled={isProcessing || cart.length === 0}
+                                    className="w-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-8 py-4 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-[#D92A63]/30 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isProcessing ? 'Processing...' : 'Proceed to Payment'}
+                                </button>
 
-                            <Link
-                                href="/courses"
-                                className="block w-full text-center border-2 border-white/20 px-8 py-4 rounded-lg text-white font-medium hover:bg-white/5 transition-colors"
-                            >
-                                Continue Shopping
-                            </Link>
-
-                            <div className="mt-6 p-4 bg-white/5 rounded-lg">
-                                <p className="text-gray-400 text-sm">
-                                    <strong className="text-white">Note:</strong> This is a demo checkout. In production, you'll need to configure your Razorpay API keys.
-                                </p>
+                                <Link
+                                    href="/courses"
+                                    className="block w-full text-center border-2 border-white/20 px-8 py-4 rounded-lg text-white font-medium hover:bg-white/5 transition-colors"
+                                >
+                                    Continue Shopping
+                                </Link>
                             </div>
                         </div>
                     </div>
-                </div>
                 </div>
             </div>
 

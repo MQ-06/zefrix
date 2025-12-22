@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { sendEnrollmentConfirmationEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
     try {
@@ -53,46 +54,28 @@ export async function POST(request: NextRequest) {
         // Calculate total amount
         const totalAmount = items.reduce((sum: number, item: any) => sum + (item.price || 0), 0);
 
-        // Return success with items data
-        // Enrollment creation will happen on frontend after verification
-        // This ensures payment is verified before creating enrollments
-        const enrollmentIds: string[] = [];
-
-        // Send to n8n webhook for each item
-        const webhookPromises = items.map(async (item: any) => {
+        // Send enrollment confirmation emails (non-blocking)
+        const emailPromises = items.map(async (item: any) => {
             try {
-                const n8nPayload = {
-                    payment_id: razorpay_payment_id,
-                    order_id: razorpay_order_id,
-                    name: studentName,
-                    email: studentEmail,
+                await sendEnrollmentConfirmationEmail({
+                    studentName,
+                    studentEmail,
+                    className: item.title,
+                    classId: item.id,
+                    paymentId: razorpay_payment_id,
+                    orderId: razorpay_order_id,
                     amount: item.price,
-                    status: 'captured',
-                    class_id: item.id,
-                    class_name: item.title,
-                    student_id: studentId,
-                    enrolled_at: new Date().toISOString()
-                };
-
-                const webhookResponse = await fetch('https://n8n.srv1137454.hstgr.cloud/webhook-test/razorpay-payment', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(n8nPayload),
                 });
-
-                if (webhookResponse.ok) {
-                    console.log(`✅ n8n webhook called successfully for class ${item.id}`);
-                } else {
-                    console.warn(`⚠️ n8n webhook failed for class ${item.id} (non-blocking)`);
-                }
-            } catch (webhookError) {
-                console.error(`Webhook error for class ${item.id} (non-blocking):`, webhookError);
+            } catch (emailError) {
+                console.error(`Error sending enrollment email for class ${item.id}:`, emailError);
+                // Don't throw - email failure shouldn't block payment verification
             }
         });
 
-        await Promise.all(webhookPromises);
+        // Send emails in background (don't await to avoid blocking response)
+        Promise.all(emailPromises).catch((err) => {
+            console.error('Error sending enrollment emails:', err);
+        });
 
         // Return success response with items data
         // Frontend will create enrollments after receiving this success response

@@ -470,40 +470,32 @@ export default function CreateClassForm() {
       // Write to Firestore
       await window.setDoc(window.doc(window.firebaseDb, 'classes', classId), firestoreData);
 
-      // Send to n8n webhook via Next.js API route (avoids CORS issues)
+      // Send email notification to admin about new class
       try {
-        const n8nPayload = {
-          class_id: classId,
-          creator_email: user.email || '',
-          creator_name: user.displayName || user.email?.split('@')[0] || 'Creator',
-          title: title,
-          category: category,
-          subcategory: subcategory,
-          start: startISO,
-          session_length_minutes: sessionLengthMinutes,
-          number_sessions: numberSessions,
-          days_between_sessions: daysBetweenSessions,
-          notes: description || ''
-        };
-
-        // Send via Next.js API route (server-side, no CORS issues)
-        fetch('/api/webhook/class-create', {
+        fetch('/api/email/class-created', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(n8nPayload),
+          body: JSON.stringify({
+            creatorName: user.displayName || user.email?.split('@')[0] || 'Creator',
+            creatorEmail: user.email || '',
+            className: title,
+            classId: classId,
+            category: category,
+            price: price,
+          }),
         }).then(response => {
           if (response.ok) {
-            console.log('✅ Webhook notification sent successfully');
+            console.log('✅ Admin notification email sent successfully');
           } else {
-            console.log('⚠️ Webhook notification failed (non-blocking)');
+            console.log('⚠️ Admin notification email failed (non-blocking)');
           }
         }).catch(err => {
-          console.log('Webhook call failed (non-blocking):', err);
+          console.log('Email notification failed (non-blocking):', err);
         });
-      } catch (webhookError) {
-        console.log('Webhook error (non-blocking):', webhookError);
+      } catch (emailError) {
+        console.log('Email error (non-blocking):', emailError);
       }
 
       // Show success message

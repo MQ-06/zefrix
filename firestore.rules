@@ -84,6 +84,10 @@ service cloud.firestore {
                      exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
                      get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.creatorId == request.auth.uid;
       
+      // Allow querying enrollments by classId (for max seats check and general queries)
+      // Students can query enrollments to check class capacity before enrolling
+      allow list: if request.auth != null;
+      
       // Students can create enrollments for themselves
       allow create: if request.auth != null && 
                        request.auth.uid == request.resource.data.studentId;

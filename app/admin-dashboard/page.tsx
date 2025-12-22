@@ -310,12 +310,32 @@ export default function AdminDashboard() {
         adminBy: user.email || user.uid,
       });
 
-      // Send to webhook via Next.js API route
-      try {
-        fetch(`/api/webhook/admin-action?class_id=${encodeURIComponent(classId)}&action=${encodeURIComponent(action)}`, {
-          method: 'GET',
-        }).catch(() => { });
-      } catch (webhookError) {
+      // Get class data for email
+      const classSnap = await window.getDoc(classRef);
+      if (classSnap.exists()) {
+        const classData = classSnap.data();
+        
+        // Send approval/rejection email to creator
+        try {
+          await fetch('/api/email/class-approval', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              creatorName: classData.creatorName || 'Creator',
+              creatorEmail: classData.creatorEmail || '',
+              className: classData.title || 'Class',
+              classId: classId,
+              status: action,
+              rejectionReason: action === 'rejected' ? 'Please review the class guidelines and resubmit.' : undefined,
+            }),
+          }).catch(() => {
+            // Email failure shouldn't block the action
+          });
+        } catch (emailError) {
+          console.error('Error sending approval email:', emailError);
+        }
       }
 
       setPendingClasses(prev => prev.filter(cls => cls.classId !== classId));
