@@ -36,7 +36,15 @@ export default function CheckoutPage() {
     const [user, setUser] = useState<any>(null);
 
     useEffect(() => {
-        // Load Firebase - ensure addDoc is available
+        // Load Razorpay script
+        if (typeof window !== 'undefined' && !window.Razorpay) {
+            const razorpayScript = document.createElement('script');
+            razorpayScript.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            razorpayScript.async = true;
+            document.body.appendChild(razorpayScript);
+        }
+
+        // Load Firebase
         if (typeof window !== 'undefined' && (!window.firebaseAuth || !window.addDoc)) {
             const script = document.createElement('script');
             script.type = 'module';
@@ -125,15 +133,116 @@ export default function CheckoutPage() {
             if (!currentUser) {
                 showError('User not found. Please login again.');
                 router.push('/signup-login?redirect=/checkout');
+                setIsProcessing(false);
                 return;
             }
 
-            // Generate a mock payment ID
-            const mockPaymentId = `PAY_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+            // Check Razorpay is loaded
+            if (!window.Razorpay) {
+                showError('Payment gateway is loading. Please wait a moment and try again.');
+                setIsProcessing(false);
+                return;
+            }
 
-            // Process each item in cart
-            const enrollmentPromises = cart.map(async (item) => {
-                // Fetch class data to get correct details
+            // Create Razorpay order
+            const createOrderResponse = await fetch('/api/payments/create-order', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    items: cart,
+                }),
+            });
+
+            if (!createOrderResponse.ok) {
+                const errorData = await createOrderResponse.json();
+                throw new Error(errorData.error || 'Failed to create order');
+            }
+
+            const orderData = await createOrderResponse.json();
+
+            // Initialize Razorpay checkout
+            const options = {
+                key: orderData.keyId,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: 'Zefrix',
+                description: `Payment for ${cart.length} ${cart.length === 1 ? 'course' : 'courses'}`,
+                order_id: orderData.orderId,
+                prefill: {
+                    name: currentUser.displayName || currentUser.email?.split('@')[0] || '',
+                    email: currentUser.email || '',
+                },
+                theme: {
+                    color: '#D92A63',
+                },
+                handler: async function (response: any) {
+                    // Payment successful - verify and create enrollments
+                    try {
+                        await handlePaymentSuccess(response, currentUser);
+                    } catch (error: any) {
+                        console.error('Payment success handler error:', error);
+                        showError(error.message || 'Failed to complete enrollment. Please contact support.');
+                        setIsProcessing(false);
+                    }
+                },
+                modal: {
+                    ondismiss: function () {
+                        // User closed the payment modal
+                        setIsProcessing(false);
+                    },
+                },
+            };
+
+            const razorpay = new window.Razorpay(options);
+            razorpay.on('payment.failed', function (response: any) {
+                console.error('Payment failed:', response);
+                showError(`Payment failed: ${response.error.description || 'Unknown error'}`);
+                setIsProcessing(false);
+            });
+
+            razorpay.open();
+        } catch (error: any) {
+            console.error('Error initiating payment:', error);
+            showError(error.message || 'Failed to initiate payment. Please try again.');
+            setIsProcessing(false);
+        }
+    };
+
+    const handlePaymentSuccess = async (paymentResponse: any, currentUser: any) => {
+        try {
+            // Verify payment with backend
+            const verifyResponse = await fetch('/api/payments/verify', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    razorpay_payment_id: paymentResponse.razorpay_payment_id,
+                    razorpay_order_id: paymentResponse.razorpay_order_id,
+                    razorpay_signature: paymentResponse.razorpay_signature,
+                    items: cart,
+                    studentId: currentUser.uid,
+                    studentEmail: currentUser.email,
+                    studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
+                }),
+            });
+
+            if (!verifyResponse.ok) {
+                const errorData = await verifyResponse.json();
+                throw new Error(errorData.error || 'Payment verification failed');
+            }
+
+            const verifyData = await verifyResponse.json();
+
+            // Now create enrollments in Firestore
+            if (!window.firebaseDb || !window.collection || !window.addDoc) {
+                throw new Error('Firebase not initialized');
+            }
+
+            // Check max seats before creating enrollments
+            for (const item of cart) {
                 let classData: any = null;
                 if (window.firebaseDb && window.doc && window.getDoc) {
                     try {
@@ -147,7 +256,7 @@ export default function CheckoutPage() {
                     }
                 }
 
-                // Check max seats if class has maxSeats set
+                // Check max seats
                 if (classData?.maxSeats && window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
                     try {
                         const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
@@ -160,66 +269,68 @@ export default function CheckoutPage() {
                         }
                     } catch (error: any) {
                         if (error.message?.includes('full')) {
-                            throw error; // Re-throw seat full error
+                            throw error;
                         }
                         console.error('Error checking enrollment count:', error);
                     }
                 }
+            }
 
-                // Create enrollment in Firestore directly (bypass payment)
-                console.log('🔍 Firebase check:', {
-                    firebaseDb: !!window.firebaseDb,
-                    collection: !!window.collection,
-                    addDoc: !!window.addDoc
-                });
-
-                if (window.firebaseDb && window.collection && window.addDoc) {
-                    console.log('📝 Creating enrollment for:', item.title);
-                    const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-                    const docRef = await window.addDoc(enrollmentsRef, {
-                        studentId: currentUser.uid,
-                        studentEmail: currentUser.email,
-                        studentName: currentUser.displayName || currentUser.email?.split('@')[0],
-                        classId: item.id,
-                        className: item.title,
-                        classPrice: item.price,
-                        paymentId: mockPaymentId,
-                        orderId: 'DIRECT_ENROLLMENT',
-                        paymentStatus: 'completed',
-                        enrolledAt: new Date(),
-                        classType: classData?.scheduleType || 'one-time',
-                        numberOfSessions: classData?.numberSessions || 1,
-                        attended: 0,
-                        status: 'active'
-                    });
-                    console.log('✅ Enrollment created with ID:', docRef.id);
-                } else {
-                    console.error('❌ Firebase not initialized properly!');
+            // Create enrollments
+            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+            const enrollmentPromises = cart.map(async (item) => {
+                let classData: any = null;
+                if (window.firebaseDb && window.doc && window.getDoc) {
+                    try {
+                        const classRef = window.doc(window.firebaseDb, 'classes', item.id);
+                        const classSnap = await window.getDoc(classRef);
+                        if (classSnap.exists()) {
+                            classData = classSnap.data();
+                        }
+                    } catch (error) {
+                        console.error('Error fetching class data:', error);
+                    }
                 }
+
+                const enrollmentData = {
+                    studentId: currentUser.uid,
+                    studentEmail: currentUser.email,
+                    studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
+                    classId: item.id,
+                    className: item.title,
+                    classPrice: item.price,
+                    paymentId: paymentResponse.razorpay_payment_id,
+                    orderId: paymentResponse.razorpay_order_id,
+                    paymentStatus: 'completed',
+                    enrolledAt: new Date(),
+                    classType: classData?.scheduleType || 'one-time',
+                    numberOfSessions: classData?.numberSessions || 1,
+                    attended: 0,
+                    status: 'active',
+                };
+
+                return window.addDoc(enrollmentsRef, enrollmentData);
             });
 
             await Promise.all(enrollmentPromises);
-            console.log('✅ All enrollments processed successfully');
+            console.log('✅ All enrollments created successfully');
 
             // Small delay to ensure Firestore writes complete
             await new Promise(resolve => setTimeout(resolve, 500));
 
-            // Set redirecting state immediately to prevent empty cart UI
+            // Set redirecting state
             setIsRedirecting(true);
-            
-            // Clear cart first (but UI won't show empty cart because isRedirecting is true)
             clearCart();
-            
-            // Use window.location for instant redirect (no React re-render delay)
-            window.location.href = `/thank-you?payment_id=${mockPaymentId}&status=success`;
+
+            // Redirect to thank you page
+            window.location.href = `/thank-you?payment_id=${paymentResponse.razorpay_payment_id}&order_id=${paymentResponse.razorpay_order_id}&status=success`;
         } catch (error: any) {
-            console.error('Error processing enrollment:', error);
-            const errorMessage = error.message || 'Enrollment failed. Please try again.';
+            console.error('Error handling payment success:', error);
+            const errorMessage = error.message || 'Failed to complete enrollment. Please contact support.';
             showError(errorMessage);
             
             // If class is full, remove it from cart
             if (errorMessage.includes('full') || errorMessage.includes('Maximum')) {
-                // Find and remove the full class from cart
                 const fullClassTitle = errorMessage.match(/"([^"]+)"/)?.[1];
                 if (fullClassTitle) {
                     const fullClass = cart.find(item => item.title === fullClassTitle);
@@ -228,8 +339,9 @@ export default function CheckoutPage() {
                     }
                 }
             }
-        } finally {
+            
             setIsProcessing(false);
+            throw error; // Re-throw to be caught by handler
         }
     };
 
