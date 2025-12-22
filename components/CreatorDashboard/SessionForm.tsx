@@ -79,8 +79,10 @@ export default function SessionForm({
 
   useEffect(() => {
     // Initialize sessions array based on number of sessions
+    // For one-time classes, only allow 1 session
+    const sessionsCount = scheduleType === 'one-time' ? 1 : numberOfSessions;
     const initialSessions: Session[] = [];
-    for (let i = 1; i <= numberOfSessions; i++) {
+    for (let i = 1; i <= sessionsCount; i++) {
       initialSessions.push({
         sessionNumber: i,
         date: '',
@@ -92,7 +94,7 @@ export default function SessionForm({
 
     // Check if form is already filled
     checkFormStatus();
-  }, [classId, numberOfSessions]);
+  }, [classId, numberOfSessions, scheduleType]);
 
   const checkFormStatus = async () => {
     if (!window.firebaseDb || !window.doc || !window.getDoc || !window.firebaseAuth) {
@@ -165,7 +167,7 @@ export default function SessionForm({
     });
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = async (): Promise<boolean> => {
     // Validate all sessions have date, time, and meet link
     for (const session of sessions) {
       if (!session.date || !session.time || !session.meetLink) {
@@ -177,6 +179,95 @@ export default function SessionForm({
       if (!session.meetLink.includes('meet.google.com') && !session.meetLink.includes('zoom.us') && !session.meetLink.startsWith('http')) {
         showError(`Please enter a valid meeting link for Session ${session.sessionNumber}`);
         return false;
+      }
+    }
+
+    // Fetch class data to validate against original schedule
+    if (window.firebaseDb && window.doc && window.getDoc) {
+      try {
+        const classRef = window.doc(window.firebaseDb, 'classes', classId);
+        const classSnap = await window.getDoc(classRef);
+        
+        if (classSnap.exists()) {
+          const classData = classSnap.data();
+          
+          // Validate one-time class
+          if (scheduleType === 'one-time') {
+            // Only 1 session allowed for one-time
+            if (sessions.length !== 1) {
+              showError('One-time classes can only have 1 session');
+              return false;
+            }
+            
+            const session = sessions[0];
+            
+            // Check if class has one-time date/time (field names: date, startTime, endTime)
+            if (classData.date && classData.startTime) {
+              const classDate = new Date(classData.date);
+              const sessionDate = new Date(session.date);
+              
+              // Compare dates (ignore time for date comparison)
+              if (classDate.toDateString() !== sessionDate.toDateString()) {
+                showError(`Session date must match the class date: ${classData.date}`);
+                return false;
+              }
+              
+              // Compare time
+              if (classData.startTime !== session.time) {
+                showError(`Session time must match the class start time: ${classData.startTime}`);
+                return false;
+              }
+            }
+          }
+          
+          // Validate recurring class
+          if (scheduleType === 'recurring') {
+            const classStartDate = startDate || classData.recurringStartDate || classData.startDate;
+            const classEndDate = endDate || classData.recurringEndDate || classData.endDate;
+            const classDays = days || classData.days || classData.recurringDays || [];
+            const classStartTime = recurringStartTime || classData.recurringStartTime || classData.startTime;
+            
+            if (classStartDate && classEndDate) {
+              const start = new Date(classStartDate);
+              const end = new Date(classEndDate);
+              
+              // Validate each session
+              for (const session of sessions) {
+                const sessionDate = new Date(session.date);
+                
+                // Check if session date is within class date range
+                if (sessionDate < start || sessionDate > end) {
+                  showError(`Session ${session.sessionNumber} date (${session.date}) must be between ${classStartDate} and ${classEndDate}`);
+                  return false;
+                }
+                
+                // Check if session is on allowed day
+                if (classDays.length > 0) {
+                  const sessionDay = sessionDate.toLocaleDateString('en-US', { weekday: 'long' });
+                  const sessionDayShort = sessionDay.substring(0, 3); // Mon, Tue, etc.
+                  const dayMatch = classDays.some((day: string) => 
+                    day.toLowerCase().includes(sessionDay.toLowerCase()) || 
+                    day.toLowerCase().includes(sessionDayShort.toLowerCase())
+                  );
+                  
+                  if (!dayMatch) {
+                    showError(`Session ${session.sessionNumber} is on ${sessionDay}, but class is only scheduled for: ${classDays.join(', ')}`);
+                    return false;
+                  }
+                }
+                
+                // Check if session time matches class start time
+                if (classStartTime && session.time !== classStartTime) {
+                  showError(`Session ${session.sessionNumber} time must match the class start time: ${classStartTime}`);
+                  return false;
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error validating against class data:', error);
+        // Continue with basic validation if class data fetch fails
       }
     }
 
@@ -198,7 +289,8 @@ export default function SessionForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) {
+    const isValid = await validateForm();
+    if (!isValid) {
       return;
     }
 

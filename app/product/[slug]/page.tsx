@@ -6,6 +6,7 @@ import { BookOpen, Clock, Users, Globe, Award, Calendar, Tag } from 'lucide-reac
 import Link from 'next/link';
 import Footer from '@/components/Footer';
 import { useCart } from '@/contexts/CartContext';
+import { useNotification } from '@/contexts/NotificationContext';
 
 declare global {
   interface Window {
@@ -28,6 +29,7 @@ export default function ProductPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const { addToCart, cart } = useCart();
+  const { showError } = useNotification();
   const router = useRouter();
   const [isInCart, setIsInCart] = useState(false);
   const [relatedCourses, setRelatedCourses] = useState<any[]>([]);
@@ -308,7 +310,7 @@ export default function ProductPage({ params }: PageProps) {
     notFound();
   }
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     // Check if user is authenticated
     if (typeof window !== 'undefined' && window.firebaseAuth) {
       const user = window.firebaseAuth.currentUser;
@@ -321,6 +323,24 @@ export default function ProductPage({ params }: PageProps) {
       // Firebase not loaded yet, redirect to login
       router.push(`/signup-login?redirect=/product/${params.slug}`);
       return;
+    }
+
+    // Check max seats if class has maxSeats set
+    if (course.maxSeats && window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+      try {
+        const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+        const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', course.id));
+        const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+        const currentEnrollments = enrollmentsSnapshot.size;
+        
+        if (currentEnrollments >= course.maxSeats) {
+          showError(`Sorry! This class is full. Maximum ${course.maxSeats} seats are already enrolled.`);
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking enrollment count:', error);
+        // Continue with enrollment even if check fails (non-blocking)
+      }
     }
 
     // Add to cart

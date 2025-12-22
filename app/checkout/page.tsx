@@ -15,6 +15,11 @@ declare global {
         collection: any;
         addDoc: any;
         serverTimestamp: any;
+        query: any;
+        where: any;
+        getDocs: any;
+        doc: any;
+        getDoc: any;
     }
 }
 
@@ -38,7 +43,7 @@ export default function CheckoutPage() {
             script.innerHTML = `
                 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
                 import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-                import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+                import { getFirestore, collection, addDoc, query, where, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
                 
                 const firebaseConfig = {
                     apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -56,6 +61,11 @@ export default function CheckoutPage() {
                 window.firebaseDb = getFirestore(app);
                 window.collection = collection;
                 window.addDoc = addDoc;
+                window.query = query;
+                window.where = where;
+                window.getDocs = getDocs;
+                window.doc = doc;
+                window.getDoc = getDoc;
                 console.log('✅ Firebase initialized in checkout with addDoc');
             `;
             document.body.appendChild(script);
@@ -137,6 +147,25 @@ export default function CheckoutPage() {
                     }
                 }
 
+                // Check max seats if class has maxSeats set
+                if (classData?.maxSeats && window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+                    try {
+                        const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+                        const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', item.id));
+                        const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+                        const currentEnrollments = enrollmentsSnapshot.size;
+                        
+                        if (currentEnrollments >= classData.maxSeats) {
+                            throw new Error(`Class "${item.title}" is full. Maximum ${classData.maxSeats} seats are already enrolled.`);
+                        }
+                    } catch (error: any) {
+                        if (error.message?.includes('full')) {
+                            throw error; // Re-throw seat full error
+                        }
+                        console.error('Error checking enrollment count:', error);
+                    }
+                }
+
                 // Create enrollment in Firestore directly (bypass payment)
                 console.log('🔍 Firebase check:', {
                     firebaseDb: !!window.firebaseDb,
@@ -183,9 +212,22 @@ export default function CheckoutPage() {
             
             // Use window.location for instant redirect (no React re-render delay)
             window.location.href = `/thank-you?payment_id=${mockPaymentId}&status=success`;
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error processing enrollment:', error);
-            showError('Enrollment failed. Please try again.');
+            const errorMessage = error.message || 'Enrollment failed. Please try again.';
+            showError(errorMessage);
+            
+            // If class is full, remove it from cart
+            if (errorMessage.includes('full') || errorMessage.includes('Maximum')) {
+                // Find and remove the full class from cart
+                const fullClassTitle = errorMessage.match(/"([^"]+)"/)?.[1];
+                if (fullClassTitle) {
+                    const fullClass = cart.find(item => item.title === fullClassTitle);
+                    if (fullClass) {
+                        removeFromCart(fullClass.id);
+                    }
+                }
+            }
         } finally {
             setIsProcessing(false);
         }
