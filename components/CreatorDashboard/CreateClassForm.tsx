@@ -307,7 +307,8 @@ export default function CreateClassForm() {
       const level = (formData.get('level') as string)?.trim();
       const videoLink = (formData.get('videoLink') as string)?.trim() || '';
       const price = parseFloat(formData.get('price') as string);
-      const maxSeats = formData.get('maxSeats') ? parseInt(formData.get('maxSeats') as string) : undefined;
+      const maxSeatsInput = formData.get('maxSeats') as string;
+      const maxSeats = maxSeatsInput && maxSeatsInput.trim() ? parseInt(maxSeatsInput.trim()) : null;
 
       // Calculate session fields based on schedule type
       let startISO: string;
@@ -429,7 +430,7 @@ export default function CreateClassForm() {
       }
 
       // Prepare Firestore document
-      const firestoreData = {
+      const firestoreData: any = {
         classId: classId,
         creatorId: user.uid,
         creatorEmail: user.email || '',
@@ -443,7 +444,6 @@ export default function CreateClassForm() {
         level: level,
         videoLink: finalVideoLink || videoLink,
         price: price,
-        maxSeats: maxSeats,
         scheduleType: scheduleType as 'one-time' | 'recurring',
         startISO: startISO,
         sessionLengthMinutes: sessionLengthMinutes,
@@ -466,6 +466,11 @@ export default function CreateClassForm() {
           days: selectedDays,
         }),
       };
+
+      // Only include maxSeats if it has a valid value (not null/undefined)
+      if (maxSeats !== null && maxSeats > 0) {
+        firestoreData.maxSeats = maxSeats;
+      }
 
       // Write to Firestore
       await window.setDoc(window.doc(window.firebaseDb, 'classes', classId), firestoreData);

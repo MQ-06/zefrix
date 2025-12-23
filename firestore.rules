@@ -186,6 +186,53 @@ service cloud.firestore {
                             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
+    // Session Reminders collection
+    match /session_reminders/{reminderId} {
+      // Students can read their own reminders
+      allow read: if request.auth != null && 
+                     request.auth.uid == resource.data.studentId;
+      
+      // Creators can read reminders for their classes
+      allow read: if request.auth != null && 
+                     exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
+                     get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.creatorId == request.auth.uid;
+      
+      // Admins can read all reminders
+      allow read: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // No client-side writes (only via Admin SDK in API route)
+      allow write: if false;
+    }
+    
+    // Failed Enrollments collection (for tracking payment success but enrollment failure)
+    match /failed_enrollments/{failedEnrollmentId} {
+      // Students can read their own failed enrollments
+      allow read: if request.auth != null && 
+                     request.auth.uid == resource.data.studentId;
+      
+      // Admins can read all failed enrollments
+      allow read: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // No client-side writes (only via Admin SDK in API route)
+      allow write: if false;
+    }
+    
+    // Failed Payments collection (for tracking payment verification failures)
+    match /failed_payments/{failedPaymentId} {
+      // Students can read their own failed payments
+      allow read: if request.auth != null && 
+                     request.auth.uid == resource.data.studentId;
+      
+      // Admins can read all failed payments
+      allow read: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // No client-side writes (only via Admin SDK in API route)
+      allow write: if false;
+    }
+    
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

@@ -3,8 +3,10 @@ import crypto from 'crypto';
 import { sendEnrollmentConfirmationEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
+    let requestBody: any = {};
+    
     try {
-        const body = await request.json();
+        requestBody = await request.json();
         const {
             razorpay_payment_id,
             razorpay_order_id,
@@ -13,7 +15,7 @@ export async function POST(request: NextRequest) {
             studentId,
             studentEmail,
             studentName,
-        } = body;
+        } = requestBody;
 
         // Verify Razorpay signature
         const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -45,14 +47,43 @@ export async function POST(request: NextRequest) {
         console.log('✅ Payment signature verified successfully');
 
         if (!items || !Array.isArray(items) || items.length === 0) {
+            console.error('Payment verification: No items provided');
             return NextResponse.json(
-                { success: false, error: 'No items provided for enrollment' },
+                { 
+                    success: false, 
+                    error: 'No items provided for enrollment. Please contact support with your Payment ID.',
+                    paymentId: razorpay_payment_id,
+                },
+                { status: 400 }
+            );
+        }
+
+        if (!studentId || !studentEmail) {
+            console.error('Payment verification: Missing student information');
+            return NextResponse.json(
+                { 
+                    success: false, 
+                    error: 'Student information is missing. Please contact support.',
+                    paymentId: razorpay_payment_id,
+                },
                 { status: 400 }
             );
         }
 
         // Calculate total amount
         const totalAmount = items.reduce((sum: number, item: any) => sum + (item.price || 0), 0);
+        
+        if (totalAmount <= 0) {
+            console.error('Payment verification: Invalid total amount', totalAmount);
+            return NextResponse.json(
+                { 
+                    success: false, 
+                    error: 'Invalid payment amount. Please contact support.',
+                    paymentId: razorpay_payment_id,
+                },
+                { status: 400 }
+            );
+        }
 
         // Send enrollment confirmation emails (non-blocking)
         const emailPromises = items.map(async (item: any) => {
@@ -93,11 +124,22 @@ export async function POST(request: NextRequest) {
 
     } catch (error: any) {
         console.error('Payment verification error:', error);
+        console.error('Error stack:', error.stack);
+        
+        // Return detailed error information for debugging (but don't expose sensitive info in production)
+        const errorMessage = error.message || 'Payment verification failed';
+        const errorResponse: any = {
+            success: false,
+            error: errorMessage,
+        };
+        
+        // Include additional details in development
+        if (process.env.NODE_ENV === 'development') {
+            errorResponse.details = error.stack;
+        }
+        
         return NextResponse.json(
-            {
-                success: false,
-                error: error.message || 'Payment verification failed'
-            },
+            errorResponse,
             { status: 500 }
         );
     }

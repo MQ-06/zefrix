@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { notFound, useRouter } from 'next/navigation';
-import { BookOpen, Clock, Users, Globe, Award, Calendar, Tag } from 'lucide-react';
+import { BookOpen, Clock, Users, Globe, Calendar, Tag } from 'lucide-react';
 import Link from 'next/link';
 import Footer from '@/components/Footer';
 import { useCart } from '@/contexts/CartContext';
@@ -629,14 +629,6 @@ export default function ProductPage({ params }: PageProps) {
                       <span>Language</span>
                     </div>
                     <span className="text-white font-semibold">English</span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <Award className="w-5 h-5" />
-                      <span>Certifications</span>
-                    </div>
-                    <span className="text-white font-semibold">Yes</span>
                   </div>
 
                   {course.category && (

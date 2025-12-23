@@ -222,16 +222,19 @@ export default function CheckoutPage() {
     };
 
     const handlePaymentSuccess = async (paymentResponse: any, currentUser: any) => {
+        const paymentId = paymentResponse.razorpay_payment_id;
+        const orderId = paymentResponse.razorpay_order_id;
+        
         try {
-            // Verify payment with backend
+            // Step 1: Verify payment with backend
             const verifyResponse = await fetch('/api/payments/verify', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    razorpay_payment_id: paymentResponse.razorpay_payment_id,
-                    razorpay_order_id: paymentResponse.razorpay_order_id,
+                    razorpay_payment_id: paymentId,
+                    razorpay_order_id: orderId,
                     razorpay_signature: paymentResponse.razorpay_signature,
                     items: cart,
                     studentId: currentUser.uid,
@@ -242,115 +245,229 @@ export default function CheckoutPage() {
 
             if (!verifyResponse.ok) {
                 const errorData = await verifyResponse.json();
-                throw new Error(errorData.error || 'Payment verification failed');
+                const errorMsg = errorData.error || 'Payment verification failed';
+                console.error('Payment verification failed:', errorMsg);
+                
+                // Payment verification failed - payment might be invalid
+                showError(`Payment verification failed: ${errorMsg}. Please contact support with Payment ID: ${paymentId}`);
+                setIsProcessing(false);
+                
+                // Store failed verification for admin review
+                try {
+                    if (window.firebaseDb && window.collection && window.addDoc && window.serverTimestamp) {
+                        const failedPaymentsRef = window.collection(window.firebaseDb, 'failed_payments');
+                        await window.addDoc(failedPaymentsRef, {
+                            paymentId: paymentId,
+                            orderId: orderId,
+                            studentId: currentUser.uid,
+                            studentEmail: currentUser.email,
+                            reason: 'payment_verification_failed',
+                            error: errorMsg,
+                            items: cart,
+                            occurredAt: window.serverTimestamp(),
+                            status: 'pending_review',
+                        });
+                    }
+                } catch (logError) {
+                    console.error('Failed to log payment verification error:', logError);
+                }
+                
+                return;
             }
 
             const verifyData = await verifyResponse.json();
+            console.log('✅ Payment verified successfully');
 
-            // Now create enrollments in Firestore
+            // Step 2: Check Firebase is initialized
             if (!window.firebaseDb || !window.collection || !window.addDoc) {
-                throw new Error('Firebase not initialized');
+                const errorMsg = 'Database connection error. Please refresh the page and try again.';
+                console.error('Firebase not initialized during enrollment');
+                
+                // Store failed enrollment for admin to process manually
+                await storeFailedEnrollment(paymentId, orderId, currentUser, cart, 'firebase_not_initialized', errorMsg);
+                
+                showError(`${errorMsg} Your payment was successful (Payment ID: ${paymentId}). Our team will enroll you manually. Please contact support if you don't see your enrollment within 24 hours.`);
+                setIsProcessing(false);
+                clearCart();
+                return;
             }
 
-            // Check max seats before creating enrollments
+            // Step 3: Check max seats before creating enrollments
+            const seatCheckErrors: string[] = [];
             for (const item of cart) {
-                let classData: any = null;
-                if (window.firebaseDb && window.doc && window.getDoc) {
-                    try {
+                try {
+                    let classData: any = null;
+                    if (window.firebaseDb && window.doc && window.getDoc) {
                         const classRef = window.doc(window.firebaseDb, 'classes', item.id);
                         const classSnap = await window.getDoc(classRef);
                         if (classSnap.exists()) {
                             classData = classSnap.data();
+                        } else {
+                            seatCheckErrors.push(`Class "${item.title}" no longer exists`);
+                            continue;
                         }
-                    } catch (error) {
-                        console.error('Error fetching class data:', error);
                     }
-                }
 
-                // Check max seats
-                if (classData?.maxSeats && window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
-                    try {
+                    // Check max seats
+                    if (classData?.maxSeats && window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
                         const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
                         const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', item.id));
                         const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
                         const currentEnrollments = enrollmentsSnapshot.size;
 
                         if (currentEnrollments >= classData.maxSeats) {
-                            throw new Error(`Class "${item.title}" is full. Maximum ${classData.maxSeats} seats are already enrolled.`);
+                            seatCheckErrors.push(`Class "${item.title}" is full (${classData.maxSeats} seats)`);
                         }
-                    } catch (error: any) {
-                        if (error.message?.includes('full')) {
-                            throw error;
-                        }
-                        console.error('Error checking enrollment count:', error);
                     }
+                } catch (error: any) {
+                    console.error(`Error checking class ${item.id}:`, error);
+                    seatCheckErrors.push(`Error checking "${item.title}": ${error.message || 'Unknown error'}`);
                 }
             }
 
-            // Create enrollments
-            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-            const enrollmentPromises = cart.map(async (item) => {
-                let classData: any = null;
-                if (window.firebaseDb && window.doc && window.getDoc) {
-                    try {
-                        const classRef = window.doc(window.firebaseDb, 'classes', item.id);
-                        const classSnap = await window.getDoc(classRef);
-                        if (classSnap.exists()) {
-                            classData = classSnap.data();
-                        }
-                    } catch (error) {
-                        console.error('Error fetching class data:', error);
-                    }
-                }
+            if (seatCheckErrors.length > 0) {
+                const errorMsg = seatCheckErrors.join('; ');
+                console.error('Seat check failed:', errorMsg);
+                
+                // Store failed enrollment
+                await storeFailedEnrollment(paymentId, orderId, currentUser, cart, 'seats_full', errorMsg);
+                
+                showError(`${errorMsg}. Your payment was successful (Payment ID: ${paymentId}). Please contact support for a refund.`);
+                setIsProcessing(false);
+                clearCart();
+                return;
+            }
 
-                const enrollmentData = {
+            // Step 4: Create enrollments with individual error handling
+            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+            const enrollmentResults: Array<{ success: boolean; item: any; error?: string }> = [];
+            
+            for (const item of cart) {
+                try {
+                    let classData: any = null;
+                    if (window.firebaseDb && window.doc && window.getDoc) {
+                        try {
+                            const classRef = window.doc(window.firebaseDb, 'classes', item.id);
+                            const classSnap = await window.getDoc(classRef);
+                            if (classSnap.exists()) {
+                                classData = classSnap.data();
+                            }
+                        } catch (error) {
+                            console.error('Error fetching class data:', error);
+                        }
+                    }
+
+                    const enrollmentData = {
+                        studentId: currentUser.uid,
+                        studentEmail: currentUser.email,
+                        studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
+                        classId: item.id,
+                        className: item.title,
+                        classPrice: item.price,
+                        paymentId: paymentId,
+                        orderId: orderId,
+                        paymentStatus: 'completed',
+                        enrolledAt: new Date(),
+                        classType: classData?.scheduleType || 'one-time',
+                        numberOfSessions: classData?.numberSessions || 1,
+                        attended: 0,
+                        status: 'active',
+                    };
+
+                    await window.addDoc(enrollmentsRef, enrollmentData);
+                    enrollmentResults.push({ success: true, item });
+                    console.log(`✅ Enrollment created for class: ${item.title}`);
+                } catch (error: any) {
+                    console.error(`❌ Failed to create enrollment for ${item.title}:`, error);
+                    enrollmentResults.push({ 
+                        success: false, 
+                        item, 
+                        error: error.message || 'Unknown error' 
+                    });
+                }
+            }
+
+            // Step 5: Handle results
+            const successfulEnrollments = enrollmentResults.filter(r => r.success);
+            const failedEnrollments = enrollmentResults.filter(r => !r.success);
+
+            if (failedEnrollments.length > 0) {
+                // Some enrollments failed - store for admin review
+                const failedItems = failedEnrollments.map(r => r.item);
+                const failedErrors = failedEnrollments.map(r => r.error).join('; ');
+                
+                await storeFailedEnrollment(paymentId, orderId, currentUser, failedItems, 'enrollment_creation_failed', failedErrors);
+                
+                if (successfulEnrollments.length > 0) {
+                    // Partial success
+                    const successCount = successfulEnrollments.length;
+                    const failCount = failedEnrollments.length;
+                    showError(`${successCount} ${successCount === 1 ? 'class was' : 'classes were'} enrolled successfully, but ${failCount} ${failCount === 1 ? 'class' : 'classes'} failed. Your payment was successful (Payment ID: ${paymentId}). Our team will process the remaining enrollments. Please contact support if needed.`);
+                } else {
+                    // Complete failure
+                    showError(`Enrollment creation failed. Your payment was successful (Payment ID: ${paymentId}). Our team will enroll you manually. Please contact support at contact@zefrix.com with your Payment ID.`);
+                }
+                
+                setIsProcessing(false);
+                clearCart();
+                
+                // Still redirect to thank you page but with a warning
+                window.location.href = `/thank-you?payment_id=${paymentId}&order_id=${orderId}&status=partial_success&failed=${failedEnrollments.length}`;
+                return;
+            }
+
+            // Step 6: All enrollments successful
+            console.log('✅ All enrollments created successfully');
+            setIsRedirecting(true);
+            clearCart();
+            window.location.href = `/thank-you?payment_id=${paymentId}&order_id=${orderId}&status=success`;
+            
+        } catch (error: any) {
+            console.error('Error handling payment success:', error);
+            const errorMessage = error.message || 'An unexpected error occurred';
+            
+            // Store failed enrollment for admin review
+            await storeFailedEnrollment(paymentId, orderId, currentUser, cart, 'unexpected_error', errorMessage);
+            
+            showError(`Enrollment failed: ${errorMessage}. Your payment was successful (Payment ID: ${paymentId}). Please contact support at contact@zefrix.com with your Payment ID for assistance.`);
+            setIsProcessing(false);
+            clearCart();
+        }
+    };
+
+    // Helper function to store failed enrollments for admin review
+    const storeFailedEnrollment = async (
+        paymentId: string,
+        orderId: string,
+        currentUser: any,
+        items: any[],
+        reason: string,
+        errorDetails: string
+    ) => {
+        try {
+            if (window.firebaseDb && window.collection && window.addDoc && window.serverTimestamp) {
+                const failedEnrollmentsRef = window.collection(window.firebaseDb, 'failed_enrollments');
+                await window.addDoc(failedEnrollmentsRef, {
+                    paymentId: paymentId,
+                    orderId: orderId,
                     studentId: currentUser.uid,
                     studentEmail: currentUser.email,
                     studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
-                    classId: item.id,
-                    className: item.title,
-                    classPrice: item.price,
-                    paymentId: paymentResponse.razorpay_payment_id,
-                    orderId: paymentResponse.razorpay_order_id,
-                    paymentStatus: 'completed',
-                    enrolledAt: new Date(),
-                    classType: classData?.scheduleType || 'one-time',
-                    numberOfSessions: classData?.numberSessions || 1,
-                    attended: 0,
-                    status: 'active',
-                };
-
-                return window.addDoc(enrollmentsRef, enrollmentData);
-            });
-
-            // Create enrollments (this is fast, usually < 200ms)
-            await Promise.all(enrollmentPromises);
-            console.log('✅ All enrollments created successfully');
-
-            // Set redirecting state and clear cart immediately
-            setIsRedirecting(true);
-            clearCart();
-
-            // Redirect to thank you page immediately (no artificial delay)
-            window.location.href = `/thank-you?payment_id=${paymentResponse.razorpay_payment_id}&order_id=${paymentResponse.razorpay_order_id}&status=success`;
-        } catch (error: any) {
-            console.error('Error handling payment success:', error);
-            const errorMessage = error.message || 'Failed to complete enrollment. Please contact support.';
-            showError(errorMessage);
-
-            // If class is full, remove it from cart
-            if (errorMessage.includes('full') || errorMessage.includes('Maximum')) {
-                const fullClassTitle = errorMessage.match(/"([^"]+)"/)?.[1];
-                if (fullClassTitle) {
-                    const fullClass = cart.find(item => item.title === fullClassTitle);
-                    if (fullClass) {
-                        removeFromCart(fullClass.id);
-                    }
-                }
+                    items: items.map(item => ({
+                        id: item.id,
+                        title: item.title,
+                        price: item.price,
+                    })),
+                    reason: reason,
+                    errorDetails: errorDetails,
+                    occurredAt: window.serverTimestamp(),
+                    status: 'pending_review',
+                    resolved: false,
+                });
+                console.log('✅ Failed enrollment logged for admin review');
             }
-
-            setIsProcessing(false);
-            throw error; // Re-throw to be caught by handler
+        } catch (logError) {
+            console.error('Failed to log enrollment error:', logError);
         }
     };
 
