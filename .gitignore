@@ -27,6 +27,9 @@ yarn-error.log*
 # local env files
 .env*.local
 
+# Firebase service account (contains sensitive credentials)
+firebase-service-account.json
+
 # vercel
 .vercel
 
