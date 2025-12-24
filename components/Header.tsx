@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCart } from '@/contexts/CartContext';
-import { Menu, X, LogOut, ShoppingCart } from 'lucide-react';
+import { Menu, X, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Header() {
@@ -14,7 +13,6 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, signOut } = useAuth();
-  const { cartCount } = useCart();
   const isLoginPage = pathname === '/signup-login';
 
   useEffect(() => {
@@ -75,21 +73,6 @@ export default function Header() {
 
           {/* Right Side Actions */}
           <div className="hidden md:flex items-center space-x-6">
-            {/* Cart Icon - Only show for non-authenticated users (for public checkout) */}
-            {!isAuthenticated && (
-              <Link
-                href="/checkout"
-                className="relative text-white hover:text-primary transition-colors duration-200"
-                aria-label="View Cart"
-              >
-                <ShoppingCart size={24} />
-                {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-[#D92A63] text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                    {cartCount > 9 ? '9+' : cartCount}
-                  </span>
-                )}
-              </Link>
-            )}
             {isAuthenticated ? null : (
               <>
                 {!isLoginPage && (

@@ -101,6 +101,7 @@ export default function AdminDashboard() {
   // Payouts
   const [payouts, setPayouts] = useState<any[]>([]);
   const [loadingPayouts, setLoadingPayouts] = useState(false);
+  const [processingPayout, setProcessingPayout] = useState<string | null>(null);
 
   // Modal state
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
@@ -124,7 +125,7 @@ export default function AdminDashboard() {
         firebaseAuthConfig.innerHTML = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc, collection, query, where, getDocs, updateDoc, orderBy, limit, onSnapshot, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, collection, query, where, getDocs, updateDoc, orderBy, limit, onSnapshot, deleteDoc, writeBatch, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -151,6 +152,8 @@ export default function AdminDashboard() {
           window.onSnapshot = onSnapshot;
           window.deleteDoc = deleteDoc;
           window.writeBatch = writeBatch;
+          window.addDoc = addDoc;
+          window.serverTimestamp = serverTimestamp;
 
           window.logout = async () => {
             try {
@@ -649,7 +652,7 @@ export default function AdminDashboard() {
         };
       });
 
-      const creatorEarnings: { [key: string]: { name: string; email: string; totalEarnings: number; classCount: number; enrollmentCount: number } } = {};
+      const creatorEarnings: { [key: string]: { name: string; email: string; totalEarnings: number; classCount: number; enrollmentCount: number; bankDetails?: any } } = {};
 
       enrollmentsSnapshot.forEach((doc: any) => {
         const enrollment = doc.data();
@@ -664,7 +667,8 @@ export default function AdminDashboard() {
               email: '',
               totalEarnings: 0,
               classCount: 0,
-              enrollmentCount: 0
+              enrollmentCount: 0,
+              bankDetails: null
             };
           }
           creatorEarnings[creatorId].totalEarnings += enrollment.classPrice || 0;
@@ -676,6 +680,14 @@ export default function AdminDashboard() {
         const creatorData = doc.data();
         if (creatorEarnings[doc.id]) {
           creatorEarnings[doc.id].email = creatorData.email || '';
+          // Fetch bank details
+          creatorEarnings[doc.id].bankDetails = {
+            accountHolderName: creatorData.bankAccountHolderName || creatorData.accountHolderName || '',
+            accountNumber: creatorData.bankAccountNumber || creatorData.accountNumber || '',
+            ifscCode: creatorData.bankIFSC || creatorData.ifscCode || '',
+            bankName: creatorData.bankName || '',
+            upiId: creatorData.upiId || ''
+          };
         }
       });
 
@@ -686,10 +698,26 @@ export default function AdminDashboard() {
         }
       });
 
+      // Fetch existing payout records to check paid status
+      const payoutsRef = window.collection(window.firebaseDb, 'payouts');
+      const payoutsQuery = window.query(
+        payoutsRef,
+        window.where('status', '==', 'paid')
+      );
+      const paidPayoutsSnapshot = await window.getDocs(payoutsQuery);
+      
+      const paidPayoutsMap: { [key: string]: boolean } = {};
+      paidPayoutsSnapshot.forEach((doc: any) => {
+        const payoutData = doc.data();
+        if (payoutData.creatorId) {
+          paidPayoutsMap[payoutData.creatorId] = true;
+        }
+      });
+
       const payoutsArray = Object.keys(creatorEarnings).map(creatorId => ({
         creatorId,
         ...creatorEarnings[creatorId],
-        status: 'pending'
+        status: paidPayoutsMap[creatorId] ? 'paid' : 'pending'
       }));
 
       payoutsArray.sort((a, b) => b.totalEarnings - a.totalEarnings);
@@ -698,6 +726,53 @@ export default function AdminDashboard() {
       console.error('Error calculating payouts:', error);
     } finally {
       setLoadingPayouts(false);
+    }
+  };
+
+  // Mark payout as paid
+  const handleMarkPayoutAsPaid = async (payout: any) => {
+    if (!window.firebaseDb || !window.collection || !window.addDoc || !window.serverTimestamp) {
+      showError('Firebase not initialized');
+      return;
+    }
+
+    if (!user) {
+      showError('You must be logged in to perform this action');
+      return;
+    }
+
+    setProcessingPayout(payout.creatorId);
+
+    try {
+      // Create payout record in Firestore
+      const payoutsRef = window.collection(window.firebaseDb, 'payouts');
+      await window.addDoc(payoutsRef, {
+        creatorId: payout.creatorId,
+        creatorName: payout.name,
+        creatorEmail: payout.email,
+        amount: payout.totalEarnings,
+        classCount: payout.classCount,
+        enrollmentCount: payout.enrollmentCount,
+        bankDetails: payout.bankDetails || {},
+        status: 'paid',
+        paidBy: user.email || user.uid,
+        paidAt: window.serverTimestamp(),
+        createdAt: window.serverTimestamp()
+      });
+
+      // Update local state
+      setPayouts(prev => prev.map(p => 
+        p.creatorId === payout.creatorId 
+          ? { ...p, status: 'paid' }
+          : p
+      ));
+
+      showSuccess(`Payout marked as paid for ${payout.name}`);
+    } catch (error: any) {
+      console.error('Error marking payout as paid:', error);
+      showError(`Failed to mark payout as paid: ${error.message}`);
+    } finally {
+      setProcessingPayout(null);
     }
   };
 
@@ -1553,7 +1628,7 @@ export default function AdminDashboard() {
         </div>
         <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.875rem', textAlign: 'right' }}>
           <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#FFD700' }}>
-            ₹{payouts.reduce((sum, p) => sum + p.totalEarnings, 0).toFixed(2)}
+            ₹{payouts.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.totalEarnings, 0).toFixed(2)}
           </div>
           <div>Total Pending</div>
         </div>
@@ -1572,6 +1647,7 @@ export default function AdminDashboard() {
                 <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Classes</th>
                 <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Enrollments</th>
                 <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Total Earnings</th>
+                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Bank Details</th>
                 <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Status</th>
                 <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Action</th>
               </tr>
@@ -1595,6 +1671,28 @@ export default function AdminDashboard() {
                     </div>
                   </td>
                   <td style={{ padding: '1rem' }}>
+                    {payout.bankDetails && (payout.bankDetails.accountNumber || payout.bankDetails.ifscCode || payout.bankDetails.bankName) ? (
+                      <div style={{ fontSize: '0.875rem' }}>
+                        <div style={{ color: '#fff', marginBottom: '0.25rem' }}>
+                          <strong>{payout.bankDetails.accountHolderName || 'N/A'}</strong>
+                        </div>
+                        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                          {payout.bankDetails.accountNumber ? `A/C: ${payout.bankDetails.accountNumber}` : ''}
+                        </div>
+                        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                          {payout.bankDetails.ifscCode ? `IFSC: ${payout.bankDetails.ifscCode}` : ''}
+                        </div>
+                        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                          {payout.bankDetails.bankName || ''}
+                        </div>
+                      </div>
+                    ) : (
+                      <span style={{ color: 'rgba(255,152,0,0.8)', fontSize: '0.875rem' }}>
+                        Not provided
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '1rem' }}>
                     <span style={{
                       padding: '0.25rem 0.75rem',
                       borderRadius: '12px',
@@ -1606,13 +1704,68 @@ export default function AdminDashboard() {
                     </span>
                   </td>
                   <td style={{ padding: '1rem' }}>
-                    <button
-                      className="button-dark"
-                      onClick={() => showInfo(`Manual payout for ${payout.name}\n\nAmount: ₹${payout.totalEarnings.toFixed(2)}\n\nPlease process payment via bank transfer and mark as paid in your records.`)}
-                      style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                    >
-                      Process Payout
-                    </button>
+                    {payout.status === 'paid' ? (
+                      <span style={{ 
+                        padding: '0.5rem 1rem', 
+                        fontSize: '0.875rem',
+                        color: '#4CAF50',
+                        fontWeight: '600'
+                      }}>
+                        Paid
+                      </span>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                        <button
+                          className="button-dark"
+                          onClick={() => {
+                            const bankDetails = payout.bankDetails;
+                            const hasBankDetails = bankDetails && (bankDetails.accountNumber || bankDetails.ifscCode || bankDetails.bankName);
+                            
+                            let message = `Manual Payout Details\n\n`;
+                            message += `Creator: ${payout.name}\n`;
+                            message += `Email: ${payout.email}\n`;
+                            message += `Amount: ₹${payout.totalEarnings.toFixed(2)}\n\n`;
+                            
+                            if (hasBankDetails) {
+                              message += `Bank Details:\n`;
+                              message += `Account Holder: ${bankDetails.accountHolderName || 'N/A'}\n`;
+                              message += `Account Number: ${bankDetails.accountNumber || 'N/A'}\n`;
+                              message += `IFSC Code: ${bankDetails.ifscCode || 'N/A'}\n`;
+                              message += `Bank Name: ${bankDetails.bankName || 'N/A'}\n`;
+                              if (bankDetails.upiId) {
+                                message += `UPI ID: ${bankDetails.upiId}\n`;
+                              }
+                            } else {
+                              message += `⚠️ Bank details not provided by creator.\nPlease contact ${payout.email} to get bank account information.`;
+                            }
+                            
+                            message += `\n\nPlease process payment via bank transfer and then click "Mark as Paid".`;
+                            
+                            showInfo(message);
+                          }}
+                          style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                          disabled={processingPayout === payout.creatorId}
+                        >
+                          View Details
+                        </button>
+                        <button
+                          className="button-dark"
+                          onClick={() => {
+                            if (confirm(`Mark payout of ₹${payout.totalEarnings.toFixed(2)} as paid for ${payout.name}?`)) {
+                              handleMarkPayoutAsPaid(payout);
+                            }
+                          }}
+                          style={{ 
+                            padding: '0.5rem 1rem', 
+                            fontSize: '0.875rem',
+                            background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)'
+                          }}
+                          disabled={processingPayout === payout.creatorId}
+                        >
+                          {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -1911,10 +2064,12 @@ export default function AdminDashboard() {
           top: 0;
           z-index: 1000;
           border-right: 1px solid rgba(255, 255, 255, 0.1);
+          overflow: hidden;
         }
 
         .sidebar-logo {
           margin-bottom: 3rem;
+          flex-shrink: 0;
         }
 
         .sidebar-logo img {
@@ -1924,6 +2079,27 @@ export default function AdminDashboard() {
 
         .sidebar-nav {
           flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          min-height: 0;
+        }
+
+        .sidebar-nav::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb {
+          background: rgba(217, 42, 99, 0.5);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb:hover {
+          background: rgba(217, 42, 99, 0.7);
         }
 
         .sidebar-nav-item {
@@ -1956,6 +2132,17 @@ export default function AdminDashboard() {
         .sidebar-footer {
           margin-top: auto;
           padding-top: 2rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          flex-shrink: 0;
+        }
+
+        .sidebar-footer .sidebar-nav-item {
+          background: rgba(217, 42, 99, 0.1);
+          border-left: 3px solid #D92A63;
+        }
+
+        .sidebar-footer .sidebar-nav-item:hover {
+          background: rgba(217, 42, 99, 0.2);
         }
 
         /* Main Content */

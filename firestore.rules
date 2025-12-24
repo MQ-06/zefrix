@@ -257,6 +257,17 @@ service cloud.firestore {
       // No client-side creates (only via Admin SDK in API routes/email functions)
       allow create: if false;
     }
+
+    // Payouts collection
+    match /payouts/{payoutId} {
+      // Admins can read and write all payouts
+      allow read, write: if request.auth != null &&
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      // Creators can read their own payouts
+      allow read: if request.auth != null &&
+                     request.auth.uid == resource.data.creatorId;
+    }
     
     // Default deny all other collections
     match /{document=**} {
