@@ -30,6 +30,13 @@ export default function InstructorCard({ instructor, index }: InstructorCardProp
             src={instructor.image}
             className="instructor-image w-28 h-28 md:w-32 md:h-32 rounded-full object-cover mx-auto group-hover:scale-105 transition-transform duration-300"
             whileHover={{ scale: 1.05 }}
+            onError={(e) => {
+              // If image fails to load, fallback to avatar API
+              const target = e.target as HTMLImageElement;
+              if (!target.src.includes('ui-avatars.com')) {
+                target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(instructor.name)}&background=D92A63&color=fff&size=200`;
+              }
+            }}
           />
         </div>
         <h2 className="heading-h6 no-margin text-white font-bold text-base mb-1 group-hover:text-[#FF6B9D] transition-colors duration-300">

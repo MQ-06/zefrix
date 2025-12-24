@@ -37,6 +37,7 @@ export default function BecomeACreatorPage() {
   const { showSuccess, showError, showInfo } = useNotification();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [whatsappError, setWhatsappError] = useState<string>('');
   const [formData, setFormData] = useState({
     fullname: '',
     email: '',
@@ -89,15 +90,84 @@ export default function BecomeACreatorPage() {
     document.head.appendChild(initScript);
   }, []);
 
+  // WhatsApp number validation utility
+  const validateWhatsAppNumber = (phoneNumber: string): { valid: boolean; error?: string; formatted?: string } => {
+    if (!phoneNumber || !phoneNumber.trim()) {
+      return { valid: false, error: 'WhatsApp number is required' };
+    }
+
+    // Remove all whitespace
+    let cleaned = phoneNumber.trim().replace(/\s+/g, '');
+
+    // Must start with +
+    if (!cleaned.startsWith('+')) {
+      return { valid: false, error: 'WhatsApp number must start with + (country code). Example: +1234567890' };
+    }
+
+    // Remove the + and check if remaining are only digits
+    const digitsOnly = cleaned.substring(1);
+    
+    if (!/^\d+$/.test(digitsOnly)) {
+      return { valid: false, error: 'WhatsApp number can only contain digits after the country code. Please remove any letters or special characters.' };
+    }
+
+    // WhatsApp numbers should be between 7-15 digits (E.164 format allows up to 15 digits total)
+    // Country codes are 1-4 digits, so the number part should be at least 4 digits
+    if (digitsOnly.length < 7) {
+      return { valid: false, error: 'WhatsApp number is too short. Please include country code and number. Example: +1234567890' };
+    }
+
+    if (digitsOnly.length > 15) {
+      return { valid: false, error: 'WhatsApp number is too long. Maximum 15 digits allowed.' };
+    }
+
+    // Country code validation (should be 1-4 digits)
+    // Common country codes are 1-3 digits, but some regions use 4
+    const countryCodeLength = Math.min(4, digitsOnly.length);
+    const countryCode = digitsOnly.substring(0, countryCodeLength);
+    
+    // Country code should not start with 0
+    if (countryCode.startsWith('0')) {
+      return { valid: false, error: 'Country code cannot start with 0. Please use the correct format: +[country code][number]' };
+    }
+
+    // Format the number for storage (with + prefix)
+    const formatted = '+' + digitsOnly;
+
+    return { valid: true, formatted };
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    
+    // Real-time validation for WhatsApp number
+    if (name === 'whatsapp') {
+      setWhatsappError('');
+      // Only validate if user has typed something (not on empty)
+      if (value.trim()) {
+        const validation = validateWhatsAppNumber(value);
+        if (!validation.valid) {
+          setWhatsappError(validation.error || 'Invalid WhatsApp number');
+        }
+      }
+    }
+    
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        return !!(formData.fullname && formData.email && formData.whatsapp);
+        // Validate WhatsApp number format before allowing next step
+        if (!formData.fullname || !formData.email || !formData.whatsapp) {
+          return false;
+        }
+        const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
+        if (!whatsappValidation.valid) {
+          setWhatsappError(whatsappValidation.error || 'Invalid WhatsApp number');
+          return false;
+        }
+        return true;
       case 2:
         return !!formData.category;
       case 3:
@@ -149,38 +219,62 @@ export default function BecomeACreatorPage() {
       return;
     }
 
-    if (formData.password.length < 6) {
+    // Only validate password if user signed up with email (not Google)
+    // Check if user is already authenticated via Google
+    const isGoogleUser = window.firebaseAuth?.currentUser?.providerData?.some(
+      (provider: any) => provider.providerId === 'google.com'
+    );
+    
+    if (!isGoogleUser && formData.password.length < 6) {
       showError('Password must be at least 6 characters long');
       setIsSubmitting(false);
       return;
     }
 
     try {
-      // Create user account using AuthContext
-      await signUp(formData.email.trim(), formData.password, formData.fullname.trim());
+      // Check if user is already authenticated (Google sign-in)
+      let currentUser = window.firebaseAuth?.currentUser;
       
-      // Get the current user from Firebase Auth directly
-      if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
-        showError('User creation successful, but could not update profile. Please try logging in.');
-        router.push('/signup-login');
+      // Only create account if not already authenticated
+      if (!currentUser) {
+        // Create user account using AuthContext
+        await signUp(formData.email.trim(), formData.password, formData.fullname.trim());
+        
+        // Get the current user from Firebase Auth directly
+        if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
+          showError('User creation successful, but could not update profile. Please try logging in.');
+          router.push('/signup-login');
+          return;
+        }
+
+        currentUser = window.firebaseAuth.currentUser;
+      }
+
+      // Validate WhatsApp number before saving
+      const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
+      if (!whatsappValidation.valid) {
+        showError(whatsappValidation.error || 'Invalid WhatsApp number');
+        setIsSubmitting(false);
         return;
       }
 
-      const currentUser = window.firebaseAuth.currentUser;
-
+      // Get profile image URL (from form or use Firebase Auth photoURL if available)
+      const profileImageUrl = formData.profileImage?.trim() || currentUser.photoURL || '';
+      
       // Update user profile with creator-specific data
       await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
         uid: currentUser.uid,
         email: formData.email.trim(),
         name: formData.fullname.trim(),
-        whatsapp: formData.whatsapp.trim(),
+        whatsapp: whatsappValidation.formatted || formData.whatsapp.trim(),
         creatorCategory: formData.category,
         subCategory: formData.subCategory?.trim() || '',
         role: 'creator',
         bio: formData.bio?.trim() || '',
         expertise: formData.expertise?.trim() || '',
         introVideo: formData.introVideo?.trim() || '',
-        profileImage: formData.profileImage?.trim() || '',
+        profileImage: profileImageUrl,
+        photoURL: profileImageUrl, // Also set photoURL to keep them in sync
         socialHandles: {
           instagram: formData.instagram?.trim() || '',
           youtube: formData.youtube?.trim() || '',
@@ -237,12 +331,21 @@ export default function BecomeACreatorPage() {
       // Get the current user from Firebase Auth directly
       if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
         showError('Google authentication successful, but could not update profile. Please try again.');
+        setIsSubmitting(false);
         return;
       }
 
       const currentUser = window.firebaseAuth.currentUser;
 
-      // Update user profile with creator role
+      // Pre-fill form with Google data
+      setFormData(prev => ({
+        ...prev,
+        fullname: currentUser.displayName || prev.fullname || '',
+        email: currentUser.email || prev.email || '',
+        profileImage: currentUser.photoURL || prev.profileImage || '',
+      }));
+
+      // Update user profile with creator role (but mark as incomplete)
       await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
         uid: currentUser.uid,
         email: currentUser.email,
@@ -251,15 +354,14 @@ export default function BecomeACreatorPage() {
         profileImage: currentUser.photoURL || '',
         role: 'creator',
         isCreatorApproved: false,
-        isProfileComplete: false,
+        isProfileComplete: false, // Mark as incomplete so they complete the form
         createdAt: window.serverTimestamp(),
         lastLogin: window.serverTimestamp(),
       }, { merge: true });
 
-      showSuccess('Google signup successful! Please complete your creator profile.');
-      // Delay redirect to show notification
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      router.push('/creator-dashboard');
+      showSuccess('Google signup successful! Please complete the form below to finish your creator profile.');
+      setIsSubmitting(false);
+      // Stay on the form - don't redirect, let them complete it
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {
         let errorMessage = 'Google signup failed. ';
@@ -311,7 +413,46 @@ export default function BecomeACreatorPage() {
                 onChange={handleInputChange}
                 placeholder="+1234567890"
                 required
+                pattern="^\+[1-9]\d{6,14}$"
+                maxLength={16}
+                style={{
+                  borderColor: whatsappError ? '#ef4444' : undefined,
+                  borderWidth: whatsappError ? '2px' : undefined
+                }}
               />
+              {whatsappError && (
+                <div style={{ 
+                  color: '#ef4444', 
+                  fontSize: '12px', 
+                  marginTop: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <i className="fa-solid fa-circle-exclamation" style={{ fontSize: '12px' }}></i>
+                  {whatsappError}
+                </div>
+              )}
+              {!whatsappError && formData.whatsapp && (
+                <div style={{ 
+                  color: '#10b981', 
+                  fontSize: '12px', 
+                  marginTop: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <i className="fa-solid fa-circle-check" style={{ fontSize: '12px' }}></i>
+                  Valid WhatsApp number
+                </div>
+              )}
+              <div style={{ 
+                color: '#6b7280', 
+                fontSize: '11px', 
+                marginTop: '4px' 
+              }}>
+                Format: +[country code][number]. Example: +919876543210, +11234567890
+              </div>
             </div>
           </div>
         );
@@ -836,8 +977,8 @@ export default function BecomeACreatorPage() {
           width: 50px;
           height: 50px;
           padding: 0;
-          background: rgba(255, 255, 255, 0.1);
-          border: 2px solid rgba(255, 255, 255, 0.2);
+          background: #000;
+          border: 2px solid #000;
           border-radius: 50%;
           cursor: pointer;
           transition: all 0.3s ease;
@@ -847,9 +988,10 @@ export default function BecomeACreatorPage() {
         }
 
         .social-auth-btn:hover:not(:disabled) {
-          border-color: #4e54c8;
-          background: rgba(78, 84, 200, 0.2);
+          border-color: #333;
+          background: #333;
           transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
         
         .social-auth-btn:disabled {

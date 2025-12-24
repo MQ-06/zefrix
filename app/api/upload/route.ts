@@ -81,8 +81,25 @@ export async function POST(request: NextRequest) {
     await writeFile(filePath, buffer);
 
     // Generate public URL
-    // For Hostinger: Use your domain
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://zefrix.com';
+    // Detect base URL from request (works for both localhost and production)
+    let baseUrl: string;
+    
+    try {
+      // Use request.nextUrl to get the origin (works in both dev and production)
+      const origin = request.nextUrl.origin;
+      baseUrl = origin;
+    } catch (error) {
+      // Fallback: try to get from headers or use environment variable
+      const host = request.headers.get('host');
+      if (host) {
+        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+        baseUrl = `${protocol}://${host}`;
+      } else {
+        // Final fallback
+        baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+      }
+    }
+    
     const relativePath = `uploads/${folder}${subfolder ? `/${subfolder}` : ''}/${uniqueFileName}`;
     const publicUrl = `${baseUrl}/${relativePath}`;
 

@@ -182,6 +182,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const userData = userDoc.data();
                 console.log('📄 User data from Firestore:', userData);
                 let role = userData.role || 'student';
+                
+                // Sync photoURL from Firebase Auth to Firestore if it exists and is different
+                const authPhotoURL = firebaseUser.photoURL || '';
+                const firestorePhotoURL = userData.photoURL || '';
+                if (authPhotoURL && authPhotoURL !== firestorePhotoURL && window.updateDoc) {
+                  try {
+                    await window.updateDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid), { 
+                      photoURL: authPhotoURL,
+                      profileImage: authPhotoURL // Also update profileImage to keep them in sync
+                    });
+                    console.log('📸 Synced photoURL from Firebase Auth to Firestore');
+                  } catch (err) {
+                    console.error('Failed to sync photoURL to Firestore:', err);
+                  }
+                }
+                
                 if (isAdminEmail) {
                   role = 'admin';
                   if (userData.role !== 'admin' && window.updateDoc) {
@@ -193,11 +209,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                   }
                 }
+                
+                // Use synced photoURL (from Auth if available, otherwise from Firestore)
+                const finalPhotoURL = authPhotoURL || firestorePhotoURL || userData.profileImage || '';
+                
                 setUser({
                   uid: firebaseUser.uid,
                   email: firebaseUser.email,
                   name: userData.name || firebaseUser.displayName,
-                  photoURL: userData.photoURL || firebaseUser.photoURL,
+                  photoURL: finalPhotoURL,
                   role,
                   isProfileComplete: userData.isProfileComplete || false,
                   isCreatorApproved: userData.isCreatorApproved || false,

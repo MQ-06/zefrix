@@ -175,6 +175,7 @@ export default function CreateClassForm() {
     }
 
     setThumbnailFile(file);
+    setSubmitMessage(null); // Clear any previous errors
 
     // Create preview
     const reader = new FileReader();
@@ -183,8 +184,7 @@ export default function CreateClassForm() {
     };
     reader.readAsDataURL(file);
 
-    // Upload image immediately (we'll need classId after form submission, so store file for now)
-    // For now, we'll upload after class is created, but show preview
+    // File will be uploaded to server storage after class is created (we need classId first)
   };
 
   // Helper function to calculate minutes between two times
@@ -353,7 +353,7 @@ export default function CreateClassForm() {
       // Generate class ID
       const classId = `CLASS_${new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Upload thumbnail if file was selected
+      // Upload thumbnail to server storage if file was selected
       let finalVideoLink = videoLink;
       if (thumbnailFile) {
         try {
@@ -361,8 +361,13 @@ export default function CreateClassForm() {
           const path = getClassThumbnailPath(classId, thumbnailFile.name);
           finalVideoLink = await uploadImage(thumbnailFile, path, true);
           setThumbnailURL(finalVideoLink);
+          console.log('✅ Thumbnail uploaded to server storage:', finalVideoLink);
         } catch (error: any) {
           console.error('Thumbnail upload error:', error);
+          setSubmitMessage({ 
+            type: 'error', 
+            text: `Thumbnail upload failed: ${error.message}. Continuing with class creation...` 
+          });
           // Continue with form submission even if thumbnail upload fails
         } finally {
           setUploadingThumbnail(false);
