@@ -1,14 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import NotificationBadge from '@/components/Notifications/NotificationBadge';
 
 interface SidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
   onLogout: () => void;
+  userId?: string;
 }
 
-export default function CreatorSidebar({ activeSection, onSectionChange, onLogout }: SidebarProps) {
+export default function CreatorSidebar({ activeSection, onSectionChange, onLogout, userId }: SidebarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, section: string) => {
@@ -28,9 +30,10 @@ export default function CreatorSidebar({ activeSection, onSectionChange, onLogou
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
             <div>Dashboard</div>
           </a>
-          <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeSection === 'notifications' ? 'active' : ''}`}>
+          <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeSection === 'notifications' ? 'active' : ''}`} style={{ position: 'relative' }}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
             <div>Notifications</div>
+            {userId && <NotificationBadge userId={userId} />}
           </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'analytics')} className={`sidebar-nav-item ${activeSection === 'analytics' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />

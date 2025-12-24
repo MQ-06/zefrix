@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useNotification } from '@/contexts/NotificationContext';
 import Link from 'next/link';
 import { courses } from '@/lib/data';
+import NotificationList from '@/components/Notifications/NotificationList';
+import NotificationBadge from '@/components/Notifications/NotificationBadge';
 
 declare global {
   interface Window {
@@ -106,6 +108,11 @@ export default function StudentDashboard() {
           window.getDocs = getDocs;
           window.addDoc = addDoc;
           window.updateDoc = updateDoc;
+          window.orderBy = orderBy;
+          window.limit = limit;
+          window.onSnapshot = onSnapshot;
+          window.deleteDoc = deleteDoc;
+          window.writeBatch = writeBatch;
 
           window.logout = async () => {
             try {
@@ -1097,9 +1104,10 @@ export default function StudentDashboard() {
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Dashboard</div>
             </a>
-            <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeView === 'notifications' ? 'active' : ''}`}>
+            <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeView === 'notifications' ? 'active' : ''}`} style={{ position: 'relative' }}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Notifications</div>
+              {user?.uid && <NotificationBadge userId={user.uid} />}
             </a>
             <a href="#" onClick={(e) => handleNavClick(e, 'upcoming-sessions')} className={`sidebar-nav-item ${activeView === 'upcoming-sessions' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
@@ -1164,25 +1172,20 @@ export default function StudentDashboard() {
 
           {activeView === 'notifications' && (
             <>
-              {/* Notifications Placeholder */}
-              <div className="section" style={{ marginTop: '2rem' }}>
-            <h2 className="section-title">Notifications</h2>
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '16px',
-              padding: '2rem',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>Notifications Center</h3>
-              <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '1rem' }}>
-                Class reminders and updates are sent via email and WhatsApp through n8n automation.
-              </p>
-              <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
-                You'll receive notifications 24 hours and 1 hour before each class starts.
-              </p>
-            </div>
-              </div>
+              {user?.uid ? (
+                <NotificationList userId={user.uid} userRole="student" />
+              ) : (
+                <div className="section" style={{ marginTop: '2rem' }}>
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '16px',
+                    padding: '2rem',
+                    textAlign: 'center'
+                  }}>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.7)' }}>Loading notifications...</p>
+                  </div>
+                </div>
+              )}
             </>
           )}
 

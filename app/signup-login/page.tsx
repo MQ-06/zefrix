@@ -16,19 +16,14 @@ export default function SignupLoginPage() {
 
   // Redirect if already authenticated (with delay to show notifications)
   useEffect(() => {
-    console.log('🔄 Redirect check - loading:', loading, 'user:', user ? `${user.email} (${user.role})` : 'null');
     if (!loading && user) {
-      console.log('🚀 Redirecting user to dashboard...');
       // Small delay to ensure notifications are visible
       const redirectTimer = setTimeout(() => {
         if (user.role === 'admin') {
-          console.log('→ Redirecting to admin-dashboard');
           router.push('/admin-dashboard');
         } else if (user.role === 'creator') {
-          console.log('→ Redirecting to creator-dashboard');
           router.push('/creator-dashboard');
         } else {
-          console.log('→ Redirecting to student-dashboard');
           router.push('/student-dashboard');
         }
       }, 2500); // Wait 2.5 seconds to show notification

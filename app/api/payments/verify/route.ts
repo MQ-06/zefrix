@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
                 await sendEnrollmentConfirmationEmail({
                     studentName,
                     studentEmail,
+                    studentId,
                     className: item.title,
                     classId: item.id,
                     paymentId: razorpay_payment_id,

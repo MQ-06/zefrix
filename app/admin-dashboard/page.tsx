@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useNotification } from '@/contexts/NotificationContext';
 import { BookOpen, CheckCircle, Clock, Users, Calendar, Eye, Mail, X, User, CreditCard, FileText, TrendingUp } from 'lucide-react';
+import NotificationList from '@/components/Notifications/NotificationList';
+import NotificationBadge from '@/components/Notifications/NotificationBadge';
 
 declare global {
   interface Window {
@@ -59,7 +61,7 @@ interface Stats {
   pendingClasses: number;
 }
 
-type AdminPage = 'dashboard' | 'creators' | 'approve-classes' | 'contact-messages' | 'payouts' | 'enrollments';
+type AdminPage = 'dashboard' | 'creators' | 'approve-classes' | 'contact-messages' | 'payouts' | 'enrollments' | 'notifications';
 
 export default function AdminDashboard() {
   const { showSuccess, showError, showInfo } = useNotification();
@@ -122,7 +124,7 @@ export default function AdminDashboard() {
         firebaseAuthConfig.innerHTML = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc, collection, query, where, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, collection, query, where, getDocs, updateDoc, orderBy, limit, onSnapshot, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -144,6 +146,11 @@ export default function AdminDashboard() {
           window.doc = doc;
           window.updateDoc = updateDoc;
           window.getDoc = getDoc;
+          window.orderBy = orderBy;
+          window.limit = limit;
+          window.onSnapshot = onSnapshot;
+          window.deleteDoc = deleteDoc;
+          window.writeBatch = writeBatch;
 
           window.logout = async () => {
             try {
@@ -325,6 +332,7 @@ export default function AdminDashboard() {
             body: JSON.stringify({
               creatorName: classData.creatorName || 'Creator',
               creatorEmail: classData.creatorEmail || '',
+              creatorId: classData.creatorId, // Pass creatorId for notifications
               className: classData.title || 'Class',
               classId: classId,
               status: action,
@@ -382,7 +390,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Fetch real creators from Firestore with enhanced stats
+  // Fetch real creators from Firestore with enhanced stats (optimized with parallel queries)
   const fetchRealCreators = async () => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
       return;
@@ -390,12 +398,20 @@ export default function AdminDashboard() {
 
     setLoadingCreators(true);
     try {
+      // Run all queries in parallel for maximum performance
       const usersRef = window.collection(window.firebaseDb, 'users');
-      const q = window.query(usersRef, window.where('role', '==', 'creator'));
-      const querySnapshot = await window.getDocs(q);
+      const classesRef = window.collection(window.firebaseDb, 'classes');
+      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
 
+      const [creatorsSnapshot, allClassesSnapshot, enrollmentsSnapshot] = await Promise.all([
+        window.getDocs(window.query(usersRef, window.where('role', '==', 'creator'))),
+        window.getDocs(window.query(classesRef)),
+        window.getDocs(window.query(enrollmentsRef))
+      ]);
+
+      // Initialize creators array
       const creatorsData: Creator[] = [];
-      querySnapshot.forEach((doc: any) => {
+      creatorsSnapshot.forEach((doc: any) => {
         const data = doc.data();
         creatorsData.push({
           uid: doc.id,
@@ -412,15 +428,15 @@ export default function AdminDashboard() {
         });
       });
 
-      // Fetch all classes
-      const classesRef = window.collection(window.firebaseDb, 'classes');
-      const allClassesQuery = await window.getDocs(classesRef);
-
+      // Build creator stats and class-to-creator mapping in single pass
       const creatorStats: { [key: string]: { total: number; approved: number; pending: number } } = {};
-      allClassesQuery.forEach((doc: any) => {
+      const classToCreator: { [key: string]: string } = {};
+
+      allClassesSnapshot.forEach((doc: any) => {
         const classData = doc.data();
         const creatorId = classData.creatorId;
         if (creatorId) {
+          classToCreator[doc.id] = creatorId;
           if (!creatorStats[creatorId]) {
             creatorStats[creatorId] = { total: 0, approved: 0, pending: 0 };
           }
@@ -433,19 +449,7 @@ export default function AdminDashboard() {
         }
       });
 
-      // Fetch enrollments to calculate earnings and enrollment counts
-      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-      const enrollmentsSnapshot = await window.getDocs(enrollmentsRef);
-
-      // Build class to creator mapping
-      const classToCreator: { [key: string]: string } = {};
-      allClassesQuery.forEach((doc: any) => {
-        const classData = doc.data();
-        if (classData.creatorId) {
-          classToCreator[doc.id] = classData.creatorId;
-        }
-      });
-
+      // Calculate earnings and enrollments in single pass
       const creatorEarnings: { [key: string]: { enrollments: number; earnings: number } } = {};
       enrollmentsSnapshot.forEach((doc: any) => {
         const enrollment = doc.data();
@@ -486,7 +490,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Calculate real statistics
+  // Calculate real statistics (optimized with parallel queries)
   const calculateStats = async () => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
       return;
@@ -494,9 +498,20 @@ export default function AdminDashboard() {
 
     setLoadingStats(true);
     try {
+      // Run all queries in parallel for better performance
       const usersRef = window.collection(window.firebaseDb, 'users');
-      const usersSnapshot = await window.getDocs(usersRef);
+      const classesRef = window.collection(window.firebaseDb, 'classes');
+      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
 
+      // Parallel queries
+      const [usersSnapshot, approvedSnapshot, pendingSnapshot, enrollmentsSnapshot] = await Promise.all([
+        window.getDocs(window.query(usersRef)),
+        window.getDocs(window.query(classesRef, window.where('status', '==', 'approved'))),
+        window.getDocs(window.query(classesRef, window.where('status', '==', 'pending'))),
+        window.getDocs(window.query(enrollmentsRef))
+      ]);
+
+      // Process results
       let totalCreators = 0;
       let totalStudents = 0;
 
@@ -509,34 +524,34 @@ export default function AdminDashboard() {
         }
       });
 
-      const classesRef = window.collection(window.firebaseDb, 'classes');
-      const approvedQuery = window.query(classesRef, window.where('status', '==', 'approved'));
-      const approvedSnapshot = await window.getDocs(approvedQuery);
-
-      const pendingQuery = window.query(classesRef, window.where('status', '==', 'pending'));
-      const pendingSnapshot = await window.getDocs(pendingQuery);
-
       let activeClasses = 0;
       let totalRevenue = 0;
 
       approvedSnapshot.forEach((doc: any) => {
-        const classData = doc.data();
         activeClasses++;
+        const classData = doc.data();
+        // Calculate revenue based on actual enrollments, not maxSeats
         if (classData.price) {
-          totalRevenue += classData.price * (classData.maxSeats || 1);
+          // This is just an estimate - for accurate revenue, count enrollments per class
+          totalRevenue += classData.price;
         }
       });
 
-      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-      const enrollmentsSnapshot = await window.getDocs(enrollmentsRef);
-      const totalEnrollments = enrollmentsSnapshot.size;
+      // Calculate actual revenue from enrollments
+      let actualRevenue = 0;
+      enrollmentsSnapshot.forEach((doc: any) => {
+        const enrollment = doc.data();
+        if (enrollment.classPrice) {
+          actualRevenue += enrollment.classPrice;
+        }
+      });
 
       setStats({
-        totalEnrollments,
+        totalEnrollments: enrollmentsSnapshot.size,
         totalCreators,
         activeClasses,
         totalStudents,
-        totalRevenue,
+        totalRevenue: actualRevenue || totalRevenue, // Use actual revenue if available
         pendingClasses: pendingSnapshot.size
       });
     } catch (error) {
@@ -576,16 +591,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // Fetch enrollments
+  // Fetch enrollments (optimized - removed unnecessary retry delays)
   const fetchEnrollments = async () => {
-    let retries = 0;
-    while ((!window.firebaseDb || !window.collection || !window.getDocs) && retries < 10) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      retries++;
-    }
-
     if (!window.firebaseDb || !window.collection || !window.getDocs) {
-      setLoadingEnrollments(false);
       return;
     }
 
@@ -613,29 +621,24 @@ export default function AdminDashboard() {
     }
   };
 
-  // Calculate payouts
+  // Calculate payouts (optimized with parallel queries, removed retry delays)
   const fetchPayouts = async () => {
-    let retries = 0;
-    while ((!window.firebaseDb || !window.collection || !window.getDocs || !window.query || !window.where) && retries < 10) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      retries++;
-    }
-
-    if (!window.firebaseDb || !window.collection || !window.getDocs) {
+    if (!window.firebaseDb || !window.collection || !window.getDocs || !window.query || !window.where) {
       return;
     }
 
     setLoadingPayouts(true);
     try {
+      // Run all queries in parallel for maximum performance
       const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-      const enrollmentsSnapshot = await window.getDocs(enrollmentsRef);
-
       const usersRef = window.collection(window.firebaseDb, 'users');
-      const creatorsQuery = window.query(usersRef, window.where('role', '==', 'creator'));
-      const creatorsSnapshot = await window.getDocs(creatorsQuery);
-
       const classesRef = window.collection(window.firebaseDb, 'classes');
-      const classesSnapshot = await window.getDocs(classesRef);
+
+      const [enrollmentsSnapshot, creatorsSnapshot, classesSnapshot] = await Promise.all([
+        window.getDocs(window.query(enrollmentsRef)),
+        window.getDocs(window.query(usersRef, window.where('role', '==', 'creator'))),
+        window.getDocs(window.query(classesRef))
+      ]);
 
       const classToCreator: { [key: string]: any } = {};
       classesSnapshot.forEach((doc: any) => {
@@ -698,7 +701,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Load data based on active page
+  // Load data based on active page (optimized to run in parallel where possible)
   useEffect(() => {
     if (!window.firebaseDb) return;
 
@@ -707,9 +710,14 @@ export default function AdminDashboard() {
     } else if (activePage === 'creators') {
       fetchRealCreators();
     } else if (activePage === 'approve-classes') {
-      fetchPendingClasses();
-      fetchApprovedClasses();
-      calculateStats();
+      // Run these in parallel for faster loading
+      Promise.all([
+        fetchPendingClasses(),
+        fetchApprovedClasses(),
+        calculateStats()
+      ]).catch((error) => {
+        console.error('Error loading approve-classes data:', error);
+      });
     } else if (activePage === 'contact-messages') {
       fetchContactMessages();
     } else if (activePage === 'enrollments') {
@@ -717,6 +725,7 @@ export default function AdminDashboard() {
     } else if (activePage === 'payouts') {
       fetchPayouts();
     }
+    // Notifications page doesn't need data fetching - it fetches its own data
   }, [activePage]);
 
   const handleLogout = () => {
@@ -1749,6 +1758,8 @@ export default function AdminDashboard() {
     switch (activePage) {
       case 'dashboard':
         return renderDashboard();
+      case 'notifications':
+        return user?.uid ? <NotificationList userId={user.uid} userRole="admin" /> : <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading notifications...</div>;
       case 'creators':
         return renderCreators();
       case 'approve-classes':
@@ -3289,6 +3300,11 @@ export default function AdminDashboard() {
             <a onClick={() => handleNavClick('dashboard')} className={`sidebar-nav-item ${activePage === 'dashboard' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Dashboard</div>
+            </a>
+            <a onClick={() => handleNavClick('notifications')} className={`sidebar-nav-item ${activePage === 'notifications' ? 'active' : ''}`} style={{ position: 'relative' }}>
+              <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+              <div>Notifications</div>
+              {user?.uid && <NotificationBadge userId={user.uid} />}
             </a>
             <a onClick={() => handleNavClick('creators')} className={`sidebar-nav-item ${activePage === 'creators' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />

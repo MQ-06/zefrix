@@ -75,8 +75,8 @@ export default function Header() {
 
           {/* Right Side Actions */}
           <div className="hidden md:flex items-center space-x-6">
-            {/* Cart Icon */}
-            {isAuthenticated && (
+            {/* Cart Icon - Only show for non-authenticated users (for public checkout) */}
+            {!isAuthenticated && (
               <Link
                 href="/checkout"
                 className="relative text-white hover:text-primary transition-colors duration-200"
@@ -148,22 +148,6 @@ export default function Header() {
                       <p className="text-white text-sm font-medium">{user?.name || 'User'}</p>
                       <p className="text-gray-400 text-xs">{user?.email}</p>
                     </div>
-                    {/* Mobile Cart Link */}
-                    <Link
-                      href="/checkout"
-                      className="flex items-center justify-between px-3 py-2 text-white hover:text-primary transition-colors duration-200"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="flex items-center space-x-2">
-                        <ShoppingCart size={20} />
-                        <span>View Cart</span>
-                      </span>
-                      {cartCount > 0 && (
-                        <span className="bg-[#D92A63] text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                          {cartCount > 9 ? '9+' : cartCount}
-                        </span>
-                      )}
-                    </Link>
                     {user?.role === 'admin' && (
                       <Link
                         href="/admin-dashboard"

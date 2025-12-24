@@ -6,9 +6,75 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@zefrix.com';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@zefrix.com';
 
+/**
+ * Helper function to create notification (server-side only)
+ * Uses Firebase Admin SDK directly
+ */
+async function createNotification(data: {
+  userId: string;
+  userRole: 'student' | 'creator' | 'admin';
+  type: string;
+  title: string;
+  message: string;
+  link?: string;
+  relatedId?: string;
+  metadata?: any;
+}) {
+  try {
+    // Dynamically import Firebase Admin SDK (only works server-side)
+    const admin = await import('firebase-admin');
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+
+    // Initialize Firebase Admin if not already initialized
+    if (!admin.default.apps.length) {
+      try {
+        if (process.env.FIREBASE_ADMIN_SDK_KEY) {
+          const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_SDK_KEY);
+          admin.default.initializeApp({
+            credential: admin.default.credential.cert(serviceAccount)
+          });
+        } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+          admin.default.initializeApp({
+            credential: admin.default.credential.applicationDefault()
+          });
+        } else {
+          try {
+            const serviceAccountPath = join(process.cwd(), 'firebase-service-account.json');
+            const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
+            admin.default.initializeApp({
+              credential: admin.default.credential.cert(serviceAccount)
+            });
+          } catch (fileError) {
+            admin.default.initializeApp();
+          }
+        }
+      } catch (error: any) {
+        console.error('❌ Firebase Admin initialization error in createNotification:', error.message);
+        return; // Don't throw, just skip notification
+      }
+    }
+
+    const db = admin.default.firestore();
+    const notificationsRef = db.collection('notifications');
+    
+    await notificationsRef.add({
+      ...data,
+      isRead: false,
+      createdAt: admin.default.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log(`✅ Notification created for ${data.userRole} ${data.userId}: ${data.title}`);
+  } catch (error: any) {
+    console.error('Error creating notification:', error);
+    // Don't throw - notification failure shouldn't block email sending
+  }
+}
+
 interface EnrollmentEmailData {
   studentName: string;
   studentEmail: string;
+  studentId?: string; // Optional: for creating notifications
   className: string;
   classId: string;
   paymentId: string;
@@ -19,6 +85,7 @@ interface EnrollmentEmailData {
 interface ClassApprovalEmailData {
   creatorName: string;
   creatorEmail: string;
+  creatorId?: string; // Optional: for creating notifications
   className: string;
   classId: string;
   status: 'approved' | 'rejected';
@@ -37,7 +104,9 @@ interface ClassCreatedEmailData {
 interface SessionReminderEmailData {
   studentName: string;
   studentEmail: string;
+  studentId?: string; // Optional: for creating notifications
   className: string;
+  classId?: string; // Optional: for creating notifications
   sessionDate: string;
   sessionTime: string;
   meetingLink: string;
@@ -51,7 +120,7 @@ export async function sendEnrollmentConfirmationEmail(data: EnrollmentEmailData)
   }
 
   try {
-    const { studentName, studentEmail, className, paymentId, orderId, amount } = data;
+    const { studentName, studentEmail, studentId, className, classId, paymentId, orderId, amount } = data;
 
     const html = `
       <!DOCTYPE html>
@@ -101,6 +170,26 @@ export async function sendEnrollmentConfirmationEmail(data: EnrollmentEmailData)
     });
 
     console.log(`✅ Enrollment confirmation email sent to ${studentEmail}`);
+
+    // Create notification if studentId is provided
+    if (studentId) {
+      await createNotification({
+        userId: studentId,
+        userRole: 'student',
+        type: 'enrollment_confirmed',
+        title: `Enrollment Confirmed: ${className}`,
+        message: `You have successfully enrolled in "${className}". Check your dashboard for session details.`,
+        link: `/product/${classId}`,
+        relatedId: classId,
+        metadata: {
+          className,
+          classId,
+          amount,
+          paymentId,
+          orderId,
+        },
+      });
+    }
   } catch (error) {
     console.error('Error sending enrollment confirmation email:', error);
     throw error;
@@ -115,7 +204,7 @@ export async function sendClassApprovalEmail(data: ClassApprovalEmailData) {
   }
 
   try {
-    const { creatorName, creatorEmail, className, status, rejectionReason } = data;
+    const { creatorName, creatorEmail, creatorId, className, classId, status, rejectionReason } = data;
 
     const html = status === 'approved' ? `
       <!DOCTYPE html>
@@ -203,6 +292,26 @@ export async function sendClassApprovalEmail(data: ClassApprovalEmailData) {
     });
 
     console.log(`✅ Class ${status} email sent to ${creatorEmail}`);
+
+    // Create notification if creatorId is provided
+    if (creatorId) {
+      await createNotification({
+        userId: creatorId,
+        userRole: 'creator',
+        type: status === 'approved' ? 'class_approved' : 'class_rejected',
+        title: status === 'approved' ? `Class Approved: ${className}` : `Class Review: ${className}`,
+        message: status === 'approved'
+          ? `Your class "${className}" has been approved and is now live!`
+          : `Your class "${className}" needs revision. Please check the details.`,
+        link: `/creator-dashboard?classId=${classId}`,
+        relatedId: classId,
+        metadata: {
+          className,
+          classId,
+          rejectionReason: status === 'rejected' ? rejectionReason : undefined,
+        },
+      });
+    }
   } catch (error) {
     console.error(`Error sending class ${status} email:`, error);
     throw error;
@@ -258,6 +367,8 @@ export async function sendClassCreatedEmail(data: ClassCreatedEmailData) {
     });
 
     console.log(`✅ Class creation notification sent to admin`);
+    // Note: Admin notification is created in the API route (class-created/route.ts)
+    // because we need Firebase Admin SDK to look up admin userId
   } catch (error) {
     console.error('Error sending class creation email:', error);
     // Don't throw - this is a notification, shouldn't block class creation
@@ -319,6 +430,27 @@ export async function sendSessionReminderEmail(data: SessionReminderEmailData) {
     });
 
     console.log(`✅ Session reminder email sent to ${studentEmail}`);
+
+    // Create notification if studentId is provided
+    if (data.studentId) {
+      const reminderType = data.sessionTime && data.sessionTime.includes('24') ? 'session_reminder_24h' : 'session_reminder_1h';
+      await createNotification({
+        userId: data.studentId,
+        userRole: 'student',
+        type: reminderType,
+        title: `Session Reminder: ${data.className}`,
+        message: `Reminder: Your session for "${data.className}" is ${reminderType.includes('24h') ? 'tomorrow' : 'in 1 hour'} at ${data.sessionTime}.`,
+        link: '/student-dashboard?view=upcoming-sessions',
+        relatedId: data.classId,
+        metadata: {
+          className: data.className,
+          classId: data.classId,
+          sessionDate: data.sessionDate,
+          sessionTime: data.sessionTime,
+          meetingLink: data.meetingLink,
+        },
+      });
+    }
   } catch (error) {
     console.error('Error sending session reminder email:', error);
     throw error;

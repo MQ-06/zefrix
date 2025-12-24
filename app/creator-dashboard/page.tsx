@@ -14,6 +14,8 @@ import LiveClass from '@/components/CreatorDashboard/LiveClass';
 import CreatorProfile from '@/components/CreatorDashboard/Profile';
 import EnrollmentList from '@/components/CreatorDashboard/EnrollmentList';
 import Analytics from '@/components/CreatorDashboard/Analytics';
+import NotificationList from '@/components/Notifications/NotificationList';
+import NotificationBadge from '@/components/Notifications/NotificationBadge';
 
 declare global {
   interface Window {
@@ -168,7 +170,7 @@ export default function CreatorDashboard() {
         firebaseAuthConfig.innerHTML = `
           import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, addDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, addDoc, Timestamp, orderBy, limit, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
           import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
           const firebaseConfig = {
@@ -198,6 +200,10 @@ export default function CreatorDashboard() {
           window.addDoc = addDoc;
           window.Timestamp = Timestamp;
           window.updateProfile = updateProfile;
+          window.orderBy = orderBy;
+          window.limit = limit;
+          window.onSnapshot = onSnapshot;
+          window.writeBatch = writeBatch;
           window.ref = ref;
           window.uploadBytes = uploadBytes;
           window.getDownloadURL = getDownloadURL;
@@ -1558,6 +1564,7 @@ export default function CreatorDashboard() {
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           onLogout={handleLogout}
+          userId={user?.uid}
         />
 
         <div className="main-content">
@@ -1617,22 +1624,18 @@ export default function CreatorDashboard() {
             {/* Notifications Section */}
             {activeSection === 'notifications' && (
               <div id="notifications" className="creator-section">
-                <h2 className="creator-section-title">Notifications</h2>
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  borderRadius: '16px',
-                  padding: '2rem',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem', color: '#fff' }}>Notifications Center</h3>
-                  <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '1rem' }}>
-                    Class reminders and updates are sent via email and WhatsApp through n8n automation.
-                  </p>
-                  <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
-                    You'll receive notifications about class approvals, student enrollments, and important updates.
-                  </p>
-                </div>
+                {user?.uid ? (
+                  <NotificationList userId={user.uid} userRole="creator" />
+                ) : (
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '16px',
+                    padding: '2rem',
+                    textAlign: 'center'
+                  }}>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.7)' }}>Loading notifications...</p>
+                  </div>
+                )}
               </div>
             )}
 

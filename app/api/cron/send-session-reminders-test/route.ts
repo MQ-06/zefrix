@@ -210,7 +210,9 @@ export async function GET(request: NextRequest) {
             await sendSessionReminderEmail({
               studentName: enrollment.studentName,
               studentEmail: enrollment.studentEmail,
+              studentId: enrollment.studentId,
               className: session.className || enrollment.className || 'Class',
+              classId: session.classId,
               sessionDate: formattedDate,
               sessionTime: formattedTime,
               meetingLink: session.meetingLink,

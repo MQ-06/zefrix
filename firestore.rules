@@ -233,6 +233,31 @@ service cloud.firestore {
       allow write: if false;
     }
     
+    // Notifications collection
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if request.auth != null &&
+                     request.auth.uid == resource.data.userId;
+
+      // Users can update their own notifications (mark as read)
+      allow update: if request.auth != null &&
+                       request.auth.uid == resource.data.userId &&
+                       // Only allow updating isRead and readAt fields
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['isRead', 'readAt']);
+
+      // Users can delete their own notifications
+      allow delete: if request.auth != null &&
+                       request.auth.uid == resource.data.userId;
+
+      // Admins can read all notifications
+      allow read: if request.auth != null &&
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      // No client-side creates (only via Admin SDK in API routes/email functions)
+      allow create: if false;
+    }
+    
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;
