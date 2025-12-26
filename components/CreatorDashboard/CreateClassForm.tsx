@@ -762,11 +762,10 @@ export default function CreateClassForm() {
         </div>
       </div>
 
-      {/* Schedule Section */}
       <div className="creator-form-section">
         <h5 className="creator-form-heading">Schedule</h5>
-        <div className="creator-radio-group">
-          <label className="creator-radio-wrap">
+        <div className="creator-radio-group" style={{ display: 'flex', gap: '3.5rem', marginBottom: '2rem' }}>
+          <label className="creator-radio-wrap" style={{ margin: 0 }}>
             <input
               type="radio"
               name="scheduleType"
@@ -777,7 +776,7 @@ export default function CreateClassForm() {
             />
             <span className="creator-radio-label">One-time Session</span>
           </label>
-          <label className="creator-radio-wrap">
+          <label className="creator-radio-wrap" style={{ margin: 0 }}>
             <input
               type="radio"
               name="scheduleType"
@@ -831,11 +830,11 @@ export default function CreateClassForm() {
 
         {scheduleType === 'recurring' && (
           <div className="creator-recurring-fields">
-            <div className="creator-form-group">
-              <label className="creator-field-label">Select Days *</label>
-              <div className="creator-pill-wrap">
+            <div className="creator-form-group" style={{ marginBottom: '1.5rem' }}>
+              <label className="creator-field-label" style={{ marginBottom: '0.75rem', display: 'block' }}>Select Days *</label>
+              <div className="creator-pill-wrap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1.5rem', padding: '1.5rem' }}>
                 {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
-                  <label key={day} className="creator-pill-item">
+                  <label key={day} className="creator-pill-item" style={{ margin: 0 }}>
                     <input
                       type="checkbox"
                       checked={selectedDays.includes(day)}
@@ -846,7 +845,7 @@ export default function CreateClassForm() {
                   </label>
                 ))}
               </div>
-              <small className="creator-field-hint">Select the days when sessions will occur</small>
+              <small className="creator-field-hint" style={{ marginTop: '0.75rem', display: 'block' }}>Select the days when sessions will occur</small>
             </div>
             <div className="creator-form-grid">
               <div className="creator-form-group">

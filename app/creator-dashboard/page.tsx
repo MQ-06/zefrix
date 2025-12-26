@@ -908,9 +908,9 @@ export default function CreatorDashboard() {
 
         .creator-radio-group {
           display: flex;
-          gap: 2.5rem;
+          gap: 3.5rem !important;
           margin-bottom: 2rem;
-          padding: 1rem;
+          padding: 1.25rem 1.5rem;
           background: rgba(255, 255, 255, 0.03);
           border-radius: 8px;
         }
@@ -918,8 +918,9 @@ export default function CreatorDashboard() {
         .creator-radio-wrap {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.75rem;
           cursor: pointer;
+          padding: 0.5rem 0;
         }
 
         .creator-radio-input {
@@ -946,16 +947,23 @@ export default function CreatorDashboard() {
         }
 
         .creator-pill-wrap {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.875rem;
-          margin-top: 0.5rem;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 1.5rem !important;
+          margin-top: 1rem;
+          padding: 1.5rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .creator-pill-item {
           display: flex;
           align-items: center;
+          justify-content: center;
           cursor: pointer;
+          min-height: 44px;
+          margin: 0;
         }
 
         .creator-pill-checkbox {
@@ -963,21 +971,37 @@ export default function CreatorDashboard() {
         }
 
         .creator-pill-label {
-          padding: 0.625rem 1.25rem;
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 24px;
-          color: rgba(255, 255, 255, 0.7);
+          display: block;
+          width: 100%;
+          padding: 0.75rem 1rem;
+          background: rgba(255, 255, 255, 0.08);
+          border: 2px solid rgba(255, 255, 255, 0.15);
+          border-radius: 10px;
+          color: rgba(255, 255, 255, 0.8);
           font-size: 0.875rem;
           font-weight: 500;
-          transition: all 0.3s;
+          transition: all 0.2s ease;
           cursor: pointer;
+          text-align: center;
+        }
+
+        .creator-pill-item:hover .creator-pill-label {
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(255, 255, 255, 0.25);
+          transform: translateY(-1px);
         }
 
         .creator-pill-checkbox:checked + .creator-pill-label {
-          background: rgba(217, 42, 99, 0.15);
+          background: rgba(217, 42, 99, 0.2);
           border-color: #D92A63;
           color: #fff;
+          font-weight: 600;
+          box-shadow: 0 2px 8px rgba(217, 42, 99, 0.3);
+        }
+
+        .creator-pill-checkbox:checked + .creator-pill-label:hover {
+          background: rgba(217, 42, 99, 0.25);
+          border-color: #FF654B;
         }
 
         .creator-form-actions {
