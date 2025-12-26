@@ -51,6 +51,14 @@ interface EnrollmentData {
     studentEmail: string;
     enrolledAt: any;
     batchId?: string;
+    sessionAttendance?: {
+        [sessionId: string]: {
+            attended: boolean;
+            joinedAt?: any;
+            markedAt?: any;
+            sessionNumber?: number;
+        };
+    };
 }
 
 interface ViewClassProps {
@@ -113,7 +121,12 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
 
             const enrollmentsList: EnrollmentData[] = [];
             querySnapshot.forEach((doc: any) => {
-                enrollmentsList.push({ id: doc.id, ...doc.data() });
+                const data = doc.data();
+                enrollmentsList.push({ id: doc.id, ...data });
+                // Debug: Log attendance data
+                if (data.sessionAttendance) {
+                    console.log(`Enrollment ${doc.id} (${data.studentName}) - sessionAttendance keys:`, Object.keys(data.sessionAttendance));
+                }
             });
 
             // Sort by enrollment date (newest first)
@@ -123,6 +136,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                 return bTime - aTime;
             });
 
+            console.log(`✅ Fetched ${enrollmentsList.length} enrollments for class ${classId}`);
             setEnrollments(enrollmentsList);
         } catch (error) {
             console.error('Error fetching enrollments:', error);
@@ -141,7 +155,9 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
 
             const sessionsList: any[] = [];
             querySnapshot.forEach((doc: any) => {
-                sessionsList.push({ id: doc.id, ...doc.data() });
+                const sessionData = { id: doc.id, ...doc.data() };
+                sessionsList.push(sessionData);
+                console.log(`Session ${doc.id} - status: ${sessionData.status}, attendance:`, sessionData.attendance);
             });
 
             // Sort by session number
@@ -149,6 +165,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                 return (a.sessionNumber || 0) - (b.sessionNumber || 0);
             });
 
+            console.log(`✅ Fetched ${sessionsList.length} sessions for class ${classId}`);
             setSessions(sessionsList);
         } catch (error) {
             console.error('Error fetching sessions:', error);
@@ -492,17 +509,45 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                                 }}
                                             >
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                                                    <div>
+                                                    <div style={{ flex: 1 }}>
                                                         <h4 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
                                                             Session {session.sessionNumber}
                                                         </h4>
-                                                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
-                                                            <span>📅 {formatDate(sessionDate)}</span>
-                                                            <span>🕐 {session.sessionTime}</span>
+                                                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                                                            <span><strong>Date:</strong> {formatDate(sessionDate)}</span>
+                                                            <span><strong>Time:</strong> {session.sessionTime}</span>
                                                             {session.meetingLink && (
-                                                                <span>🔗 <a href={session.meetingLink} target="_blank" rel="noopener noreferrer" style={{ color: '#D92A63' }}>Meeting Link</a></span>
+                                                                <span><strong>Link:</strong> <a href={session.meetingLink} target="_blank" rel="noopener noreferrer" style={{ color: '#D92A63' }}>Meeting Link</a></span>
                                                             )}
                                                         </div>
+                                                        {/* Attendance Display */}
+                                                        {isCompleted && (
+                                                            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(76, 175, 80, 0.1)', borderRadius: '6px', border: '1px solid rgba(76, 175, 80, 0.3)' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9375rem', fontWeight: '600', color: '#4CAF50', marginBottom: '0.25rem' }}>
+                                                                    <span><strong>Attendance:</strong></span>
+                                                                    <span>{(() => {
+                                                                        // Calculate actual attendance from enrollments
+                                                                        let actualPresent = 0;
+                                                                        let actualTotal = 0;
+                                                                        enrollments.forEach(e => {
+                                                                            const sessionAttendance = e.sessionAttendance || {};
+                                                                            if (sessionAttendance[session.id]) {
+                                                                                actualTotal++;
+                                                                                if (sessionAttendance[session.id].attended) {
+                                                                                    actualPresent++;
+                                                                                }
+                                                                            }
+                                                                        });
+                                                                        // Use actual data if available, otherwise fallback to session.attendance
+                                                                        const attendance = session.attendance || {};
+                                                                        const displayPresent = actualTotal > 0 ? actualPresent : (attendance.present || 0);
+                                                                        const displayTotal = actualTotal > 0 ? actualTotal : (attendance.totalEnrolled || enrollments.length);
+                                                                        const displayRate = displayTotal > 0 ? ((displayPresent / displayTotal) * 100).toFixed(0) : '0';
+                                                                        return `${displayPresent}/${displayTotal} (${displayRate}%)`;
+                                                                    })()}</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div>
                                                         {isLive && (
@@ -516,7 +561,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                                                 display: 'inline-block',
                                                                 marginBottom: '0.5rem'
                                                             }}>
-                                                                🔴 LIVE
+                                                                LIVE
                                                             </span>
                                                         )}
                                                         {isCompleted && (
@@ -530,7 +575,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                                                 display: 'inline-block',
                                                                 marginBottom: '0.5rem'
                                                             }}>
-                                                                ✓ Completed
+                                                                Completed
                                                             </span>
                                                         )}
                                                     </div>
@@ -589,7 +634,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                                                         fontSize: '0.875rem'
                                                                     }}
                                                                 >
-                                                                    📹 View Recording
+                                                                    View Recording
                                                                 </a>
                                                             </div>
                                                         )}
@@ -649,14 +694,34 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                     <div className={styles.tableCol}>Student Name</div>
                                     <div className={styles.tableCol}>Email</div>
                                     <div className={styles.tableCol}>Enrolled On</div>
+                                    <div className={styles.tableCol}>Attendance</div>
                                 </div>
-                                {enrollments.map((enrollment) => (
-                                    <div key={enrollment.id} className={styles.tableRow}>
-                                        <div className={styles.tableCol}>{enrollment.studentName}</div>
-                                        <div className={styles.tableCol}>{enrollment.studentEmail}</div>
-                                        <div className={styles.tableCol}>{formatDateTime(enrollment.enrolledAt)}</div>
-                                    </div>
-                                ))}
+                                {enrollments.map((enrollment) => {
+                                    const sessionAttendance = enrollment.sessionAttendance || {};
+                                    const totalSessions = Object.keys(sessionAttendance).length;
+                                    const attendedSessions = Object.values(sessionAttendance).filter((s: any) => s.attended).length;
+                                    const attendanceRate = totalSessions > 0 ? (attendedSessions / totalSessions) * 100 : 0;
+                                    
+                                    return (
+                                        <div key={enrollment.id} className={styles.tableRow}>
+                                            <div className={styles.tableCol}>{enrollment.studentName}</div>
+                                            <div className={styles.tableCol}>{enrollment.studentEmail}</div>
+                                            <div className={styles.tableCol}>{formatDateTime(enrollment.enrolledAt)}</div>
+                                            <div className={styles.tableCol}>
+                                                {totalSessions > 0 ? (
+                                                    <span style={{
+                                                        color: attendanceRate >= 75 ? '#4CAF50' : attendanceRate >= 50 ? '#FF9800' : '#F44336',
+                                                        fontWeight: '600'
+                                                    }}>
+                                                        {attendedSessions}/{totalSessions} sessions ({attendanceRate.toFixed(0)}%)
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: 'rgba(255, 255, 255, 0.5)' }}>No sessions yet</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

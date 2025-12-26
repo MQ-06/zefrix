@@ -622,7 +622,7 @@ export default function StudentDashboard() {
     sessionDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
     
     const diffMinutes = (sessionDateTime.getTime() - now.getTime()) / (1000 * 60);
-    return diffMinutes >= -30 && diffMinutes <= 120; // Live if within 30 min before to 2 hours after
+    return diffMinutes >= -30 && diffMinutes <= 120; 
   };
 
   const dashboardStyles = `
@@ -929,6 +929,165 @@ export default function StudentDashboard() {
           margin-bottom: 2rem;
         }
 
+        /* Dashboard Stats Grid */
+        .dashboard-stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 1.5rem;
+          margin-top: 2rem;
+          margin-bottom: 2rem;
+        }
+
+        .stat-card {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 1.5rem;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-value {
+          font-size: 2rem;
+          font-weight: 700;
+          margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+          color: rgba(255, 255, 255, 0.7);
+          font-size: 0.875rem;
+        }
+
+        /* Dashboard Quick Actions */
+        .dashboard-quick-actions {
+          display: flex;
+          gap: 1rem;
+          margin-bottom: 2rem;
+          flex-wrap: wrap;
+        }
+
+        .quick-action-button {
+          padding: 0.75rem 1.5rem;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 8px;
+          color: #fff;
+          text-decoration: none;
+          font-weight: 500;
+          font-size: 0.875rem;
+          transition: all 0.2s;
+          cursor: pointer;
+        }
+
+        .quick-action-button:hover {
+          background: rgba(255, 255, 255, 0.15);
+          border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .quick-action-button.primary {
+          background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
+          border: none;
+        }
+
+        .quick-action-button.primary:hover {
+          opacity: 0.9;
+        }
+
+        /* Dashboard Widgets */
+        .dashboard-widgets-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 2rem;
+          margin-bottom: 2rem;
+        }
+
+        .widget-card {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 1.5rem;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .widget-title {
+          font-size: 1.125rem;
+          font-weight: 600;
+          margin-bottom: 1rem;
+          color: #fff;
+        }
+
+        .widget-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .widget-list-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          transition: all 0.2s;
+        }
+
+        .widget-list-item:hover {
+          background: rgba(255, 255, 255, 0.05);
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .widget-list-item.clickable {
+          text-decoration: none;
+          color: inherit;
+        }
+
+        .widget-item-title {
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #fff;
+          margin-bottom: 0.25rem;
+        }
+
+        .widget-item-meta {
+          font-size: 0.8125rem;
+          color: rgba(255, 255, 255, 0.6);
+        }
+
+        .widget-button-join {
+          padding: 0.5rem 1rem;
+          background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
+          color: #fff;
+          text-decoration: none;
+          border-radius: 6px;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          transition: opacity 0.2s;
+        }
+
+        .widget-button-join:hover {
+          opacity: 0.9;
+        }
+
+        .widget-view-all {
+          display: block;
+          margin-top: 1rem;
+          color: #D92A63;
+          text-decoration: none;
+          font-size: 0.875rem;
+          font-weight: 600;
+          transition: opacity 0.2s;
+        }
+
+        .widget-view-all:hover {
+          opacity: 0.8;
+        }
+
+        .widget-empty-text {
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 0.875rem;
+          text-align: center;
+          padding: 1rem;
+        }
+
         .button-dark {
           background: linear-gradient(135deg, #D92A63 0%, #FF6B35 100%);
           color: #fff;
@@ -1078,44 +1237,6 @@ export default function StudentDashboard() {
           display: none;
         }
 
-        @media (max-width: 991px) {
-          .sidebar {
-            transform: translateX(-100%);
-            transition: transform 0.3s;
-          }
-
-          .sidebar.open {
-            transform: translateX(0);
-          }
-
-          .main-content {
-            margin-left: 0;
-          }
-
-          .hamburger {
-            display: flex;
-          }
-
-          .course-grid {
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-          }
-        }
-
-        @media (max-width: 767px) {
-          .course-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .enrollment-item {
-            grid-template-columns: 1fr;
-            gap: 1rem;
-          }
-
-          .enrollment-actions {
-            flex-direction: column;
-          }
-        }
-
         /* Rating Modal */
         .rating-modal-overlay {
           position: fixed;
@@ -1188,12 +1309,269 @@ export default function StudentDashboard() {
           font-weight: 600;
         }
 
-        @media (max-width: 768px) {
+        /* Responsive Styles */
+        @media (max-width: 991px) {
+          .sidebar {
+            transform: translateX(-100%);
+            transition: transform 0.3s;
+          }
+
+          .sidebar.open {
+            transform: translateX(0);
+          }
+
+          .main-content {
+            margin-left: 0;
+            padding: 1rem;
+          }
+
+          .hamburger {
+            display: flex;
+          }
+
+          .course-grid {
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+          }
+
+          .dashboard-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 2rem;
+          }
+
+          .user-summary {
+            width: 100%;
+            min-width: auto;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.5rem;
+          }
+
+          .section-title {
+            font-size: 1.5rem;
+          }
+        }
+
+        @media (max-width: 767px) {
+          .main-content {
+            padding: 1rem;
+          }
+
+          .course-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+
+          .enrollment-item {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+
+          .enrollment-actions {
+            flex-direction: column;
+            width: 100%;
+          }
+
+          .dashboard-header {
+            margin-bottom: 1.5rem;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.25rem;
+          }
+
+          .welcome-section p {
+            font-size: 0.875rem;
+          }
+
+          .section-title {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+          }
+
+          .user-summary {
+            padding: 0.5rem 0.75rem;
+          }
+
+          .user-avatar {
+            width: 36px;
+            height: 36px;
+          }
+
+          .user-name {
+            font-size: 0.875rem;
+          }
+
+          .user-email {
+            font-size: 0.75rem;
+          }
+
           .dashboard-stats-grid {
             grid-template-columns: repeat(2, 1fr) !important;
+            gap: 1rem !important;
           }
-          .dashboard-two-col {
+
+          .stat-card {
+            padding: 1rem !important;
+          }
+
+          .stat-value {
+            font-size: 1.5rem !important;
+          }
+
+          .stat-label {
+            font-size: 0.75rem !important;
+          }
+
+        .dashboard-two-col {
+          grid-template-columns: 1fr !important;
+        }
+
+        .dashboard-widgets-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 2rem;
+          margin-bottom: 2rem;
+        }
+
+          .dashboard-quick-actions {
+            flex-direction: column;
+            gap: 0.75rem !important;
+          }
+
+          .quick-action-button {
+            width: 100% !important;
+          }
+
+          .dashboard-widgets-grid {
             grid-template-columns: 1fr !important;
+            gap: 1rem !important;
+          }
+
+          .widget-card {
+            padding: 1rem !important;
+          }
+
+          .widget-title {
+            font-size: 1rem !important;
+          }
+
+          .search-filter-container {
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+
+          .search-input {
+            width: 100%;
+            min-width: auto;
+            max-width: 100%;
+          }
+
+          .filter-select {
+            width: 100%;
+            min-width: auto;
+          }
+
+          .session-card {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 1rem;
+          }
+
+          .profile-form {
+            padding: 1.5rem;
+          }
+
+          .rating-modal-content {
+            padding: 1.5rem;
+            margin: 1rem;
+          }
+
+          .course-card {
+            margin-bottom: 1rem;
+          }
+
+          .course-info {
+            padding: 1rem;
+          }
+
+          .course-title {
+            font-size: 1.125rem;
+          }
+
+          .course-meta {
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .course-bottom {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 1rem;
+          }
+
+          .button-dark {
+            width: 100%;
+            text-align: center;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .main-content {
+            padding: 0.75rem;
+          }
+
+          .dashboard-stats-grid {
+            grid-template-columns: 1fr !important;
+            gap: 0.75rem !important;
+          }
+
+          .stat-card {
+            padding: 1rem !important;
+          }
+
+          .stat-value {
+            font-size: 1.5rem !important;
+          }
+
+          .stat-label {
+            font-size: 0.75rem !important;
+          }
+
+          .sidebar {
+            width: 100%;
+            max-width: 320px;
+          }
+
+          .sidebar-logo img {
+            width: 120px;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.125rem;
+          }
+
+          .section-title {
+            font-size: 1.125rem;
+          }
+
+          .course-image-wrap {
+            height: 180px;
+          }
+
+          .widget-list-item {
+            padding: 0.75rem !important;
+          }
+
+          .widget-item-title {
+            font-size: 0.875rem !important;
+          }
+
+          .widget-item-meta {
+            font-size: 0.75rem !important;
           }
         }
       }
@@ -1278,210 +1656,106 @@ export default function StudentDashboard() {
               </div>
 
               {/* Statistics Cards */}
-              <div className="dashboard-stats-grid" style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: '1.5rem',
-                marginTop: '2rem',
-                marginBottom: '2rem'
-              }}>
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  borderRadius: '12px',
-                  padding: '1.5rem',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}>
-                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#D92A63', marginBottom: '0.5rem' }}>
+              <div className="dashboard-stats-grid">
+                <div className="stat-card">
+                  <div className="stat-value" style={{ color: '#D92A63' }}>
                     {enrollments.length}
                   </div>
-                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                  <div className="stat-label">
                     Enrolled Classes
                   </div>
                 </div>
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  borderRadius: '12px',
-                  padding: '1.5rem',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}>
-                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#FF654B', marginBottom: '0.5rem' }}>
+                <div className="stat-card">
+                  <div className="stat-value" style={{ color: '#FF654B' }}>
                     {upcomingSessions.length}
                   </div>
-                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                  <div className="stat-label">
                     Upcoming Sessions
                   </div>
                 </div>
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  borderRadius: '12px',
-                  padding: '1.5rem',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}>
-                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#4CAF50', marginBottom: '0.5rem' }}>
+                <div className="stat-card">
+                  <div className="stat-value" style={{ color: '#4CAF50' }}>
                     {upcomingSessions.filter(s => isClassLive(s.sessionDate, s.sessionTime) || s.status === 'live').length}
                   </div>
-                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                  <div className="stat-label">
                     Live Now
                   </div>
                 </div>
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  borderRadius: '12px',
-                  padding: '1.5rem',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}>
-                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#2196F3', marginBottom: '0.5rem' }}>
+                <div className="stat-card">
+                  <div className="stat-value" style={{ color: '#2196F3' }}>
                     {approvedClasses.length}
                   </div>
-                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                  <div className="stat-label">
                     Available Classes
                   </div>
                 </div>
               </div>
 
               {/* Quick Actions */}
-              <div style={{
-                display: 'flex',
-                gap: '1rem',
-                marginBottom: '2rem',
-                flexWrap: 'wrap'
-              }}>
+              <div className="dashboard-quick-actions">
                 <a
                   href="#"
                   onClick={(e) => handleNavClick(e, 'my-enrollments')}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    textDecoration: 'none',
-                    fontWeight: '500',
-                    fontSize: '0.875rem',
-                    transition: 'opacity 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                  className="quick-action-button primary"
                 >
                   View My Enrollments
                 </a>
                 <a
                   href="#"
                   onClick={(e) => handleNavClick(e, 'browse-classes')}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    textDecoration: 'none',
-                    fontWeight: '500',
-                    fontSize: '0.875rem',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                  className="quick-action-button"
                 >
                   Browse All Classes
                 </a>
                 <a
                   href="#"
                   onClick={(e) => handleNavClick(e, 'upcoming-sessions')}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    textDecoration: 'none',
-                    fontWeight: '500',
-                    fontSize: '0.875rem',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                  className="quick-action-button"
                 >
                   View Upcoming Sessions
                 </a>
               </div>
 
               {/* Two Column Layout */}
-              <div className="dashboard-two-col" style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '2rem',
-                marginBottom: '2rem'
-              }}>
+              <div className="dashboard-widgets-grid">
                 {/* Upcoming Sessions Widget */}
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  borderRadius: '12px',
-                  padding: '1.5rem',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}>
+                <div className="widget-card">
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    marginBottom: '1.5rem'
+                    marginBottom: '1rem'
                   }}>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#fff', margin: 0 }}>
-                      Upcoming Sessions
-                    </h3>
+                    <h3 className="widget-title">Next Upcoming Sessions</h3>
                     <a
                       href="#"
                       onClick={(e) => handleNavClick(e, 'upcoming-sessions')}
-                      style={{
-                        color: '#D92A63',
-                        textDecoration: 'none',
-                        fontSize: '0.875rem',
-                        fontWeight: '500'
-                      }}
+                      className="widget-view-all"
                     >
                       View All →
                     </a>
                   </div>
                   {upcomingSessions.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="widget-list">
                       {upcomingSessions.slice(0, 3).map((session) => {
                         const isLiveFromStatus = session.status === 'live';
                         const isLive = isLiveFromStatus || isClassLive(session.sessionDate, session.sessionTime);
                         return (
-                          <div key={session.id} style={{
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            borderRadius: '8px',
-                            padding: '1rem',
-                            border: '1px solid rgba(255, 255, 255, 0.1)'
-                          }}>
-                            <div style={{
-                              fontSize: '0.9375rem',
-                              fontWeight: '600',
-                              color: '#fff',
-                              marginBottom: '0.5rem'
-                            }}>
-                              {session.className}
-                            </div>
-                            <div style={{
-                              fontSize: '0.75rem',
-                              color: 'rgba(255, 255, 255, 0.7)',
-                              marginBottom: '0.5rem'
-                            }}>
-                              📅 {formatDate(session.sessionDate)} at {formatTime(session.sessionTime)}
+                          <div key={session.id} className="widget-list-item">
+                            <div>
+                              <div className="widget-item-title">
+                                {session.className}
+                              </div>
+                              <div className="widget-item-meta">
+                                <strong>Date:</strong> {formatDate(session.sessionDate)} at {formatTime(session.sessionTime)}
+                              </div>
                             </div>
                             {isLive && session.meetingLink && (
                               <a
                                 href={session.meetingLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style={{
-                                  display: 'inline-block',
-                                  padding: '0.5rem 1rem',
-                                  background: '#D92A63',
-                                  borderRadius: '6px',
-                                  color: '#fff',
-                                  textDecoration: 'none',
-                                  fontSize: '0.75rem',
-                                  fontWeight: '500'
-                                }}
+                                className="widget-button-join"
                               >
                                 Join Now
                               </a>
@@ -1491,43 +1765,36 @@ export default function StudentDashboard() {
                       })}
                     </div>
                   ) : (
-                    <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
-                      No upcoming sessions
-                    </div>
+                    <p className="widget-empty-text">No upcoming sessions.</p>
                   )}
+                  <a
+                    href="#"
+                    onClick={(e) => handleNavClick(e, 'upcoming-sessions')}
+                    className="widget-view-all"
+                  >
+                    View All Upcoming Sessions →
+                  </a>
                 </div>
 
                 {/* Recent Enrollments Widget */}
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  borderRadius: '12px',
-                  padding: '1.5rem',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}>
+                <div className="widget-card">
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    marginBottom: '1.5rem'
+                    marginBottom: '1rem'
                   }}>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#fff', margin: 0 }}>
-                      Recent Enrollments
-                    </h3>
+                    <h3 className="widget-title">Recent Enrollments</h3>
                     <a
                       href="#"
                       onClick={(e) => handleNavClick(e, 'my-enrollments')}
-                      style={{
-                        color: '#D92A63',
-                        textDecoration: 'none',
-                        fontSize: '0.875rem',
-                        fontWeight: '500'
-                      }}
+                      className="widget-view-all"
                     >
                       View All →
                     </a>
                   </div>
                   {enrollments.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="widget-list">
                       {enrollments.slice(0, 3).map((enrollment) => {
                         const classData = enrollmentClasses[enrollment.classId] || {};
                         const className = enrollment.className || classData.title || 'Class';
@@ -1537,44 +1804,31 @@ export default function StudentDashboard() {
                           <Link
                             key={enrollment.id}
                             href={`/product/${enrollment.classId}`}
-                            style={{
-                              background: 'rgba(255, 255, 255, 0.05)',
-                              borderRadius: '8px',
-                              padding: '1rem',
-                              border: '1px solid rgba(255, 255, 255, 0.1)',
-                              textDecoration: 'none',
-                              color: 'inherit',
-                              display: 'block',
-                              transition: 'background 0.2s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+                            className="widget-list-item clickable"
                           >
-                            <div style={{
-                              fontSize: '0.9375rem',
-                              fontWeight: '600',
-                              color: '#fff',
-                              marginBottom: '0.5rem'
-                            }}>
-                              {className}
-                            </div>
-                            {enrollmentDate && (
-                              <div style={{
-                                fontSize: '0.75rem',
-                                color: 'rgba(255, 255, 255, 0.7)'
-                              }}>
-                                Enrolled: {formatDate(enrollmentDate)}
+                            <div>
+                              <div className="widget-item-title">
+                                {className}
                               </div>
-                            )}
+                              <div className="widget-item-meta">
+                                Enrolled: {enrollmentDate ? formatDate(enrollmentDate) : 'N/A'}
+                              </div>
+                            </div>
+                            <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}>→</span>
                           </Link>
                         );
                       })}
                     </div>
                   ) : (
-                    <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
-                      No enrollments yet. <a href="#" onClick={(e) => handleNavClick(e, 'browse-classes')} style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse classes</a> to get started!
-                    </div>
+                    <p className="widget-empty-text">No enrollments yet. <a href="#" onClick={(e) => handleNavClick(e, 'browse-classes')} style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse classes</a> to get started!</p>
                   )}
+                  <a
+                    href="#"
+                    onClick={(e) => handleNavClick(e, 'my-enrollments')}
+                    className="widget-view-all"
+                  >
+                    View All Enrollments →
+                  </a>
                 </div>
               </div>
 

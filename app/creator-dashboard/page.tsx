@@ -601,6 +601,29 @@ export default function CreatorDashboard() {
           transition: all 0.3s;
         }
 
+        .hamburger-line.top.open {
+          transform: rotate(45deg) translate(8px, 8px);
+        }
+
+        .hamburger-line.mid.open {
+          opacity: 0;
+        }
+
+        .hamburger-line.bot.open {
+          transform: rotate(-45deg) translate(7px, -7px);
+        }
+
+        .creator-nav-overlay {
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 999;
+        }
+
         /* Main Content */
         .main-content {
           margin-left: 280px;
@@ -1576,6 +1599,14 @@ export default function CreatorDashboard() {
             display: block;
           }
 
+          .hamburger {
+            display: flex;
+          }
+
+          .main-content {
+            padding-top: 80px;
+          }
+
           .creator-course-grid {
             grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
           }
@@ -1590,6 +1621,289 @@ export default function CreatorDashboard() {
             flex-direction: column;
             align-items: flex-start;
             gap: 1rem;
+          }
+
+          .main-content {
+            padding: 1rem;
+            padding-top: 80px;
+          }
+
+          .creator-content-wrapper {
+            padding: 1rem;
+          }
+
+          .creator-form-container {
+            padding: 1.5rem;
+          }
+
+          .creator-welcome-section h2 {
+            font-size: 1.25rem;
+          }
+
+          .creator-section-title {
+            font-size: 1.25rem;
+          }
+
+          .creator-course-image-wrap {
+            height: 180px;
+          }
+
+          .creator-course-info {
+            padding: 1rem;
+          }
+
+          .creator-course-title {
+            font-size: 1rem;
+          }
+
+          .creator-course-meta {
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .div-block-14.payment-info.grid {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+
+          .creator-payments-list-item {
+            padding: 0.75rem;
+          }
+
+          .creator-pay-info-name {
+            font-size: 0.8125rem;
+          }
+
+          .text-block-31 {
+            font-size: 0.75rem;
+          }
+
+          .button-dark.button-new-style {
+            padding: 5px 12px;
+            font-size: 0.6875rem;
+          }
+
+          .creator-details-card {
+            padding: 1rem;
+          }
+
+          .creator-students-card {
+            padding: 1rem;
+          }
+
+          .creator-live-students {
+            padding: 1rem;
+          }
+
+          .creator-live-video {
+            padding: 1rem;
+          }
+
+          .creator-profile {
+            padding: 1.5rem;
+          }
+
+          .creator-form-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .creator-radio-group {
+            flex-direction: column;
+            gap: 1rem !important;
+            padding: 1rem;
+          }
+
+          .creator-pill-wrap {
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 0.75rem !important;
+            padding: 1rem;
+          }
+
+          .creator-submit-btn {
+            width: 100%;
+            max-width: 100%;
+            padding: 14px 24px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .sidebar {
+            width: 100%;
+            max-width: 320px;
+          }
+
+          .sidebar-logo img {
+            width: 120px;
+          }
+
+          .hamburger {
+            top: 0.75rem;
+            left: 0.75rem;
+            padding: 0.375rem;
+          }
+
+          .hamburger-line {
+            width: 22px;
+            height: 2.5px;
+          }
+
+          .creator-welcome-section h2 {
+            font-size: 1.125rem;
+          }
+
+          .creator-section-title {
+            font-size: 1.125rem;
+          }
+
+          .main-content {
+            padding: 0.75rem;
+          }
+
+          .creator-content-wrapper {
+            padding: 0.75rem;
+          }
+
+          .creator-form-container {
+            padding: 1rem;
+          }
+
+          .creator-course-image-wrap {
+            height: 160px;
+          }
+
+          .creator-course-teacher-wrap {
+            top: 0.5rem;
+            left: 0.5rem;
+            padding: 0.375rem 0.75rem;
+          }
+
+          .creator-course-instructor-img {
+            width: 24px;
+            height: 24px;
+          }
+
+          .creator-course-info {
+            padding: 0.875rem;
+          }
+
+          .creator-course-title {
+            font-size: 0.9375rem;
+            margin-bottom: 0.5rem;
+          }
+
+          .creator-course-meta-item {
+            font-size: 0.75rem;
+          }
+
+          .creator-course-price {
+            font-size: 1rem;
+          }
+
+          .creator-pill-wrap {
+            grid-template-columns: 1fr;
+            gap: 0.5rem !important;
+          }
+
+          .creator-pill-label {
+            padding: 0.625rem 0.875rem;
+            font-size: 0.8125rem;
+          }
+
+          .creator-form-heading {
+            font-size: 1.125rem;
+          }
+
+          .creator-field-label {
+            font-size: 0.8125rem;
+          }
+
+          .creator-form-input,
+          .creator-textarea,
+          .creator-select {
+            padding: 10px 14px;
+            font-size: 0.875rem;
+          }
+
+          .thumbnail {
+            width: 40px;
+            height: 40px;
+          }
+
+          .creator-pay-info-name {
+            font-size: 0.75rem;
+          }
+
+          .text-block-31 {
+            font-size: 0.6875rem;
+          }
+
+          .button-dark.button-new-style {
+            padding: 4px 10px;
+            font-size: 0.625rem;
+          }
+
+          .creator-details-card {
+            padding: 0.875rem;
+          }
+
+          .creator-details-title {
+            font-size: 1rem;
+          }
+
+          .creator-details-description {
+            font-size: 0.8125rem;
+          }
+
+          .creator-chart-value {
+            font-size: 1.25rem;
+          }
+
+          .creator-chart-label {
+            font-size: 0.6875rem;
+          }
+
+          .creator-students-title {
+            font-size: 0.9375rem;
+          }
+
+          .creator-table-col {
+            font-size: 0.6875rem;
+          }
+
+          .creator-table-row .creator-table-col {
+            font-size: 0.6875rem;
+          }
+
+          .creator-info-label,
+          .creator-info-value {
+            font-size: 0.6875rem;
+          }
+
+          .creator-live-students {
+            padding: 0.875rem;
+          }
+
+          .creator-live-video {
+            padding: 0.875rem;
+          }
+
+          .creator-student-item {
+            font-size: 0.8125rem;
+            padding: 0.5rem 0;
+          }
+
+          .creator-profile {
+            padding: 1rem;
+          }
+
+          .creator-submit-btn {
+            padding: 12px 20px;
+            font-size: 1rem;
+          }
+
+          .creator-message {
+            padding: 0.875rem 1rem;
+            font-size: 0.875rem;
           }
         }
       `}</style>

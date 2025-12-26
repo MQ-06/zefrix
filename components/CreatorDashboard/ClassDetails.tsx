@@ -161,7 +161,10 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
 
       const sessionsList: any[] = [];
       querySnapshot.forEach((doc: any) => {
-        sessionsList.push({ id: doc.id, ...doc.data() });
+        const sessionData = { id: doc.id, ...doc.data() };
+        sessionsList.push(sessionData);
+        // Debug: Log session data
+        console.log(`📅 Session ${doc.id} - status: ${sessionData.status}, attendance:`, sessionData.attendance);
       });
 
       // Sort by session number or date
@@ -174,9 +177,10 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
         return aDate - bDate;
       });
 
+      console.log(`✅ Fetched ${sessionsList.length} sessions for class ${classId}`);
       setSessions(sessionsList);
     } catch (error) {
-      console.error('Error fetching sessions:', error);
+      console.error('❌ Error fetching sessions:', error);
     }
   };
 
@@ -196,10 +200,18 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
         enrollmentsList.push({ id: doc.id, ...data });
         // Debug: Log attendance data
         if (data.sessionAttendance) {
-          console.log(`Enrollment ${doc.id} - sessionAttendance:`, data.sessionAttendance);
+          const sessionKeys = Object.keys(data.sessionAttendance);
+          console.log(`👤 Enrollment ${doc.id} (${data.studentName}) - sessionAttendance keys:`, sessionKeys);
+          sessionKeys.forEach(sessionId => {
+            const att = data.sessionAttendance[sessionId];
+            console.log(`  └─ Session ${sessionId}: attended=${att.attended}, sessionNumber=${att.sessionNumber}`);
+          });
+        } else {
+          console.log(`👤 Enrollment ${doc.id} (${data.studentName}) - NO sessionAttendance data`);
         }
       });
 
+      console.log(`✅ Fetched ${enrollmentsList.length} enrollments for class ${classId}`);
       setEnrollments(enrollmentsList);
     } catch (error) {
       console.error('Error fetching enrollments:', error);
@@ -244,6 +256,7 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
   let totalAttendanceRate = 0;
   let studentsWithSessions = 0;
   
+  console.log(`📊 Calculating analytics for ${enrollments.length} enrollments...`);
   enrollments.forEach(e => {
     const sessionAttendance = e.sessionAttendance || {};
     const sessions = Object.keys(sessionAttendance).length;
@@ -255,11 +268,13 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
       }
       const rate = (attended / sessions) * 100;
       totalAttendanceRate += rate;
+      console.log(`  └─ Student ${e.studentName}: ${attended}/${sessions} sessions attended (${rate.toFixed(1)}%)`);
     }
   });
   
   // Calculate average attendance rate only for students who have session data
   const averageAttendanceRate = studentsWithSessions > 0 ? totalAttendanceRate / studentsWithSessions : 0;
+  console.log(`📊 Analytics Result: totalAttended=${totalAttended}, studentsWithSessions=${studentsWithSessions}, averageRate=${averageAttendanceRate.toFixed(1)}%`);
   
   const averageRating = enrollments.filter(e => e.rating).length > 0
     ? (enrollments.reduce((sum, e) => sum + (e.rating || 0), 0) / enrollments.filter(e => e.rating).length).toFixed(1)

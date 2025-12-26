@@ -66,10 +66,18 @@ export default function CreatorSidebar({ activeSection, onSectionChange, onLogou
 
       {/* Mobile Hamburger */}
       <div className="hamburger" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-        <div className="hamburger-line"></div>
-        <div className="hamburger-line"></div>
-        <div className="hamburger-line"></div>
+        <div className={`hamburger-line ${isMenuOpen ? 'top open' : ''}`}></div>
+        <div className={`hamburger-line ${isMenuOpen ? 'mid open' : ''}`}></div>
+        <div className={`hamburger-line ${isMenuOpen ? 'bot open' : ''}`}></div>
       </div>
+
+      {/* Overlay to close menu on mobile */}
+      {isMenuOpen && (
+        <div 
+          className="creator-nav-overlay" 
+          onClick={() => setIsMenuOpen(false)}
+        ></div>
+      )}
     </>
   );
 }

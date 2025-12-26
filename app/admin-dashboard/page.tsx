@@ -3436,6 +3436,12 @@ export default function AdminDashboard() {
           gap: 5px;
           cursor: pointer;
           padding: 0.5rem;
+          position: fixed;
+          top: 1rem;
+          left: 1rem;
+          z-index: 1001;
+          background: rgba(0, 0, 0, 0.5);
+          border-radius: 8px;
         }
 
         .hamburger-line {
@@ -3444,6 +3450,29 @@ export default function AdminDashboard() {
           background: #fff;
           border-radius: 3px;
           transition: all 0.3s;
+        }
+
+        .hamburger-line.top.open {
+          transform: rotate(45deg) translate(8px, 8px);
+        }
+
+        .hamburger-line.mid.open {
+          opacity: 0;
+        }
+
+        .hamburger-line.bot.open {
+          transform: rotate(-45deg) translate(7px, -7px);
+        }
+
+        .admin-nav-overlay {
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 999;
         }
 
         @media (max-width: 991px) {
@@ -3458,27 +3487,136 @@ export default function AdminDashboard() {
 
           .main-content {
             margin-left: 0;
+            padding-top: 80px;
           }
 
           .hamburger {
             display: flex;
           }
 
+          .admin-nav-overlay {
+            display: block;
+          }
+
+          .dashboard-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1.5rem;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.5rem;
+          }
+
+          .section-title {
+            font-size: 1.5rem;
+          }
+
           .stats-grid {
             grid-template-columns: 1fr;
+            gap: 1rem;
           }
 
           .charts-section {
             grid-template-columns: 1fr;
+            gap: 1rem;
           }
 
           .pie-chart-container {
             flex-direction: column;
             align-items: center;
           }
+
+          .modal-overlay {
+            padding: 1rem;
+          }
+
+          .modal-content {
+            max-width: 95%;
+          }
+
+          .modal-stats-grid {
+            grid-template-columns: 1fr;
+          }
         }
 
         @media (max-width: 767px) {
+          .main-content {
+            padding: 1rem;
+            padding-top: 80px;
+          }
+
+          .dashboard-header {
+            margin-bottom: 2rem;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.25rem;
+          }
+
+          .welcome-section p {
+            font-size: 0.875rem;
+          }
+
+          .section-title {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+          }
+
+          .button-dark,
+          .button-2 {
+            padding: 0.625rem 1.25rem;
+            font-size: 0.875rem;
+          }
+
+          .stats-grid {
+            gap: 0.75rem;
+          }
+
+          .stat-card-with-chart {
+            padding: 1rem;
+          }
+
+          .stat-number {
+            font-size: 1.5rem;
+          }
+
+          .stat-number.revenue-number {
+            font-size: 1.25rem;
+          }
+
+          .charts-section {
+            gap: 0.75rem;
+          }
+
+          .chart-card {
+            padding: 1rem;
+          }
+
+          .chart-title {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+          }
+
+          .pie-chart {
+            width: 150px;
+            height: 150px;
+          }
+
+          .pie-center {
+            width: 80px;
+            height: 80px;
+          }
+
+          .pie-center-number {
+            font-size: 1.25rem;
+          }
+
+          .bar-label {
+            width: 80px;
+            font-size: 0.8125rem;
+          }
+
           .creator-table-wrapper {
             overflow-x: auto;
           }
@@ -3487,12 +3625,592 @@ export default function AdminDashboard() {
             min-width: 800px;
           }
 
+          .creator-table th,
+          .creator-table-row td {
+            padding: 0.75rem 0.5rem;
+            font-size: 0.8125rem;
+          }
+
+          .creator-avatar-small {
+            width: 32px;
+            height: 32px;
+          }
+
+          .creator-name-row {
+            font-size: 0.875rem;
+          }
+
+          .creator-email-row {
+            font-size: 0.75rem;
+          }
+
+          .creator-view-btn {
+            padding: 0.375rem 0.625rem;
+            font-size: 0.75rem;
+          }
+
           .grid-instructor {
             grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+          }
+
+          .instructor-item {
+            padding: 1rem;
+          }
+
+          .instructor-image-wrap {
+            width: 100px;
+            height: 100px;
+          }
+
+          .heading-h6 {
+            font-size: 1.125rem;
           }
 
           .pending-grid {
             grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+
+          .class-card-image-wrapper {
+            height: 160px;
+          }
+
+          .class-card-body {
+            padding: 0.875rem;
+            gap: 0.75rem;
+          }
+
+          .class-card-title {
+            font-size: 0.9375rem;
+          }
+
+          .class-card-subtitle {
+            font-size: 0.8125rem;
+          }
+
+          .class-card-info-row {
+            gap: 0.75rem;
+          }
+
+          .class-info-item {
+            font-size: 0.75rem;
+          }
+
+          .class-card-details {
+            padding: 0.625rem;
+          }
+
+          .class-detail-text {
+            font-size: 0.75rem;
+          }
+
+          .class-price {
+            font-size: 1rem;
+          }
+
+          .class-card-creator {
+            padding: 0.625rem;
+          }
+
+          .creator-avatar-mini {
+            width: 32px;
+            height: 32px;
+            font-size: 0.8125rem;
+          }
+
+          .creator-name-mini {
+            font-size: 0.8125rem;
+          }
+
+          .creator-email-mini {
+            font-size: 0.6875rem;
+          }
+
+          .class-card-actions {
+            gap: 0.5rem;
+          }
+
+          .class-action-btn {
+            padding: 0.625rem;
+            font-size: 0.8125rem;
+          }
+
+          .enrollments-summary {
+            gap: 0.75rem;
+          }
+
+          .summary-item {
+            padding: 0.75rem 1rem;
+          }
+
+          .summary-value {
+            font-size: 1.25rem;
+          }
+
+          .enrollments-table-wrapper {
+            margin-top: 1.5rem;
+          }
+
+          .enrollments-table th,
+          .enrollment-row td {
+            padding: 0.75rem 0.5rem;
+            font-size: 0.8125rem;
+          }
+
+          .student-avatar-small {
+            width: 32px;
+            height: 32px;
+            font-size: 0.8125rem;
+          }
+
+          .student-name {
+            font-size: 0.8125rem;
+          }
+
+          .student-email {
+            font-size: 0.75rem;
+          }
+
+          .enrollment-class-cell,
+          .enrollment-price-cell {
+            font-size: 0.8125rem;
+          }
+
+          .modal-overlay {
+            padding: 0.5rem;
+          }
+
+          .modal-content {
+            max-width: 100%;
+            max-height: 95vh;
+          }
+
+          .modal-header {
+            padding: 1rem;
+          }
+
+          .modal-title {
+            font-size: 1.25rem;
+          }
+
+          .modal-avatar-large {
+            width: 50px;
+            height: 50px;
+          }
+
+          .modal-initial-large {
+            font-size: 1.25rem;
+          }
+
+          .modal-body {
+            padding: 1rem;
+          }
+
+          .modal-section-title {
+            font-size: 1rem;
+          }
+
+          .modal-stats-grid {
+            gap: 0.75rem;
+          }
+
+          .modal-stat-card {
+            padding: 0.75rem;
+          }
+
+          .modal-stat-number {
+            font-size: 1.25rem;
+          }
+
+          .modal-metric-item {
+            padding: 0.75rem;
+          }
+
+          .modal-metric-label {
+            font-size: 0.8125rem;
+          }
+
+          .modal-metric-value {
+            font-size: 0.875rem;
+          }
+
+          .modal-metric-value.earnings {
+            font-size: 1rem;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .sidebar {
+            width: 100%;
+            max-width: 320px;
+          }
+
+          .sidebar-logo img {
+            width: 120px;
+          }
+
+          .hamburger {
+            top: 0.75rem;
+            left: 0.75rem;
+            padding: 0.375rem;
+          }
+
+          .hamburger-line {
+            width: 22px;
+            height: 2.5px;
+          }
+
+          .main-content {
+            padding: 0.75rem;
+            padding-top: 70px;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.125rem;
+          }
+
+          .welcome-section p {
+            font-size: 0.8125rem;
+          }
+
+          .section-title {
+            font-size: 1.125rem;
+            margin-bottom: 1rem;
+          }
+
+          .button-dark,
+          .button-2 {
+            padding: 0.5rem 1rem;
+            font-size: 0.8125rem;
+            width: 100%;
+          }
+
+          .stats-grid {
+            gap: 0.5rem;
+          }
+
+          .stat-card-with-chart {
+            padding: 0.875rem;
+          }
+
+          .stat-card-header h2 {
+            font-size: 0.8125rem;
+          }
+
+          .stat-number {
+            font-size: 1.25rem;
+          }
+
+          .stat-number.revenue-number {
+            font-size: 1.125rem;
+          }
+
+          .chart-card {
+            padding: 0.875rem;
+          }
+
+          .chart-title {
+            font-size: 0.9375rem;
+            margin-bottom: 0.75rem;
+          }
+
+          .pie-chart {
+            width: 120px;
+            height: 120px;
+          }
+
+          .pie-center {
+            width: 60px;
+            height: 60px;
+          }
+
+          .pie-center-text {
+            font-size: 0.6875rem;
+          }
+
+          .pie-center-number {
+            font-size: 1rem;
+          }
+
+          .legend-item {
+            font-size: 0.8125rem;
+          }
+
+          .bar-label {
+            width: 70px;
+            font-size: 0.75rem;
+          }
+
+          .bar-wrapper {
+            height: 32px;
+          }
+
+          .creator-table th,
+          .creator-table-row td {
+            padding: 0.5rem 0.375rem;
+            font-size: 0.75rem;
+          }
+
+          .creator-avatar-small {
+            width: 28px;
+            height: 28px;
+          }
+
+          .creator-initial-small {
+            font-size: 0.875rem;
+          }
+
+          .creator-name-row {
+            font-size: 0.8125rem;
+          }
+
+          .creator-email-row {
+            font-size: 0.6875rem;
+          }
+
+          .stat-number {
+            font-size: 0.8125rem;
+          }
+
+          .stat-breakdown {
+            font-size: 0.6875rem;
+          }
+
+          .creator-view-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.6875rem;
+          }
+
+          .grid-instructor {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+
+          .instructor-item {
+            padding: 0.875rem;
+          }
+
+          .instructor-image-wrap {
+            width: 80px;
+            height: 80px;
+          }
+
+          .heading-h6 {
+            font-size: 1rem;
+          }
+
+          .text-block-10 {
+            font-size: 0.8125rem;
+          }
+
+          .pending-grid {
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+          }
+
+          .class-card-image-wrapper {
+            height: 140px;
+          }
+
+          .class-card-status-badge {
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.3rem 0.625rem;
+            font-size: 0.6875rem;
+          }
+
+          .class-card-body {
+            padding: 0.75rem;
+            gap: 0.625rem;
+          }
+
+          .class-card-title {
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+          }
+
+          .class-card-subtitle {
+            font-size: 0.75rem;
+          }
+
+          .class-card-info-row {
+            gap: 0.5rem;
+          }
+
+          .class-info-item {
+            font-size: 0.6875rem;
+          }
+
+          .class-card-details {
+            padding: 0.5rem;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+          }
+
+          .class-detail-item {
+            width: 100%;
+          }
+
+          .class-detail-text {
+            font-size: 0.6875rem;
+          }
+
+          .class-price {
+            font-size: 0.9375rem;
+          }
+
+          .class-card-creator {
+            padding: 0.5rem;
+          }
+
+          .creator-avatar-mini {
+            width: 28px;
+            height: 28px;
+            font-size: 0.75rem;
+          }
+
+          .creator-name-mini {
+            font-size: 0.75rem;
+          }
+
+          .creator-email-mini {
+            font-size: 0.625rem;
+          }
+
+          .class-card-actions {
+            gap: 0.5rem;
+          }
+
+          .class-action-btn {
+            padding: 0.5rem;
+            font-size: 0.75rem;
+          }
+
+          .enrollments-summary {
+            gap: 0.5rem;
+          }
+
+          .summary-item {
+            padding: 0.625rem 0.875rem;
+          }
+
+          .summary-icon {
+            width: 20px;
+            height: 20px;
+          }
+
+          .summary-value {
+            font-size: 1.125rem;
+          }
+
+          .summary-label {
+            font-size: 0.6875rem;
+          }
+
+          .enrollments-table th,
+          .enrollment-row td {
+            padding: 0.5rem 0.375rem;
+            font-size: 0.75rem;
+          }
+
+          .student-avatar-small {
+            width: 28px;
+            height: 28px;
+            font-size: 0.75rem;
+          }
+
+          .student-name {
+            font-size: 0.75rem;
+          }
+
+          .student-email {
+            font-size: 0.6875rem;
+          }
+
+          .enrollment-class-cell,
+          .enrollment-price-cell {
+            font-size: 0.75rem;
+          }
+
+          .modal-header {
+            padding: 0.875rem;
+          }
+
+          .modal-title {
+            font-size: 1.125rem;
+          }
+
+          .modal-subtitle {
+            font-size: 0.8125rem;
+          }
+
+          .modal-avatar-large {
+            width: 40px;
+            height: 40px;
+          }
+
+          .modal-initial-large {
+            font-size: 1rem;
+          }
+
+          .modal-close-btn {
+            width: 32px;
+            height: 32px;
+          }
+
+          .modal-body {
+            padding: 0.875rem;
+          }
+
+          .modal-section {
+            margin-bottom: 1.5rem;
+          }
+
+          .modal-section-title {
+            font-size: 0.9375rem;
+            margin-bottom: 0.75rem;
+          }
+
+          .modal-info-label {
+            font-size: 0.6875rem;
+          }
+
+          .modal-info-value {
+            font-size: 0.8125rem;
+          }
+
+          .modal-stats-grid {
+            gap: 0.5rem;
+          }
+
+          .modal-stat-card {
+            padding: 0.625rem;
+          }
+
+          .modal-stat-number {
+            font-size: 1.125rem;
+          }
+
+          .modal-stat-label {
+            font-size: 0.6875rem;
+          }
+
+          .modal-metric-item {
+            padding: 0.625rem;
+          }
+
+          .modal-metric-label {
+            font-size: 0.75rem;
+          }
+
+          .modal-metric-value {
+            font-size: 0.8125rem;
+          }
+
+          .modal-metric-value.earnings {
+            font-size: 0.9375rem;
           }
         }
       `}</style>
@@ -3546,10 +4264,18 @@ export default function AdminDashboard() {
         <div className="main-content">
           {/* Mobile Hamburger */}
           <div className="hamburger" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-            <div className="hamburger-line"></div>
-            <div className="hamburger-line"></div>
-            <div className="hamburger-line"></div>
+            <div className={`hamburger-line ${isMenuOpen ? 'top open' : ''}`}></div>
+            <div className={`hamburger-line ${isMenuOpen ? 'mid open' : ''}`}></div>
+            <div className={`hamburger-line ${isMenuOpen ? 'bot open' : ''}`}></div>
           </div>
+
+          {/* Overlay to close menu on mobile */}
+          {isMenuOpen && (
+            <div 
+              className="admin-nav-overlay" 
+              onClick={() => setIsMenuOpen(false)}
+            ></div>
+          )}
 
           {renderCurrentPage()}
         </div>
