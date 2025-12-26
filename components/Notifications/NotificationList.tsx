@@ -193,6 +193,25 @@ export default function NotificationList({ userId, userRole }: NotificationListP
 
   return (
     <div style={{ padding: '2rem' }}>
+      {/* Info text for students */}
+      {userRole === 'student' && (
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.05)',
+          borderRadius: '12px',
+          padding: '1rem 1.5rem',
+          marginBottom: '2rem',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+        }}>
+          <p style={{ 
+            color: 'rgba(255, 255, 255, 0.8)', 
+            fontSize: '0.9375rem',
+            lineHeight: '1.6',
+            margin: 0,
+          }}>
+            Stay updated with your class enrollments, updates, and important reminders.
+          </p>
+        </div>
+      )}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -298,7 +317,7 @@ export default function NotificationList({ userId, userRole }: NotificationListP
           <p style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
             {filter === 'unread' 
               ? 'You\'re all caught up!'
-              : 'You\'ll see notifications about enrollments, class updates, and more here.'}
+              : 'Stay updated with your class enrollments, updates, and important reminders.'}
           </p>
         </div>
       ) : (

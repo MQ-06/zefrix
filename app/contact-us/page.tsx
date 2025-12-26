@@ -139,6 +139,32 @@ export default function ContactUsPage() {
 
       console.log('✅ Contact message saved to Firestore with ID:', docRef.id);
 
+      // Create admin notification (non-blocking)
+      try {
+        await fetch('/api/notifications/contact-message', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: formData.name.trim(),
+            email: formData.email.trim(),
+            subject: formData.subject.trim(),
+            messageId: docRef.id,
+          }),
+        }).then(response => {
+          if (response.ok) {
+            console.log('✅ Admin notification created for contact message');
+          } else {
+            console.log('⚠️ Failed to create admin notification (non-blocking)');
+          }
+        }).catch(err => {
+          console.log('Notification creation failed (non-blocking):', err);
+        });
+      } catch (notifError) {
+        console.log('Notification error (non-blocking):', notifError);
+      }
+
       showSuccess('Thank you! Your message has been sent successfully. We\'ll get back to you soon!');
       setSubmitMessage({
         type: 'success',

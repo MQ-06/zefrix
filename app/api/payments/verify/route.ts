@@ -86,8 +86,10 @@ export async function POST(request: NextRequest) {
         }
 
         // Send enrollment confirmation emails (non-blocking)
+        console.log(`📧 Sending enrollment emails for ${items.length} classes to student: ${studentId} (${studentEmail})`);
         const emailPromises = items.map(async (item: any) => {
             try {
+                console.log(`📝 Processing enrollment email for class: ${item.id} (${item.title}), studentId: ${studentId}`);
                 await sendEnrollmentConfirmationEmail({
                     studentName,
                     studentEmail,
@@ -98,8 +100,9 @@ export async function POST(request: NextRequest) {
                     orderId: razorpay_order_id,
                     amount: item.price,
                 });
+                console.log(`✅ Enrollment email and notification processed for class: ${item.id}`);
             } catch (emailError) {
-                console.error(`Error sending enrollment email for class ${item.id}:`, emailError);
+                console.error(`❌ Error sending enrollment email for class ${item.id}:`, emailError);
                 // Don't throw - email failure shouldn't block payment verification
             }
         });

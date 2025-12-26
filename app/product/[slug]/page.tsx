@@ -38,6 +38,7 @@ export default function ProductPage({ params }: PageProps) {
   const { showError } = useNotification();
   const router = useRouter();
   const [isInCart, setIsInCart] = useState(false);
+  const [isEnrolled, setIsEnrolled] = useState(false);
   const [relatedCourses, setRelatedCourses] = useState<any[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(true);
   const [creatorProfile, setCreatorProfile] = useState<any>(null);
@@ -156,6 +157,32 @@ export default function ProductPage({ params }: PageProps) {
       setIsInCart(cart.some((item) => item.id === course.id));
     }
   }, [cart, course]);
+
+  // Check if user is enrolled in this class
+  useEffect(() => {
+    const checkEnrollment = async () => {
+      if (!user || !course || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        setIsEnrolled(false);
+        return;
+      }
+
+      try {
+        const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+        const q = window.query(
+          enrollmentsRef,
+          window.where('studentId', '==', user.uid),
+          window.where('classId', '==', course.id)
+        );
+        const querySnapshot = await window.getDocs(q);
+        setIsEnrolled(!querySnapshot.empty);
+      } catch (error) {
+        console.error('Error checking enrollment:', error);
+        setIsEnrolled(false);
+      }
+    };
+
+    checkEnrollment();
+  }, [user, course]);
 
   // Fetch related courses from Firestore
   useEffect(() => {
@@ -689,21 +716,30 @@ export default function ProductPage({ params }: PageProps) {
                   )}
                 </div>
 
-                {/* Add to Cart Button */}
-                {isInCart ? (
-                  <Link
-                    href="/checkout"
-                    className="w-full px-8 py-4 rounded-lg text-white font-semibold transition-all duration-200 shadow-lg bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30 flex items-center justify-center"
-                  >
-                    View Cart & Checkout
-                  </Link>
-                ) : (
-                  <button
-                    onClick={handleAddToCart}
-                    className="w-full px-8 py-4 rounded-lg text-white font-semibold transition-opacity duration-200 shadow-lg bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30"
-                  >
-                    Add to Cart
-                  </button>
+                {/* Add to Cart Button - Hide if enrolled */}
+                {!isEnrolled && (
+                  <>
+                    {isInCart ? (
+                      <Link
+                        href="/checkout"
+                        className="w-full px-8 py-4 rounded-lg text-white font-semibold transition-all duration-200 shadow-lg bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30 flex items-center justify-center"
+                      >
+                        View Cart & Checkout
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={handleAddToCart}
+                        className="w-full px-8 py-4 rounded-lg text-white font-semibold transition-opacity duration-200 shadow-lg bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30"
+                      >
+                        Add to Cart
+                      </button>
+                    )}
+                  </>
+                )}
+                {isEnrolled && (
+                  <div className="w-full px-8 py-4 rounded-lg text-white font-semibold bg-green-600/20 border border-green-500/50 text-center">
+                    ✓ You're enrolled in this class
+                  </div>
                 )}
               </div>
             </div>

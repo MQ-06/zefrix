@@ -374,9 +374,36 @@ export default function CheckoutPage() {
                         status: 'active',
                     };
 
-                    await window.addDoc(enrollmentsRef, enrollmentData);
+                    const enrollmentDocRef = await window.addDoc(enrollmentsRef, enrollmentData);
                     enrollmentResults.push({ success: true, item });
                     console.log(`✅ Enrollment created for class: ${item.title}`);
+
+                    // Create creator notification (non-blocking)
+                    try {
+                      await fetch('/api/notifications/enrollment', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          classId: item.id,
+                          className: item.title,
+                          studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
+                          studentEmail: currentUser.email || '',
+                          enrollmentId: enrollmentDocRef.id,
+                        }),
+                      }).then(response => {
+                        if (response.ok) {
+                          console.log(`✅ Creator notification created for enrollment in class: ${item.title}`);
+                        } else {
+                          console.log(`⚠️ Failed to create creator notification for class: ${item.title} (non-blocking)`);
+                        }
+                      }).catch(err => {
+                        console.log(`Notification creation failed for class ${item.title} (non-blocking):`, err);
+                      });
+                    } catch (notifError) {
+                      console.log(`Notification error for class ${item.title} (non-blocking):`, notifError);
+                    }
                 } catch (error: any) {
                     console.error(`❌ Failed to create enrollment for ${item.title}:`, error);
                     enrollmentResults.push({ 

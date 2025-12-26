@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { markNotificationAsRead } from '@/lib/notifications';
 
 interface NotificationItemProps {
@@ -77,7 +76,7 @@ export default function NotificationItem({ notification, onUpdate }: Notificatio
     return '🔔';
   };
 
-  const content = (
+  return (
     <div
       className={`notification-item ${notification.isRead ? 'read' : 'unread'}`}
       onClick={!notification.isRead ? handleMarkAsRead : undefined}
@@ -142,18 +141,5 @@ export default function NotificationItem({ notification, onUpdate }: Notificatio
       )}
     </div>
   );
-
-  if (notification.link) {
-    return (
-      <Link 
-        href={notification.link} 
-        style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-      >
-        {content}
-      </Link>
-    );
-  }
-
-  return content;
 }
 

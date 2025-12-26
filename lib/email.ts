@@ -173,22 +173,31 @@ export async function sendEnrollmentConfirmationEmail(data: EnrollmentEmailData)
 
     // Create notification if studentId is provided
     if (studentId) {
-      await createNotification({
-        userId: studentId,
-        userRole: 'student',
-        type: 'enrollment_confirmed',
-        title: `Enrollment Confirmed: ${className}`,
-        message: `You have successfully enrolled in "${className}". Check your dashboard for session details.`,
-        link: `/product/${classId}`,
-        relatedId: classId,
-        metadata: {
-          className,
-          classId,
-          amount,
-          paymentId,
-          orderId,
-        },
-      });
+      console.log(`📝 Creating enrollment notification for student: ${studentId}, class: ${className}`);
+      try {
+        await createNotification({
+          userId: studentId,
+          userRole: 'student',
+          type: 'enrollment_confirmed',
+          title: `Enrollment Confirmed: ${className}`,
+          message: `You have successfully enrolled in "${className}". Check your dashboard for session details.`,
+          link: `/student-dashboard?view=my-enrollments`,
+          relatedId: classId,
+          metadata: {
+            className,
+            classId,
+            amount,
+            paymentId,
+            orderId,
+          },
+        });
+        console.log(`✅ Enrollment notification created successfully for student: ${studentId}`);
+      } catch (notifError) {
+        console.error('❌ Error creating enrollment notification:', notifError);
+        // Don't throw - notification failure shouldn't block email sending
+      }
+    } else {
+      console.warn('⚠️ No studentId provided, skipping enrollment notification creation');
     }
   } catch (error) {
     console.error('Error sending enrollment confirmation email:', error);

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useNotification } from '@/contexts/NotificationContext';
 import Link from 'next/link';
 import { courses } from '@/lib/data';
+import { categoryDetails } from '@/lib/categoriesData';
 import NotificationList from '@/components/Notifications/NotificationList';
 import NotificationBadge from '@/components/Notifications/NotificationBadge';
 
@@ -24,6 +25,10 @@ declare global {
     updateDoc: any;
     addDoc: any;
     Timestamp: any;
+    orderBy: any;
+    limit: any;
+    deleteDoc: any;
+    writeBatch: any;
   }
 }
 
@@ -49,6 +54,7 @@ export default function StudentDashboard() {
   const [activeView, setActiveView] = useState('dashboard');
   const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [enrollmentClasses, setEnrollmentClasses] = useState<Record<string, any>>({});
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [loadingEnrollments, setLoadingEnrollments] = useState(false);
 
@@ -85,7 +91,7 @@ export default function StudentDashboard() {
         firebaseAuthConfig.innerHTML = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -171,10 +177,14 @@ export default function StudentDashboard() {
   }, []);
 
 
-  // Fetch enrollments from Firestore
+  // Fetch enrollments from Firestore with real-time updates
   useEffect(() => {
-    const fetchEnrollments = async () => {
-      if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+    let unsubscribe: (() => void) | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    const setupListener = async () => {
+      if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot || !window.doc || !window.getDoc) {
+        retryTimeout = setTimeout(setupListener, 500);
         return;
       }
 
@@ -182,31 +192,55 @@ export default function StudentDashboard() {
       try {
         const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
         const q = window.query(enrollmentsRef, window.where('studentId', '==', user.uid));
-        const querySnapshot = await window.getDocs(q);
+        
+        unsubscribe = window.onSnapshot(q, async (snapshot: any) => {
+          const fetchedEnrollments: any[] = [];
+          snapshot.forEach((doc: any) => {
+            fetchedEnrollments.push({ id: doc.id, ...doc.data() });
+          });
 
-        const fetchedEnrollments: any[] = [];
-        querySnapshot.forEach((doc: any) => {
-          fetchedEnrollments.push({ id: doc.id, ...doc.data() });
+          // Sort by enrollment date (newest first)
+          fetchedEnrollments.sort((a, b) => {
+            const aTime = a.enrolledAt?.toMillis?.() || 0;
+            const bTime = b.enrolledAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+
+          // Fetch class data for each enrollment
+          const classesData: Record<string, any> = {};
+          const classPromises = fetchedEnrollments.map(async (enrollment) => {
+            try {
+              const classRef = window.doc(window.firebaseDb, 'classes', enrollment.classId);
+              const classSnap = await window.getDoc(classRef);
+              if (classSnap.exists()) {
+                classesData[enrollment.classId] = classSnap.data();
+              }
+            } catch (error) {
+              console.error(`Error fetching class ${enrollment.classId}:`, error);
+            }
+          });
+
+          await Promise.all(classPromises);
+
+          setEnrollments(fetchedEnrollments);
+          setEnrollmentClasses(classesData);
+          setLoadingEnrollments(false);
+        }, (error: any) => {
+          console.error('Error in enrollments listener:', error);
+          setLoadingEnrollments(false);
         });
-
-        // Sort by enrollment date (newest first)
-        fetchedEnrollments.sort((a, b) => {
-          const aTime = a.enrolledAt?.toMillis?.() || 0;
-          const bTime = b.enrolledAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-
-        setEnrollments(fetchedEnrollments);
       } catch (error) {
-        console.error('Error fetching enrollments:', error);
-      } finally {
+        console.error('Error setting up enrollments listener:', error);
         setLoadingEnrollments(false);
       }
     };
 
-    if (user) {
-      fetchEnrollments();
-    }
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [user]);
 
   // Load user profile data
@@ -481,7 +515,7 @@ export default function StudentDashboard() {
       setRating(0);
       setFeedback('');
       setSelectedClassForRating(null);
-      // Refresh enrollments
+      // Refresh enrollments (this will also refresh class data via the useEffect)
       if (user) {
         const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
         const q = window.query(enrollmentsRef, window.where('studentId', '==', user.uid));
@@ -490,7 +524,29 @@ export default function StudentDashboard() {
         querySnapshot.forEach((doc: any) => {
           fetchedEnrollments.push({ id: doc.id, ...doc.data() });
         });
+        fetchedEnrollments.sort((a, b) => {
+          const aTime = a.enrolledAt?.toMillis?.() || 0;
+          const bTime = b.enrolledAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        // Fetch class data for each enrollment
+        const classesData: Record<string, any> = {};
+        const classPromises = fetchedEnrollments.map(async (enrollment) => {
+          try {
+            const classRef = window.doc(window.firebaseDb, 'classes', enrollment.classId);
+            const classSnap = await window.getDoc(classRef);
+            if (classSnap.exists()) {
+              classesData[enrollment.classId] = classSnap.data();
+            }
+          } catch (error) {
+            console.error(`Error fetching class ${enrollment.classId}:`, error);
+          }
+        });
+        await Promise.all(classPromises);
+
         setEnrollments(fetchedEnrollments);
+        setEnrollmentClasses(classesData);
       }
     } catch (error) {
       console.error('Error submitting rating:', error);
@@ -1102,6 +1158,15 @@ export default function StudentDashboard() {
           font-size: 0.875rem;
           font-weight: 600;
         }
+
+        @media (max-width: 768px) {
+          .dashboard-stats-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .dashboard-two-col {
+            grid-template-columns: 1fr !important;
+          }
+        }
       }
   `;
 
@@ -1164,24 +1229,325 @@ export default function StudentDashboard() {
             <>
               {/* Dashboard Header */}
               <div className="dashboard-header">
-            <div className="welcome-section">
-              <h2>Welcome back, {user?.displayName || 'Student'}!</h2>
-              <p>Continue your learning journey</p>
-            </div>
-            <div className="user-summary">
-              <div className="user-avatar">
-                {user?.photoURL ? (
-                  <img src={user.photoURL} alt={user?.displayName || 'Student'} />
-                ) : (
-                  userInitial
-                )}
+                <div className="welcome-section">
+                  <h2>Welcome back, {user?.displayName || 'Student'}!</h2>
+                  <p>Continue your learning journey</p>
+                </div>
+                <div className="user-summary">
+                  <div className="user-avatar">
+                    {user?.photoURL ? (
+                      <img src={user.photoURL} alt={user?.displayName || 'Student'} />
+                    ) : (
+                      userInitial
+                    )}
+                  </div>
+                  <div className="user-meta">
+                    <div className="user-name">{user?.displayName || user?.email?.split('@')[0] || 'Student'}</div>
+                    <div className="user-email">{user?.email || 'Student account'}</div>
+                  </div>
+                </div>
               </div>
-              <div className="user-meta">
-                <div className="user-name">{user?.displayName || user?.email?.split('@')[0] || 'Student'}</div>
-                <div className="user-email">{user?.email || 'Student account'}</div>
+
+              {/* Statistics Cards */}
+              <div className="dashboard-stats-grid" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '1.5rem',
+                marginTop: '2rem',
+                marginBottom: '2rem'
+              }}>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#D92A63', marginBottom: '0.5rem' }}>
+                    {enrollments.length}
+                  </div>
+                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                    Enrolled Classes
+                  </div>
+                </div>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#FF654B', marginBottom: '0.5rem' }}>
+                    {upcomingSessions.length}
+                  </div>
+                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                    Upcoming Sessions
+                  </div>
+                </div>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#4CAF50', marginBottom: '0.5rem' }}>
+                    {upcomingSessions.filter(s => isClassLive(s.sessionDate, s.sessionTime) || s.status === 'live').length}
+                  </div>
+                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                    Live Now
+                  </div>
+                </div>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#2196F3', marginBottom: '0.5rem' }}>
+                    {approvedClasses.length}
+                  </div>
+                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                    Available Classes
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+
+              {/* Quick Actions */}
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                marginBottom: '2rem',
+                flexWrap: 'wrap'
+              }}>
+                <a
+                  href="#"
+                  onClick={(e) => handleNavClick(e, 'my-enrollments')}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    textDecoration: 'none',
+                    fontWeight: '500',
+                    fontSize: '0.875rem',
+                    transition: 'opacity 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                >
+                  View My Enrollments
+                </a>
+                <a
+                  href="#"
+                  onClick={(e) => handleNavClick(e, 'browse-classes')}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    textDecoration: 'none',
+                    fontWeight: '500',
+                    fontSize: '0.875rem',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                >
+                  Browse All Classes
+                </a>
+                <a
+                  href="#"
+                  onClick={(e) => handleNavClick(e, 'upcoming-sessions')}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    textDecoration: 'none',
+                    fontWeight: '500',
+                    fontSize: '0.875rem',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                >
+                  View Upcoming Sessions
+                </a>
+              </div>
+
+              {/* Two Column Layout */}
+              <div className="dashboard-two-col" style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '2rem',
+                marginBottom: '2rem'
+              }}>
+                {/* Upcoming Sessions Widget */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '1.5rem'
+                  }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#fff', margin: 0 }}>
+                      Upcoming Sessions
+                    </h3>
+                    <a
+                      href="#"
+                      onClick={(e) => handleNavClick(e, 'upcoming-sessions')}
+                      style={{
+                        color: '#D92A63',
+                        textDecoration: 'none',
+                        fontSize: '0.875rem',
+                        fontWeight: '500'
+                      }}
+                    >
+                      View All →
+                    </a>
+                  </div>
+                  {upcomingSessions.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {upcomingSessions.slice(0, 3).map((session) => {
+                        const isLiveFromStatus = session.status === 'live';
+                        const isLive = isLiveFromStatus || isClassLive(session.sessionDate, session.sessionTime);
+                        return (
+                          <div key={session.id} style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            borderRadius: '8px',
+                            padding: '1rem',
+                            border: '1px solid rgba(255, 255, 255, 0.1)'
+                          }}>
+                            <div style={{
+                              fontSize: '0.9375rem',
+                              fontWeight: '600',
+                              color: '#fff',
+                              marginBottom: '0.5rem'
+                            }}>
+                              {session.className}
+                            </div>
+                            <div style={{
+                              fontSize: '0.75rem',
+                              color: 'rgba(255, 255, 255, 0.7)',
+                              marginBottom: '0.5rem'
+                            }}>
+                              📅 {formatDate(session.sessionDate)} at {formatTime(session.sessionTime)}
+                            </div>
+                            {isLive && session.meetingLink && (
+                              <a
+                                href={session.meetingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '0.5rem 1rem',
+                                  background: '#D92A63',
+                                  borderRadius: '6px',
+                                  color: '#fff',
+                                  textDecoration: 'none',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '500'
+                                }}
+                              >
+                                Join Now
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
+                      No upcoming sessions
+                    </div>
+                  )}
+                </div>
+
+                {/* Recent Enrollments Widget */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '1.5rem'
+                  }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#fff', margin: 0 }}>
+                      Recent Enrollments
+                    </h3>
+                    <a
+                      href="#"
+                      onClick={(e) => handleNavClick(e, 'my-enrollments')}
+                      style={{
+                        color: '#D92A63',
+                        textDecoration: 'none',
+                        fontSize: '0.875rem',
+                        fontWeight: '500'
+                      }}
+                    >
+                      View All →
+                    </a>
+                  </div>
+                  {enrollments.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {enrollments.slice(0, 3).map((enrollment) => {
+                        const classData = enrollmentClasses[enrollment.classId] || {};
+                        const className = enrollment.className || classData.title || 'Class';
+                        const enrollmentDate = enrollment.enrolledAt?.toDate ? enrollment.enrolledAt.toDate() : (enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null);
+                        
+                        return (
+                          <Link
+                            key={enrollment.id}
+                            href={`/product/${enrollment.classId}`}
+                            style={{
+                              background: 'rgba(255, 255, 255, 0.05)',
+                              borderRadius: '8px',
+                              padding: '1rem',
+                              border: '1px solid rgba(255, 255, 255, 0.1)',
+                              textDecoration: 'none',
+                              color: 'inherit',
+                              display: 'block',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+                          >
+                            <div style={{
+                              fontSize: '0.9375rem',
+                              fontWeight: '600',
+                              color: '#fff',
+                              marginBottom: '0.5rem'
+                            }}>
+                              {className}
+                            </div>
+                            {enrollmentDate && (
+                              <div style={{
+                                fontSize: '0.75rem',
+                                color: 'rgba(255, 255, 255, 0.7)'
+                              }}>
+                                Enrolled: {formatDate(enrollmentDate)}
+                              </div>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
+                      No enrollments yet. <a href="#" onClick={(e) => handleNavClick(e, 'browse-classes')} style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse classes</a> to get started!
+                    </div>
+                  )}
+                </div>
+              </div>
 
             </>
           )}
@@ -1346,44 +1712,101 @@ export default function StudentDashboard() {
               <div className="text-white text-center py-8">Loading enrollments...</div>
             ) : enrollments.length > 0 ? (
               <div className="course-grid">
-                {enrollments.map((course) => (
-                  <Link key={course.id} href={`/product/${course.classId}`} className="course-card">
-                    <div className="course-image-wrap">
-                      <img
-                        src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"
-                        alt={course.className}
-                        className="course-image"
-                      />
-                      <div className="course-teacher-wrap">
-                        <div style={{
-                          width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
-                        }}>
-                          Z
+                {enrollments.map((enrollment) => {
+                  const classData = enrollmentClasses[enrollment.classId] || {};
+                  const classImage = classData.videoLink || classData.thumbnail || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                  const creatorName = classData.creatorName || enrollment.creatorName || 'Creator';
+                  const category = classData.category || enrollment.category || '';
+                  const scheduleType = classData.scheduleType || enrollment.classType || 'one-time';
+                  const numberOfSessions = classData.numberSessions || enrollment.numberOfSessions || 1;
+                  const enrollmentDate = enrollment.enrolledAt?.toDate ? enrollment.enrolledAt.toDate() : (enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null);
+                  const nextSession = upcomingSessions.find(s => s.classId === enrollment.classId);
+                  const creatorInitial = (creatorName[0] || 'C').toUpperCase();
+
+                  return (
+                    <Link key={enrollment.id} href={`/product/${enrollment.classId}`} className="course-card">
+                      <div className="course-image-wrap">
+                        <img
+                          src={classImage}
+                          alt={enrollment.className || classData.title || 'Class'}
+                          className="course-image"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                          }}
+                        />
+                        <div className="course-teacher-wrap">
+                          <div style={{
+                            width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold',
+                            color: '#fff', fontSize: '0.875rem'
+                          }}>
+                            {creatorInitial}
+                          </div>
+                          <div className="ml-2" style={{ color: '#fff', fontSize: '0.875rem', fontWeight: '500' }}>
+                            {creatorName}
+                          </div>
                         </div>
-                        <div className="ml-2">Zefrix</div>
+                        {category && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '0.75rem',
+                            right: '0.75rem',
+                            background: 'rgba(0, 0, 0, 0.7)',
+                            backdropFilter: 'blur(10px)',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            color: '#fff',
+                            fontWeight: '500'
+                          }}>
+                            {category}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="course-info">
-                      <h3 className="course-title">{course.className}</h3>
-                      <div className="course-meta">
-                        <div className="course-meta-item">
-                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                          <div>{course.numberOfSessions || 1} Sessions</div>
+                      <div className="course-info">
+                        <h3 className="course-title">{enrollment.className || classData.title || 'Class'}</h3>
+                        <div className="course-meta" style={{ marginBottom: '0.75rem' }}>
+                          <div className="course-meta-item">
+                            <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
+                            <div>{numberOfSessions} {numberOfSessions === 1 ? 'Session' : 'Sessions'}</div>
+                          </div>
+                          <div className="course-meta-item">
+                            <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
+                            <div>{scheduleType === 'recurring' ? 'Recurring' : 'One-time'}</div>
+                          </div>
                         </div>
-                        <div className="course-meta-item">
-                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                          <div>{course.classType || 'One-time'}</div>
+                        {enrollmentDate && (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: 'rgba(255, 255, 255, 0.6)',
+                            marginBottom: '0.5rem'
+                          }}>
+                            Enrolled: {formatDate(enrollmentDate)}
+                          </div>
+                        )}
+                        {nextSession && (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: '#D92A63',
+                            fontWeight: '500',
+                            marginBottom: '0.5rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                          }}>
+                            <span>📅</span>
+                            <span>Next: {formatDate(nextSession.sessionDate)} {nextSession.sessionTime && `at ${formatTime(nextSession.sessionTime)}`}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="course-bottom">
+                        <div className="course-price-wrap">
+                          <h4 className="course-price">₹{(enrollment.classPrice || classData.price || 0).toFixed(2)}</h4>
                         </div>
                       </div>
-                    </div>
-                    <div className="course-bottom">
-                      <div className="course-price-wrap">
-                        <h4 className="course-price">₹{(course.classPrice || 0).toFixed(2)}</h4>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-gray-400 py-8">
@@ -1423,8 +1846,8 @@ export default function StudentDashboard() {
                 style={{ minWidth: '150px' }}
               >
                 <option value="">All Categories</option>
-                {Array.from(new Set(approvedClasses.map(c => c.category))).map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                {categoryDetails.map(cat => (
+                  <option key={cat.slug} value={cat.title}>{cat.title}</option>
                 ))}
               </select>
               {(searchQuery || selectedCategory) && (
