@@ -48,7 +48,7 @@ interface ApprovedClass {
 }
 
 export default function StudentDashboard() {
-  const { showError } = useNotification();
+  const { showError, showSuccess } = useNotification();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [activeView, setActiveView] = useState('dashboard');
@@ -484,37 +484,65 @@ export default function StudentDashboard() {
   const handleRatingSubmit = async () => {
     if (!selectedClassForRating || !rating || !user) return;
 
+    const classId = selectedClassForRating.classId || selectedClassForRating.id;
+
     try {
-      if (!window.firebaseDb || !window.collection || !window.addDoc) {
+      if (!window.firebaseDb || !window.collection || !window.addDoc || !window.query || !window.where || !window.getDocs || !window.updateDoc || !window.doc) {
         showError('Firebase not ready. Please try again.');
         return;
       }
 
-      const ratingsRef = window.collection(window.firebaseDb, 'ratings');
-      await window.addDoc(ratingsRef, {
-        classId: selectedClassForRating.classId || selectedClassForRating.id,
-        studentId: user.uid,
-        studentName: user.displayName || user.email?.split('@')[0],
-        rating: rating,
-        feedback: feedback,
-        createdAt: new Date()
-      });
+      // 1. Validate: Check if student is enrolled in this class
+      const enrollment = enrollments.find(e => e.classId === classId);
+      if (!enrollment) {
+        showError('You must be enrolled in this class to submit a rating.');
+        return;
+      }
 
-      // Update enrollment with rating
-      const enrollment = enrollments.find(e => e.classId === (selectedClassForRating.classId || selectedClassForRating.id));
-      if (enrollment && window.updateDoc && window.doc) {
-        const enrollmentRef = window.doc(window.firebaseDb, 'enrollments', enrollment.id);
-        await window.updateDoc(enrollmentRef, {
+      // 2. Check for duplicate rating (prevent multiple ratings)
+      const ratingsRef = window.collection(window.firebaseDb, 'ratings');
+      const existingRatingQuery = window.query(
+        ratingsRef,
+        window.where('classId', '==', classId),
+        window.where('studentId', '==', user.uid)
+      );
+      const existingRatingSnapshot = await window.getDocs(existingRatingQuery);
+      
+      if (!existingRatingSnapshot.empty) {
+        // Rating already exists - update it instead of creating new one
+        const existingRatingDoc = existingRatingSnapshot.docs[0];
+        await window.updateDoc(existingRatingDoc.ref, {
           rating: rating,
           feedback: feedback,
-          ratedAt: new Date()
+          updatedAt: new Date()
         });
+        showSuccess('Rating updated successfully!');
+      } else {
+        // Create new rating
+        await window.addDoc(ratingsRef, {
+          classId: classId,
+          studentId: user.uid,
+          studentName: user.displayName || user.email?.split('@')[0] || 'Student',
+          rating: rating,
+          feedback: feedback,
+          createdAt: new Date()
+        });
+        showSuccess('Rating submitted successfully!');
       }
+
+      // 3. Update enrollment document for quick access (keep in sync)
+      const enrollmentRef = window.doc(window.firebaseDb, 'enrollments', enrollment.id);
+      await window.updateDoc(enrollmentRef, {
+        rating: rating,
+        feedback: feedback,
+        ratedAt: new Date()
+      });
 
       setShowRatingModal(false);
       setRating(0);
       setFeedback('');
       setSelectedClassForRating(null);
+      
       // Refresh enrollments (this will also refresh class data via the useEffect)
       if (user) {
         const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
@@ -1722,6 +1750,12 @@ export default function StudentDashboard() {
                   const enrollmentDate = enrollment.enrolledAt?.toDate ? enrollment.enrolledAt.toDate() : (enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null);
                   const nextSession = upcomingSessions.find(s => s.classId === enrollment.classId);
                   const creatorInitial = (creatorName[0] || 'C').toUpperCase();
+                  
+                  // Calculate attendance stats
+                  const sessionAttendance = enrollment.sessionAttendance || {};
+                  const totalSessions = Object.keys(sessionAttendance).length;
+                  const attendedSessions = Object.values(sessionAttendance).filter((s: any) => s.attended).length;
+                  const attendanceRate = totalSessions > 0 ? (attendedSessions / totalSessions) * 100 : 0;
 
                   return (
                     <Link key={enrollment.id} href={`/product/${enrollment.classId}`} className="course-card">
@@ -1784,6 +1818,16 @@ export default function StudentDashboard() {
                             Enrolled: {formatDate(enrollmentDate)}
                           </div>
                         )}
+                        {totalSessions > 0 && (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: attendanceRate >= 75 ? '#4CAF50' : attendanceRate >= 50 ? '#FF9800' : 'rgba(255, 255, 255, 0.6)',
+                            marginBottom: '0.5rem',
+                            fontWeight: '500'
+                          }}>
+                            Attendance: {attendedSessions}/{totalSessions} sessions ({attendanceRate.toFixed(0)}%)
+                          </div>
+                        )}
                         {nextSession && (
                           <div style={{
                             fontSize: '0.75rem',
@@ -1803,6 +1847,11 @@ export default function StudentDashboard() {
                         <div className="course-price-wrap">
                           <h4 className="course-price">₹{(enrollment.classPrice || classData.price || 0).toFixed(2)}</h4>
                         </div>
+                        {enrollment.rating !== undefined && enrollment.rating !== null && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#FFD700', fontSize: '0.875rem' }}>
+                            ⭐ {enrollment.rating?.toFixed(1)} Rating
+                          </div>
+                        )}
                       </div>
                     </Link>
                   );

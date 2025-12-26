@@ -370,7 +370,10 @@ export default function CheckoutPage() {
                         enrolledAt: new Date(),
                         classType: classData?.scheduleType || 'one-time',
                         numberOfSessions: classData?.numberSessions || 1,
-                        attended: 0,
+                        sessionAttendance: {}, // Per-session attendance tracking
+                        totalSessions: 0,
+                        attendedSessions: 0,
+                        attendanceRate: 0,
                         status: 'active',
                     };
 

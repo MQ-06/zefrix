@@ -44,6 +44,9 @@ export default function ProductPage({ params }: PageProps) {
   const [creatorProfile, setCreatorProfile] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [earliestBatchDate, setEarliestBatchDate] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [averageRating, setAverageRating] = useState<number | null>(null);
 
   useEffect(() => {
     // Load Firebase if not already loaded
@@ -77,6 +80,7 @@ export default function ProductPage({ params }: PageProps) {
         window.orderBy = orderBy;
         window.limit = limit;
         window.onSnapshot = onSnapshot;
+        window.Timestamp = Timestamp;
       `;
       document.body.appendChild(script);
     }
@@ -261,6 +265,71 @@ export default function ProductPage({ params }: PageProps) {
 
     if (course) {
       fetchCreatorProfile();
+    }
+  }, [course]);
+
+  // Fetch reviews/ratings for this class
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!course || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !window.orderBy) {
+        return;
+      }
+
+      setLoadingReviews(true);
+      try {
+        const ratingsRef = window.collection(window.firebaseDb, 'ratings');
+        // Try with orderBy first, fallback to just where if index not available
+        let querySnapshot;
+        try {
+          const q = window.query(
+            ratingsRef,
+            window.where('classId', '==', course.id),
+            window.orderBy('createdAt', 'desc')
+          );
+          querySnapshot = await window.getDocs(q);
+        } catch (orderByError: any) {
+          // If orderBy fails (index not created), use simple where query and sort in memory
+          console.warn('OrderBy index not available, sorting in memory:', orderByError);
+          const q = window.query(
+            ratingsRef,
+            window.where('classId', '==', course.id)
+          );
+          querySnapshot = await window.getDocs(q);
+        }
+        
+        const fetchedReviews: any[] = [];
+        let totalRating = 0;
+        let ratingCount = 0;
+
+        querySnapshot.forEach((doc: any) => {
+          const reviewData = { id: doc.id, ...doc.data() };
+          fetchedReviews.push(reviewData);
+          if (reviewData.rating) {
+            totalRating += reviewData.rating;
+            ratingCount++;
+          }
+        });
+
+        // Sort by createdAt in descending order (newest first) if not already sorted
+        fetchedReviews.sort((a, b) => {
+          const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+          const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+          return bTime - aTime;
+        });
+
+        setReviews(fetchedReviews);
+        setAverageRating(ratingCount > 0 ? totalRating / ratingCount : null);
+      } catch (error) {
+        console.error('Error fetching reviews:', error);
+        setReviews([]);
+        setAverageRating(null);
+      } finally {
+        setLoadingReviews(false);
+      }
+    };
+
+    if (course) {
+      fetchReviews();
     }
   }, [course]);
 
@@ -521,14 +590,90 @@ export default function ProductPage({ params }: PageProps) {
                       </div>
                     )}
 
-                    {/* Testimonials Section - Coming Soon */}
+                    {/* Reviews & Ratings Section */}
                     <div>
-                      <h2 className="text-2xl font-bold text-white mb-4">Reviews & Testimonials</h2>
-                      <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                        <p className="text-gray-400 italic">
-                          Reviews and testimonials will be available soon. Be the first to leave a review after completing this course!
-                        </p>
-                      </div>
+                      <h2 className="text-2xl font-bold text-white mb-4">Reviews & Ratings</h2>
+                      {loadingReviews ? (
+                        <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                          <p className="text-gray-400">Loading reviews...</p>
+                        </div>
+                      ) : reviews.length > 0 ? (
+                        <>
+                          {/* Average Rating Summary */}
+                          <div className="bg-white/5 rounded-lg p-6 border border-white/10 mb-6">
+                            <div className="flex items-center gap-4">
+                              <div className="text-4xl font-bold text-white">
+                                {averageRating?.toFixed(1)}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1 mb-2">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-2xl ${star <= Math.round(averageRating || 0) ? 'text-yellow-400' : 'text-gray-600'}`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                </div>
+                                <p className="text-gray-400 text-sm">
+                                  Based on {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Reviews List */}
+                          <div className="space-y-4">
+                            {reviews.map((review) => (
+                              <div key={review.id} className="bg-white/5 rounded-lg p-6 border border-white/10">
+                                <div className="flex items-start justify-between mb-3">
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] flex items-center justify-center text-white font-bold text-sm">
+                                        {(review.studentName || 'S')[0].toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <div className="font-semibold text-white">
+                                          {review.studentName || 'Anonymous'}
+                                        </div>
+                                        <div className="text-gray-400 text-sm">
+                                          {review.createdAt?.toDate ? review.createdAt.toDate().toLocaleDateString('en-US', {
+                                            month: 'short',
+                                            day: 'numeric',
+                                            year: 'numeric'
+                                          }) : 'Recently'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <span
+                                        key={star}
+                                        className={`text-lg ${star <= review.rating ? 'text-yellow-400' : 'text-gray-600'}`}
+                                      >
+                                        ★
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                                {review.feedback && (
+                                  <p className="text-gray-300 whitespace-pre-wrap">
+                                    {review.feedback}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                          <p className="text-gray-400 italic">
+                            No reviews yet. Be the first to leave a review after completing this class!
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

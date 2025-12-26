@@ -16,6 +16,7 @@ declare global {
     getDocs: any;
     serverTimestamp: any;
     arrayUnion: any;
+    Timestamp: any;
   }
 }
 
@@ -28,16 +29,25 @@ interface LiveClassProps {
   onEndClass: () => void;
 }
 
+interface StudentJoin {
+  studentId: string;
+  joinedAt: Date;
+  isPresent: boolean;
+}
+
 export default function LiveClass({ classId, sessionId, sessionNumber, meetingLink, className, onEndClass }: LiveClassProps) {
   const { showSuccess, showError } = useNotification();
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(true);
+  const [studentJoins, setStudentJoins] = useState<Record<string, StudentJoin>>({});
+  const [classStartTime, setClassStartTime] = useState<Date | null>(null);
 
   useEffect(() => {
     fetchEnrolledStudents();
     // Mark session as live
     markSessionAsLive();
+    setClassStartTime(new Date());
   }, [classId]);
 
   const fetchEnrolledStudents = async () => {
@@ -79,46 +89,126 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
       const sessionRef = window.doc(window.firebaseDb, 'sessions', sessionId);
       await window.updateDoc(sessionRef, {
         status: 'live',
-        startedAt: window.serverTimestamp()
+        startedAt: window.serverTimestamp ? window.serverTimestamp() : new Date()
       });
     } catch (error) {
       console.error('Error marking session as live:', error);
     }
   };
 
+  const handleToggleAttendance = (studentId: string) => {
+    setStudentJoins(prev => {
+      const current = prev[studentId];
+      if (current) {
+        // Toggle existing
+        return {
+          ...prev,
+          [studentId]: {
+            ...current,
+            isPresent: !current.isPresent
+          }
+        };
+      } else {
+        // Mark as present with current time
+        return {
+          ...prev,
+          [studentId]: {
+            studentId,
+            joinedAt: new Date(),
+            isPresent: true
+          }
+        };
+      }
+    });
+  };
+
   const handleEndClass = async () => {
-    if (!window.firebaseDb || !window.doc || !window.updateDoc || !window.serverTimestamp) {
-      showError('Firebase not ready');
+    if (!window.firebaseDb || !window.doc || !window.updateDoc || !window.serverTimestamp || !sessionId) {
+      showError('Firebase not ready or session ID missing');
       return;
     }
 
     try {
-      // Mark all enrolled students as attended for this session
-      const updatePromises = students.map(async (student) => {
-        if (student.enrollmentId && window.updateDoc) {
-          const enrollmentRef = window.doc(window.firebaseDb, 'enrollments', student.enrollmentId);
-          await window.updateDoc(enrollmentRef, {
-            attended: true,
-            attendedSessions: window.arrayUnion?.(sessionId || ''),
-            lastAttendedAt: window.serverTimestamp()
-          });
+      const presentStudentIds: string[] = [];
+      const absentStudentIds: string[] = [];
+      
+      // Determine who attended based on studentJoins
+      students.forEach((student) => {
+        const joinRecord = studentJoins[student.studentId];
+        if (joinRecord && joinRecord.isPresent) {
+          presentStudentIds.push(student.studentId);
+        } else {
+          absentStudentIds.push(student.studentId);
         }
+      });
+
+      // Update each enrollment with per-session attendance
+      const updatePromises = students.map(async (student) => {
+        if (!student.enrollmentId || !window.updateDoc) return;
+
+        const joinRecord = studentJoins[student.studentId];
+        const attended = joinRecord?.isPresent || false;
+        const joinedAt = joinRecord?.joinedAt || null;
+
+        const enrollmentRef = window.doc(window.firebaseDb, 'enrollments', student.enrollmentId);
+        let enrollmentData: any = {};
+        if (window.getDoc) {
+          const enrollmentDoc = await window.getDoc(enrollmentRef);
+          enrollmentData = enrollmentDoc.data() || {};
+        }
+
+        // Get current sessionAttendance object
+        const sessionAttendance = enrollmentData.sessionAttendance || {};
+        
+        // Update this session's attendance
+        sessionAttendance[sessionId] = {
+          attended: attended,
+          joinedAt: joinedAt ? (window.serverTimestamp ? window.serverTimestamp() : joinedAt) : null,
+          markedAt: window.serverTimestamp ? window.serverTimestamp() : new Date(),
+          sessionNumber: sessionNumber || 1
+        };
+
+        // Calculate overall stats
+        const totalSessions = Object.keys(sessionAttendance).length;
+        const attendedSessions = Object.values(sessionAttendance).filter((s: any) => s.attended).length;
+        const attendanceRate = totalSessions > 0 ? (attendedSessions / totalSessions) * 100 : 0;
+
+        // Update enrollment
+        const updateData: any = {
+          sessionAttendance: sessionAttendance,
+          totalSessions: totalSessions,
+          attendedSessions: attendedSessions,
+          attendanceRate: attendanceRate
+        };
+
+        // Update lastAttendedAt if student attended
+        if (attended) {
+          updateData.lastAttendedAt = window.serverTimestamp ? window.serverTimestamp() : new Date();
+        }
+
+        await window.updateDoc(enrollmentRef, updateData);
       });
 
       await Promise.all(updatePromises);
 
-      // Mark session as completed
-      if (sessionId) {
-        const sessionRef = window.doc(window.firebaseDb, 'sessions', sessionId);
-        await window.updateDoc(sessionRef, {
-          status: 'completed',
-          endedAt: window.serverTimestamp(),
-          attendedCount: students.length
-        });
-      }
+      // Update session document with attendance stats
+      const sessionRef = window.doc(window.firebaseDb, 'sessions', sessionId);
+      await window.updateDoc(sessionRef, {
+        status: 'completed',
+        endedAt: window.serverTimestamp ? window.serverTimestamp() : new Date(),
+        attendance: {
+          totalEnrolled: students.length,
+          present: presentStudentIds.length,
+          absent: absentStudentIds.length,
+          attendanceRate: students.length > 0 ? (presentStudentIds.length / students.length) * 100 : 0
+        },
+        attendedStudents: presentStudentIds,
+        absentStudents: absentStudentIds,
+        attendedCount: presentStudentIds.length
+      });
 
       setIsLive(false);
-      showSuccess('Class ended successfully! Attendance marked for all enrolled students.');
+      showSuccess(`Class ended! ${presentStudentIds.length}/${students.length} students marked as present.`);
       onEndClass();
     } catch (error: any) {
       console.error('Error ending class:', error);
@@ -151,10 +241,16 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
 
       <div className="creator-live-grid">
         <div className="creator-live-students">
-          <div className="creator-students-title">Enrolled Students ({students.length})</div>
+          <div className="creator-students-title">
+            Enrolled Students ({students.length})
+            <span style={{ marginLeft: '1rem', fontSize: '0.875rem', fontWeight: 'normal', color: 'rgba(255, 255, 255, 0.7)' }}>
+              Present: {Object.values(studentJoins).filter(j => j.isPresent).length}/{students.length}
+            </span>
+          </div>
           <div className="creator-students-list">
             <div className="creator-table-header">
-              <div className="creator-table-col">Name</div>
+              <div className="creator-table-col" style={{ flex: 1 }}>Name</div>
+              <div className="creator-table-col" style={{ width: '140px', textAlign: 'center' }}>Attendance</div>
             </div>
             {loading ? (
               <div style={{ padding: '1rem', textAlign: 'center', color: 'rgba(255, 255, 255, 0.7)' }}>
@@ -165,11 +261,42 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
                 No students enrolled yet
               </div>
             ) : (
-              students.map((student) => (
-                <div key={student.id} className="creator-student-item">
-                  {student.name}
-                </div>
-              ))
+              students.map((student) => {
+                const joinRecord = studentJoins[student.studentId];
+                const isPresent = joinRecord?.isPresent || false;
+                return (
+                  <div key={student.id} className="creator-student-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem' }}>
+                    <span style={{ flex: 1 }}>{student.name}</span>
+                    <button
+                      onClick={() => handleToggleAttendance(student.studentId)}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        background: isPresent ? '#4CAF50' : 'rgba(255, 255, 255, 0.1)',
+                        border: isPresent ? '1px solid #4CAF50' : '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '6px',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        fontWeight: '500',
+                        minWidth: '120px',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isPresent) {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isPresent) {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                        }
+                      }}
+                    >
+                      {isPresent ? '✅ Present' : '⏳ Mark Present'}
+                    </button>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
