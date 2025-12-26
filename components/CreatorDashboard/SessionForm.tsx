@@ -82,19 +82,70 @@ export default function SessionForm({
     // For one-time classes, only allow 1 session
     const sessionsCount = scheduleType === 'one-time' ? 1 : numberOfSessions;
     const initialSessions: Session[] = [];
-    for (let i = 1; i <= sessionsCount; i++) {
+    
+    // Pre-fill dates and times from class schedule to avoid duplication
+    // Note: For one-time, we need to check both 'date' field (from class) and startDate prop
+    if (scheduleType === 'one-time') {
+      // One-time: Check if we have date info from props or need to fetch from class
+      const oneTimeDate = startDate || ''; // ViewClass might pass date as startDate prop
+      const oneTimeTime = recurringStartTime || ''; // ViewClass might pass time as recurringStartTime prop
+      
       initialSessions.push({
-        sessionNumber: i,
-        date: '',
-        time: '',
+        sessionNumber: 1,
+        date: oneTimeDate.split('T')[0] || '', // Extract date part if ISO string
+        time: oneTimeTime,
         meetLink: ''
       });
+    } else if (scheduleType === 'recurring' && startDate && endDate && recurringStartTime && days && days.length > 0) {
+      // Recurring: Generate sessions for each selected day between start and end date
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      let sessionNum = 1;
+      const currentDate = new Date(start);
+      
+      while (currentDate <= end && sessionNum <= sessionsCount) {
+        const dayName = currentDate.toLocaleDateString('en-US', { weekday: 'long' });
+        
+        if (days.includes(dayName)) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          initialSessions.push({
+            sessionNumber: sessionNum,
+            date: dateStr,
+            time: recurringStartTime,
+            meetLink: ''
+          });
+          sessionNum++;
+        }
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // Fill remaining slots if not enough sessions generated
+      while (initialSessions.length < sessionsCount) {
+        initialSessions.push({
+          sessionNumber: initialSessions.length + 1,
+          date: '',
+          time: recurringStartTime || '',
+          meetLink: ''
+        });
+      }
+    } else {
+      // Fallback: Empty sessions (creator fills manually)
+      for (let i = 1; i <= sessionsCount; i++) {
+        initialSessions.push({
+          sessionNumber: i,
+          date: '',
+          time: recurringStartTime || '',
+          meetLink: ''
+        });
+      }
     }
+    
     setSessions(initialSessions);
 
     // Check if form is already filled
     checkFormStatus();
-  }, [classId, numberOfSessions, scheduleType]);
+  }, [classId, numberOfSessions, scheduleType, startDate, endDate, recurringStartTime, days]);
 
   const checkFormStatus = async () => {
     if (!window.firebaseDb || !window.doc || !window.getDoc || !window.firebaseAuth) {
@@ -112,11 +163,44 @@ export default function SessionForm({
       const userRef = window.doc(window.firebaseDb, 'users', currentUser.uid);
       const userSnap = await window.getDoc(userRef);
       
-      // Load sessions from class document
+      // Load sessions from sessions collection (check if already created)
+      if (window.collection && window.query && window.where && window.getDocs) {
+        const sessionsRef = window.collection(window.firebaseDb, 'sessions');
+        const sessionsQuery = window.query(sessionsRef, window.where('classId', '==', classId));
+        const sessionsSnapshot = await window.getDocs(sessionsQuery);
+        
+        if (sessionsSnapshot.size > 0) {
+          const existingSessions: Session[] = [];
+          sessionsSnapshot.forEach((doc: any) => {
+            const sessionData = doc.data();
+            const sessionDate = sessionData.sessionDate?.toDate 
+              ? sessionData.sessionDate.toDate() 
+              : new Date(sessionData.sessionDate);
+            
+            existingSessions.push({
+              sessionNumber: sessionData.sessionNumber || 1,
+              date: sessionDate.toISOString().split('T')[0],
+              time: sessionData.sessionTime || '',
+              meetLink: sessionData.meetingLink || ''
+            });
+          });
+          
+          // Sort by session number
+          existingSessions.sort((a, b) => a.sessionNumber - b.sessionNumber);
+          
+          if (existingSessions.length > 0) {
+            setSessions(existingSessions);
+            setFormFilled(true);
+          }
+        }
+      }
+      
+      // Fallback: Load sessions from class document (old format)
       if (classSnap.exists()) {
         const classData = classSnap.data();
-        if (classData.sessions && classData.sessions.length > 0) {
+        if (classData.sessions && classData.sessions.length > 0 && sessions.length === 0) {
           setSessions(classData.sessions);
+          setFormFilled(true);
         }
       }
 

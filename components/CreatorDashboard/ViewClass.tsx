@@ -458,9 +458,9 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                     className={classData.title}
                                     numberOfSessions={classData.numberSessions}
                                     scheduleType={classData.scheduleType}
-                                    startDate={classData.startDate}
+                                    startDate={classData.scheduleType === 'one-time' ? classData.date : classData.startDate}
                                     endDate={classData.endDate}
-                                    recurringStartTime={classData.recurringStartTime}
+                                    recurringStartTime={classData.scheduleType === 'one-time' ? classData.startTime : classData.recurringStartTime}
                                     recurringEndTime={classData.recurringEndTime}
                                     days={classData.days}
                                     onSuccess={() => {
@@ -620,9 +620,9 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                         className={classData.title}
                                         numberOfSessions={classData.numberSessions}
                                         scheduleType={classData.scheduleType}
-                                        startDate={classData.startDate}
+                                        startDate={classData.scheduleType === 'one-time' ? classData.date : classData.startDate}
                                         endDate={classData.endDate}
-                                        recurringStartTime={classData.recurringStartTime}
+                                        recurringStartTime={classData.scheduleType === 'one-time' ? classData.startTime : classData.recurringStartTime}
                                         recurringEndTime={classData.recurringEndTime}
                                         days={classData.days}
                                         onSuccess={() => {

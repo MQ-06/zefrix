@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import NotificationItem from './NotificationItem';
 import { markAllNotificationsAsRead } from '@/lib/notifications';
 
@@ -64,7 +64,8 @@ export default function NotificationList({ userId, userRole }: NotificationListP
       });
 
       setNotifications(fetchedNotifications);
-      setUnreadCount(fetchedNotifications.filter(n => !n.isRead).length);
+      // Count unread: isRead === false or isRead === undefined
+      setUnreadCount(fetchedNotifications.filter(n => n.isRead === false || n.isRead === undefined).length);
     } catch (error: any) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -94,7 +95,8 @@ export default function NotificationList({ userId, userRole }: NotificationListP
           });
         });
         setNotifications(fetchedNotifications);
-        setUnreadCount(fetchedNotifications.filter(n => !n.isRead).length);
+        // Count unread: isRead === false or isRead === undefined
+        setUnreadCount(fetchedNotifications.filter(n => n.isRead === false || n.isRead === undefined).length);
         setLoading(false);
       }, (error: any) => {
         console.error('Error listening to notifications:', error);
@@ -116,9 +118,70 @@ export default function NotificationList({ userId, userRole }: NotificationListP
     }
   };
 
-  const filteredNotifications = filter === 'unread'
-    ? notifications.filter(n => !n.isRead)
-    : notifications;
+  // Group notifications by date
+  const groupNotificationsByDate = (notifs: Notification[]) => {
+    const groups: { [key: string]: Notification[] } = {};
+    
+    notifs.forEach((notification) => {
+      let dateKey = 'Unknown';
+      try {
+        const date = notification.createdAt?.toDate 
+          ? notification.createdAt.toDate() 
+          : new Date(notification.createdAt);
+        
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const notificationDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        
+        if (notificationDate.getTime() === today.getTime()) {
+          dateKey = 'Today';
+        } else if (notificationDate.getTime() === yesterday.getTime()) {
+          dateKey = 'Yesterday';
+        } else {
+          dateKey = date.toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            month: 'long', 
+            day: 'numeric',
+            year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+          });
+        }
+      } catch (error) {
+        dateKey = 'Recent';
+      }
+      
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(notification);
+    });
+    
+    return groups;
+  };
+
+  // Filter notifications based on selected filter
+  const filteredNotifications = useMemo(() => {
+    const filtered = filter === 'unread'
+      ? notifications.filter(n => n.isRead === false || n.isRead === undefined)
+      : notifications;
+    
+    // Sort by date (newest first) - already sorted by query, but ensure it
+    return filtered.sort((a, b) => {
+      try {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return dateB.getTime() - dateA.getTime();
+      } catch {
+        return 0;
+      }
+    });
+  }, [notifications, filter]);
+
+  // Group filtered notifications by date
+  const groupedNotifications = useMemo(() => {
+    return groupNotificationsByDate(filteredNotifications);
+  }, [filteredNotifications]);
 
   if (loading) {
     return (
@@ -167,9 +230,10 @@ export default function NotificationList({ userId, userRole }: NotificationListP
                 cursor: 'pointer',
                 fontSize: '0.875rem',
                 fontWeight: filter === 'all' ? '600' : '400',
+                transition: 'all 0.2s',
               }}
             >
-              All
+              All ({notifications.length})
             </button>
             <button
               onClick={() => setFilter('unread')}
@@ -182,12 +246,13 @@ export default function NotificationList({ userId, userRole }: NotificationListP
                 cursor: 'pointer',
                 fontSize: '0.875rem',
                 fontWeight: filter === 'unread' ? '600' : '400',
+                transition: 'all 0.2s',
               }}
             >
-              Unread
+              Unread ({unreadCount})
             </button>
           </div>
-          {unreadCount > 0 && (
+          {unreadCount > 0 && filter === 'all' && (
             <button
               onClick={handleMarkAllAsRead}
               style={{
@@ -199,6 +264,13 @@ export default function NotificationList({ userId, userRole }: NotificationListP
                 cursor: 'pointer',
                 fontSize: '0.875rem',
                 fontWeight: '500',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(217, 42, 99, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(217, 42, 99, 0.2)';
               }}
             >
               Mark all as read
@@ -231,12 +303,28 @@ export default function NotificationList({ userId, userRole }: NotificationListP
         </div>
       ) : (
         <div>
-          {filteredNotifications.map((notification) => (
-            <NotificationItem
-              key={notification.id}
-              notification={notification}
-              onUpdate={fetchNotifications}
-            />
+          {Object.keys(groupedNotifications).map((dateKey) => (
+            <div key={dateKey} style={{ marginBottom: '2rem' }}>
+              <h3 style={{
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                color: 'rgba(255, 255, 255, 0.6)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                marginBottom: '1rem',
+                paddingBottom: '0.5rem',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              }}>
+                {dateKey}
+              </h3>
+              {groupedNotifications[dateKey].map((notification) => (
+                <NotificationItem
+                  key={notification.id}
+                  notification={notification}
+                  onUpdate={fetchNotifications}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}

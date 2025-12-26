@@ -325,6 +325,10 @@ export default function AdminDashboard() {
       if (classSnap.exists()) {
         const classData = classSnap.data();
         
+        // Note: Sessions are NOT auto-generated on approval
+        // Creators must manually create sessions with Google Meet links using SessionForm
+        // The schedule data in the class serves as a template for session creation
+        
         // Send approval/rejection email to creator
         try {
           await fetch('/api/email/class-approval', {
@@ -1056,7 +1060,6 @@ export default function AdminDashboard() {
           <h2>All Creators</h2>
           <p>Manage creator accounts and profiles</p>
         </div>
-        <button className="button-dark">Add Creator</button>
       </div>
 
       <div className="search-wrapper">

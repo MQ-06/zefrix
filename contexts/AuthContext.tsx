@@ -45,7 +45,7 @@ declare global {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const ADMIN_EMAIL = 'kartik@zefrix.com';
+  const ADMIN_EMAILS = ['kartik@zefrix.com', 'mariamqadeem181@gmail.com'];
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -177,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Fetch user data from Firestore
             if (window.firebaseDb && window.doc && window.getDoc) {
               const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid));
-              const isAdminEmail = normalizeEmail(firebaseUser.email) === ADMIN_EMAIL;
+              const isAdminEmail = ADMIN_EMAILS.some(adminEmail => normalizeEmail(firebaseUser.email) === normalizeEmail(adminEmail));
               if (userDoc.exists()) {
                 const userData = userDoc.data();
                 console.log('📄 User data from Firestore:', userData);
@@ -376,7 +376,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cred = await window.createUserWithEmailAndPassword(window.firebaseAuth, email.trim(), password);
       await window.updateProfile(cred.user, { displayName: name });
       
-      const role = email.toLowerCase() === 'kartik@zefrix.com' ? 'admin' : 'student';
+      const isAdminEmail = ADMIN_EMAILS.some(adminEmail => normalizeEmail(email) === normalizeEmail(adminEmail));
+      const role = isAdminEmail ? 'admin' : 'student';
       
       // Wait for Firestore to be ready
       let attempts = 0;
@@ -428,7 +429,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       let role = 'student';
       if (!snap.exists()) {
-        role = user.email?.toLowerCase() === 'kartik@zefrix.com' ? 'admin' : 'student';
+        const isAdminEmailForGoogle = ADMIN_EMAILS.some(adminEmail => normalizeEmail(user.email) === normalizeEmail(adminEmail));
+        role = isAdminEmailForGoogle ? 'admin' : 'student';
         await window.setDoc(userRef, {
           uid: user.uid,
           email: user.email,

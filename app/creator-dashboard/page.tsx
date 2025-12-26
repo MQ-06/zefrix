@@ -137,6 +137,8 @@ export default function CreatorDashboard() {
   const [user, setUser] = useState<any>(null);
   const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
   const [loadingClasses, setLoadingClasses] = useState(false);
+  const [classesPage, setClassesPage] = useState(1);
+  const classesPerPage = 12;
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [viewingClassId, setViewingClassId] = useState<string | null>(null);
   const [viewingEnrollmentsClassId, setViewingEnrollmentsClassId] = useState<string | null>(null);
@@ -389,6 +391,13 @@ export default function CreatorDashboard() {
       fetchApprovedClasses();
     }
   }, [activeSection, user]);
+
+  // Reset pagination when switching to dashboard
+  useEffect(() => {
+    if (activeSection === 'dashboard') {
+      setClassesPage(1);
+    }
+  }, [activeSection]);
 
   return (
     <>
@@ -985,7 +994,7 @@ export default function CreatorDashboard() {
         .creator-submit-btn {
           background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
           color: white;
-          border: none;
+          border: 2px solid rgba(255, 255, 255, 0.3);
           padding: 16px 40px;
           border-radius: 10px;
           font-size: 1.0625rem;
@@ -1018,10 +1027,17 @@ export default function CreatorDashboard() {
         .creator-submit-btn:hover {
           transform: translateY(-2px);
           box-shadow: 0 8px 20px rgba(217, 42, 99, 0.3);
+          border-color: rgba(255, 255, 255, 0.5);
         }
 
         .creator-submit-btn:active {
           transform: translateY(0);
+        }
+
+        .creator-submit-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          border-color: rgba(255, 255, 255, 0.2);
         }
 
         /* Manage Classes Styles - Matching Webflow HTML */
@@ -1580,39 +1596,89 @@ export default function CreatorDashboard() {
             {/* Dashboard Section */}
             {activeSection === 'dashboard' && (
               <div id="dashboard" className="creator-section">
-                <h2 className="creator-section-title">My Approved Classes</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <h2 className="creator-section-title" style={{ margin: 0 }}>My Approved Classes</h2>
+                  {approvedClasses.length > 0 && (
+                    <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                      {approvedClasses.length} {approvedClasses.length === 1 ? 'class' : 'classes'}
+                    </div>
+                  )}
+                </div>
                 {loadingClasses ? (
                   <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
                     Loading classes...
                   </div>
                 ) : approvedClasses.length > 0 ? (
-                  <div className="creator-course-grid">
-                    {approvedClasses.map((classItem) => {
-                      const course = {
-                        id: classItem.classId,
-                        slug: classItem.classId,
-                        title: classItem.title,
-                        instructor: classItem.creatorName || 'Creator',
-                        instructorImage: '',
-                        image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b861_course-12.jpg',
-                        price: classItem.price,
-                        originalPrice: classItem.price,
-                        sections: classItem.numberSessions,
-                        duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
-                        students: 0,
-                      };
-                      return (
-                        <CreatorCourseCard 
-                          key={classItem.classId} 
-                          course={course}
-                          onViewClass={(classId) => {
-                            setViewingClassId(classId);
-                            setActiveSection('manage-classes');
+                  <>
+                    <div className="creator-course-grid">
+                      {approvedClasses
+                        .slice((classesPage - 1) * classesPerPage, classesPage * classesPerPage)
+                        .map((classItem) => {
+                          return (
+                            <CreatorCourseCard 
+                              key={classItem.classId} 
+                              classData={classItem}
+                              onViewClass={(classId) => {
+                                setViewingClassId(classId);
+                                setActiveSection('manage-classes');
+                              }}
+                            />
+                          );
+                        })}
+                    </div>
+                    {approvedClasses.length > classesPerPage && (
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'center', 
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        marginTop: '2rem',
+                        padding: '1rem'
+                      }}>
+                        <button
+                          onClick={() => setClassesPage(prev => Math.max(1, prev - 1))}
+                          disabled={classesPage === 1}
+                          style={{
+                            padding: '0.5rem 1rem',
+                            background: classesPage === 1 ? 'rgba(255, 255, 255, 0.1)' : 'rgba(217, 42, 99, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            cursor: classesPage === 1 ? 'not-allowed' : 'pointer',
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                            opacity: classesPage === 1 ? 0.5 : 1
                           }}
-                        />
-                      );
-                    })}
-                  </div>
+                        >
+                          Previous
+                        </button>
+                        <span style={{ 
+                          color: 'rgba(255, 255, 255, 0.9)', 
+                          fontSize: '0.875rem',
+                          padding: '0 1rem'
+                        }}>
+                          Page {classesPage} of {Math.ceil(approvedClasses.length / classesPerPage)}
+                        </span>
+                        <button
+                          onClick={() => setClassesPage(prev => Math.min(Math.ceil(approvedClasses.length / classesPerPage), prev + 1))}
+                          disabled={classesPage >= Math.ceil(approvedClasses.length / classesPerPage)}
+                          style={{
+                            padding: '0.5rem 1rem',
+                            background: classesPage >= Math.ceil(approvedClasses.length / classesPerPage) ? 'rgba(255, 255, 255, 0.1)' : 'rgba(217, 42, 99, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            cursor: classesPage >= Math.ceil(approvedClasses.length / classesPerPage) ? 'not-allowed' : 'pointer',
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                            opacity: classesPage >= Math.ceil(approvedClasses.length / classesPerPage) ? 0.5 : 1
+                          }}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
                     No approved classes yet. Create a class and wait for admin approval.

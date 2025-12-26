@@ -295,22 +295,31 @@ export async function sendClassApprovalEmail(data: ClassApprovalEmailData) {
 
     // Create notification if creatorId is provided
     if (creatorId) {
-      await createNotification({
-        userId: creatorId,
-        userRole: 'creator',
-        type: status === 'approved' ? 'class_approved' : 'class_rejected',
-        title: status === 'approved' ? `Class Approved: ${className}` : `Class Review: ${className}`,
-        message: status === 'approved'
-          ? `Your class "${className}" has been approved and is now live!`
-          : `Your class "${className}" needs revision. Please check the details.`,
-        link: `/creator-dashboard?classId=${classId}`,
-        relatedId: classId,
-        metadata: {
-          className,
-          classId,
-          rejectionReason: status === 'rejected' ? rejectionReason : undefined,
-        },
-      });
+      console.log('🔔 Creating notification for creator:', creatorId, 'type:', status === 'approved' ? 'class_approved' : 'class_rejected');
+      try {
+        await createNotification({
+          userId: creatorId,
+          userRole: 'creator',
+          type: status === 'approved' ? 'class_approved' : 'class_rejected',
+          title: status === 'approved' ? `Class Approved: ${className}` : `Class Review: ${className}`,
+          message: status === 'approved'
+            ? `Your class "${className}" has been approved and is now live!`
+            : `Your class "${className}" needs revision. Please check the details.`,
+          link: `/creator-dashboard?classId=${classId}`,
+          relatedId: classId,
+          metadata: {
+            className,
+            classId,
+            rejectionReason: status === 'rejected' ? rejectionReason : undefined,
+          },
+        });
+        console.log('✅ Notification created successfully for creator:', creatorId);
+      } catch (notifError) {
+        console.error('❌ Error creating notification:', notifError);
+        // Don't throw - notification failure shouldn't block email sending
+      }
+    } else {
+      console.warn('⚠️ No creatorId provided, skipping notification creation');
     }
   } catch (error) {
     console.error(`Error sending class ${status} email:`, error);

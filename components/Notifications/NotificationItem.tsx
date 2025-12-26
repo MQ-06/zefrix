@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { markNotificationAsRead, deleteNotification } from '@/lib/notifications';
+import { markNotificationAsRead } from '@/lib/notifications';
 
 interface NotificationItemProps {
   notification: {
@@ -20,7 +20,6 @@ interface NotificationItemProps {
 
 export default function NotificationItem({ notification, onUpdate }: NotificationItemProps) {
   const [isMarkingRead, setIsMarkingRead] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleMarkAsRead = async () => {
     if (notification.isRead || isMarkingRead) return;
@@ -33,20 +32,6 @@ export default function NotificationItem({ notification, onUpdate }: Notificatio
       console.error('Error marking notification as read:', error);
     } finally {
       setIsMarkingRead(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (isDeleting) return;
-    
-    setIsDeleting(true);
-    try {
-      await deleteNotification(notification.id);
-      onUpdate();
-    } catch (error) {
-      console.error('Error deleting notification:', error);
-    } finally {
-      setIsDeleting(false);
     }
   };
 
@@ -120,35 +105,14 @@ export default function NotificationItem({ notification, onUpdate }: Notificatio
           {getNotificationIcon(notification.type)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-            <h4 style={{
-              fontSize: '1rem',
-              fontWeight: notification.isRead ? '500' : '600',
-              color: '#fff',
-              margin: 0,
-            }}>
-              {notification.title}
-            </h4>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete();
-              }}
-              disabled={isDeleting}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'rgba(255, 255, 255, 0.5)',
-                cursor: 'pointer',
-                padding: '0.25rem',
-                fontSize: '1rem',
-                opacity: isDeleting ? 0.5 : 1,
-              }}
-              title="Delete notification"
-            >
-              ✕
-            </button>
-          </div>
+          <h4 style={{
+            fontSize: '1rem',
+            fontWeight: notification.isRead ? '500' : '600',
+            color: '#fff',
+            margin: '0 0 0.5rem 0',
+          }}>
+            {notification.title}
+          </h4>
           <p style={{
             fontSize: '0.875rem',
             color: 'rgba(255, 255, 255, 0.7)',
@@ -169,7 +133,7 @@ export default function NotificationItem({ notification, onUpdate }: Notificatio
         <div style={{
           position: 'absolute',
           top: '1rem',
-          right: '2.5rem',
+          right: '1rem',
           width: '8px',
           height: '8px',
           borderRadius: '50%',
@@ -181,7 +145,10 @@ export default function NotificationItem({ notification, onUpdate }: Notificatio
 
   if (notification.link) {
     return (
-      <Link href={notification.link} style={{ textDecoration: 'none', color: 'inherit' }}>
+      <Link 
+        href={notification.link} 
+        style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+      >
         {content}
       </Link>
     );

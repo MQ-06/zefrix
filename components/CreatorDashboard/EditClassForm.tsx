@@ -332,11 +332,13 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
 
                 {error && (
                     <div style={{
-                        padding: '0.75rem 1rem',
+                        padding: '1rem 1.25rem',
                         borderRadius: '8px',
-                        backgroundColor: '#f8d7da',
-                        color: '#721c24',
-                        border: '1px solid #f5c6cb',
+                        fontSize: '0.9375rem',
+                        fontWeight: 500,
+                        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                        color: '#ef4444',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
                         marginBottom: '1rem'
                     }}>
                         {error}
@@ -349,9 +351,30 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                         className="creator-submit-btn"
                         disabled={saving}
                         style={{
-                            opacity: saving ? 0.6 : 1,
+                            background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+                            color: 'white',
+                            border: '2px solid rgba(255, 255, 255, 0.3)',
+                            padding: '16px 40px',
+                            borderRadius: '10px',
+                            fontSize: '1.0625rem',
+                            fontWeight: 600,
                             cursor: saving ? 'not-allowed' : 'pointer',
-                            flex: 1
+                            transition: 'all 0.3s',
+                            opacity: saving ? 0.6 : 1,
+                        }}
+                        onMouseEnter={(e) => {
+                            if (!saving) {
+                                e.currentTarget.style.transform = 'translateY(-2px)';
+                                e.currentTarget.style.boxShadow = '0 8px 20px rgba(217, 42, 99, 0.3)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+                            }
+                        }}
+                        onMouseLeave={(e) => {
+                            if (!saving) {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = 'none';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                            }
                         }}
                     >
                         {saving ? 'Saving...' : 'Save Changes'}

@@ -27,7 +27,6 @@ export default function CreatorProfile() {
     name: '',
     bio: '',
     expertise: '',
-    phone: '',
     whatsapp: '',
     profileImage: '',
     introVideo: '',
@@ -123,7 +122,6 @@ export default function CreatorProfile() {
           name: data.name || data.displayName || '',
           bio: data.bio || '',
           expertise: data.expertise || data.skills || '',
-          phone: data.phone || '',
           whatsapp: data.whatsapp || '',
           profileImage: data.profileImage || data.photoURL || '',
           introVideo: data.introVideo || '',
@@ -221,7 +219,6 @@ export default function CreatorProfile() {
         displayName: formData.name.trim(),
         bio: formData.bio.trim(),
         expertise: formData.expertise.trim(),
-        phone: formData.phone.trim(),
         whatsapp: formData.whatsapp.trim(),
         profileImage: formData.profileImage.trim(),
         photoURL: formData.profileImage.trim(),
@@ -306,19 +303,6 @@ export default function CreatorProfile() {
             value={formData.expertise}
             onChange={handleInputChange}
             placeholder="e.g., Graphic Design, Web Development, Photography"
-          />
-        </div>
-
-        <div className="creator-form-group">
-          <label htmlFor="profile-phone" className="creator-field-label">Phone Number</label>
-          <input
-            type="tel"
-            id="profile-phone"
-            name="phone"
-            className="creator-form-input"
-            value={formData.phone}
-            onChange={handleInputChange}
-            placeholder="+91 1234567890"
           />
         </div>
 
