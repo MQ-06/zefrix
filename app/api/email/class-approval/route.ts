@@ -61,27 +61,28 @@ export async function POST(request: NextRequest) {
         }
         
         if (!finalCreatorId) {
-            console.error('❌ WARNING: No creatorId available for notification. creatorId:', creatorId, 'classId:', classId);
-            return NextResponse.json(
-                { success: false, error: 'Creator ID not found' },
-                { status: 400 }
-            );
+            console.warn('⚠️ WARNING: No creatorId available for notification. creatorId:', creatorId, 'classId:', classId);
+            console.warn('⚠️ Email will still be sent, but notification will be skipped');
+        } else {
+            console.log('📝 Creating approval notification - creatorId:', finalCreatorId, 'classId:', classId, 'status:', status, 'className:', className);
         }
-        
-        console.log('📝 Creating approval notification - creatorId:', finalCreatorId, 'classId:', classId, 'status:', status, 'className:', className);
 
-        // Send email and create notification
+        // Send email and create notification (creatorId is optional - notification will be skipped if not available)
         await sendClassApprovalEmail({
             creatorName: creatorName || 'Creator',
             creatorEmail,
-            creatorId: finalCreatorId,
+            creatorId: finalCreatorId, // May be undefined - sendClassApprovalEmail handles this gracefully
             className,
             classId: classId || '',
             status: status === 'approved' ? 'approved' : 'rejected',
             rejectionReason,
         });
 
-        return NextResponse.json({ success: true, message: 'Email sent successfully' });
+        return NextResponse.json({ 
+            success: true, 
+            message: finalCreatorId ? 'Email and notification sent successfully' : 'Email sent successfully (notification skipped - no creatorId)',
+            notificationSent: !!finalCreatorId
+        });
     } catch (error: any) {
         console.error('Error sending class approval email:', error);
         return NextResponse.json(

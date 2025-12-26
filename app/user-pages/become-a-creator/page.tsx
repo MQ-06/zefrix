@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotification } from '@/contexts/NotificationContext';
 import { categoryDetails } from '@/lib/categoriesData';
+import { uploadImage, getProfileImagePath, validateFile } from '@/lib/utils/serverStorage';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -39,6 +40,9 @@ export default function BecomeACreatorPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [whatsappError, setWhatsappError] = useState<string>('');
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [formData, setFormData] = useState({
     fullname: '',
     email: '',
@@ -90,6 +94,16 @@ export default function BecomeACreatorPage() {
     `;
     document.head.appendChild(initScript);
   }, []);
+
+  // Sync profileImage URL with preview when it changes
+  useEffect(() => {
+    if (formData.profileImage && formData.profileImage.trim() && formData.profileImage.startsWith('http')) {
+      // If there's a profileImage URL but no preview, set it
+      if (!profileImagePreview || profileImagePreview !== formData.profileImage.trim()) {
+        setProfileImagePreview(formData.profileImage.trim());
+      }
+    }
+  }, [formData.profileImage]);
 
   // WhatsApp number validation utility
   const validateWhatsAppNumber = (phoneNumber: string): { valid: boolean; error?: string; formatted?: string } => {
@@ -153,7 +167,61 @@ export default function BecomeACreatorPage() {
       }
     }
     
-    setFormData(prev => ({ ...prev, [name]: value }));
+    // If category changes, clear subCategory
+    if (name === 'category') {
+      setFormData(prev => ({ ...prev, [name]: value, subCategory: '' }));
+    } else if (name === 'profileImage') {
+      // When profile image URL is entered, update preview
+      setFormData(prev => ({ ...prev, [name]: value }));
+      if (value.trim()) {
+        setProfileImagePreview(value.trim());
+      } else {
+        setProfileImagePreview('');
+      }
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleProfileImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file
+    const validation = validateFile(file, 'image');
+    if (!validation.valid) {
+      showError(validation.error || 'Invalid file');
+      return;
+    }
+
+    setProfileImageFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfileImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload image immediately
+    setUploadingImage(true);
+    try {
+      // Use current user ID if available (Google sign-in), otherwise use temporary ID
+      // The image will be re-uploaded with correct path during form submission if needed
+      const currentUser = window.firebaseAuth?.currentUser;
+      const userId = currentUser?.uid || user?.uid || 'temp-' + Date.now();
+      const path = getProfileImagePath(userId, file.name);
+      const downloadURL = await uploadImage(file, path, true);
+      setFormData(prev => ({ ...prev, profileImage: downloadURL }));
+      showSuccess('Profile image uploaded successfully!');
+    } catch (error: any) {
+      console.error('Image upload error:', error);
+      showError(error.message || 'Failed to upload image');
+      setProfileImageFile(null);
+      setProfileImagePreview('');
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const validateStep = (step: number): boolean => {
@@ -339,12 +407,23 @@ export default function BecomeACreatorPage() {
       const currentUser = window.firebaseAuth.currentUser;
 
       // Pre-fill form with Google data
+      const googlePhotoURL = currentUser.photoURL || '';
+      console.log('🔍 Google photoURL:', googlePhotoURL); // Debug log
+      
       setFormData(prev => ({
         ...prev,
         fullname: currentUser.displayName || prev.fullname || '',
         email: currentUser.email || prev.email || '',
-        profileImage: currentUser.photoURL || prev.profileImage || '',
+        profileImage: googlePhotoURL || prev.profileImage || '',
       }));
+      
+      // Set preview for Google image
+      if (googlePhotoURL) {
+        console.log('✅ Setting profile image preview:', googlePhotoURL); // Debug log
+        setProfileImagePreview(googlePhotoURL);
+      } else {
+        console.log('⚠️ No Google photoURL available'); // Debug log
+      }
 
       // Update user profile with creator role (but mark as incomplete)
       await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
@@ -479,13 +558,30 @@ export default function BecomeACreatorPage() {
             </div>
             <div className="form-group">
               <label>Sub-Category (optional)</label>
-              <input
-                type="text"
+              <select
                 name="subCategory"
                 value={formData.subCategory}
                 onChange={handleInputChange}
-                placeholder="e.g., Graphic Design, Web Development"
-              />
+                disabled={!formData.category}
+              >
+                <option value="">Select Sub-Category</option>
+                {formData.category && categoryDetails
+                  .find(cat => cat.slug === formData.category)
+                  ?.subcategories.map((subcat, index) => (
+                    <option key={index} value={subcat}>
+                      {subcat}
+                    </option>
+                  ))}
+              </select>
+              {!formData.category && (
+                <div style={{ 
+                  color: '#6b7280', 
+                  fontSize: '11px', 
+                  marginTop: '4px' 
+                }}>
+                  Please select a category first
+                </div>
+              )}
             </div>
           </div>
         );
@@ -526,14 +622,108 @@ export default function BecomeACreatorPage() {
               />
             </div>
             <div className="form-group">
-              <label>Profile Image URL (optional)</label>
-              <input
-                type="url"
-                name="profileImage"
-                value={formData.profileImage}
-                onChange={handleInputChange}
-                placeholder="https://example.com/profile.jpg"
-              />
+              <label>Profile Image (optional)</label>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexDirection: 'column' }}>
+                <div style={{ width: '100%' }}>
+                  <input
+                    type="file"
+                    id="profile-image-upload"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                    onChange={handleProfileImageChange}
+                    disabled={uploadingImage}
+                    style={{ 
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#eee',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontFamily: 'Poppins, sans-serif',
+                      cursor: uploadingImage ? 'not-allowed' : 'pointer'
+                    }}
+                  />
+                  <small style={{ 
+                    display: 'block', 
+                    marginTop: '0.5rem', 
+                    color: '#999', 
+                    fontSize: '11px' 
+                  }}>
+                    Max size: 5MB. Formats: JPEG, PNG, WebP, GIF.
+                  </small>
+                  {uploadingImage && (
+                    <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '12px' }}>
+                      ⏳ Uploading image...
+                    </div>
+                  )}
+                </div>
+                <div style={{ 
+                  width: '120px', 
+                  height: '120px', 
+                  borderRadius: '50%', 
+                  overflow: 'hidden',
+                  border: '2px solid rgba(217, 42, 99, 0.5)',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: (profileImagePreview || formData.profileImage) ? 'transparent' : 'rgba(255, 255, 255, 0.1)'
+                }}>
+                  {(profileImagePreview || formData.profileImage) ? (
+                    <img
+                      src={profileImagePreview || formData.profileImage}
+                      alt="Profile preview"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onLoad={() => console.log('✅ Profile image loaded successfully')}
+                      onError={(e) => { 
+                        console.error('❌ Profile image failed to load:', profileImagePreview || formData.profileImage);
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        // Show placeholder on error
+                        const parent = (e.target as HTMLImageElement).parentElement;
+                        if (parent) {
+                          const placeholder = document.createElement('div');
+                          placeholder.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.5); font-size: 48px;';
+                          placeholder.innerHTML = '<i class="fa-solid fa-user"></i>';
+                          parent.appendChild(placeholder);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div style={{ 
+                      width: '100%', 
+                      height: '100%', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      fontSize: '48px'
+                    }}>
+                      <i className="fa-solid fa-user"></i>
+                    </div>
+                  )}
+                </div>
+                <div style={{ width: '100%', marginTop: '0.5rem' }}>
+                  <label style={{ fontSize: '12px', color: '#666', marginBottom: '0.25rem', display: 'block' }}>
+                    Or enter image URL:
+                  </label>
+                  <input
+                    type="url"
+                    name="profileImage"
+                    value={formData.profileImage}
+                    onChange={handleInputChange}
+                    placeholder="https://example.com/profile.jpg"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontFamily: 'Poppins, sans-serif',
+                      background: '#eee',
+                      color: '#000'
+                    }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         );
