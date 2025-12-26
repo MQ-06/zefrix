@@ -123,8 +123,33 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
   };
 
   const handleEndClass = async () => {
-    if (!window.firebaseDb || !window.doc || !window.updateDoc || !window.serverTimestamp || !sessionId) {
+    if (!window.firebaseDb || !window.doc || !window.updateDoc || !window.serverTimestamp || !sessionId || !window.firebaseAuth) {
       showError('Firebase not ready or session ID missing');
+      return;
+    }
+
+    const currentUser = window.firebaseAuth.currentUser;
+    if (!currentUser) {
+      showError('You must be logged in to end a class');
+      return;
+    }
+
+    // Verify creator owns this class
+    try {
+      const classRef = window.doc(window.firebaseDb, 'classes', classId);
+      const classDoc = await window.getDoc(classRef);
+      if (!classDoc.exists()) {
+        showError('Class not found');
+        return;
+      }
+      const classData = classDoc.data();
+      if (classData.creatorId !== currentUser.uid) {
+        showError('You do not have permission to end this class');
+        return;
+      }
+    } catch (error: any) {
+      console.error('Error verifying class ownership:', error);
+      showError('Failed to verify permissions');
       return;
     }
 
@@ -187,13 +212,15 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
         }
 
         await window.updateDoc(enrollmentRef, updateData);
+        console.log(`✅ Updated enrollment ${student.enrollmentId} with attendance:`, updateData);
       });
 
       await Promise.all(updatePromises);
+      console.log(`✅ Updated ${updatePromises.length} enrollments with attendance data`);
 
       // Update session document with attendance stats
       const sessionRef = window.doc(window.firebaseDb, 'sessions', sessionId);
-      await window.updateDoc(sessionRef, {
+      const sessionUpdateData = {
         status: 'completed',
         endedAt: window.serverTimestamp ? window.serverTimestamp() : new Date(),
         attendance: {
@@ -205,7 +232,9 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
         attendedStudents: presentStudentIds,
         absentStudents: absentStudentIds,
         attendedCount: presentStudentIds.length
-      });
+      };
+      await window.updateDoc(sessionRef, sessionUpdateData);
+      console.log(`✅ Updated session ${sessionId} with attendance:`, sessionUpdateData);
 
       setIsLive(false);
       showSuccess(`Class ended! ${presentStudentIds.length}/${students.length} students marked as present.`);
@@ -304,38 +333,55 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
         <div className="creator-live-video">
           <div className="creator-video-wrapper">
             {meetingLink ? (
-              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px' }}>
-                  <p style={{ margin: 0, marginBottom: '0.5rem', fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
-                    Join the Google Meet session:
+              <div style={{ 
+                width: '100%', 
+                height: '100%', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '2rem',
+                padding: '3rem',
+                background: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: '12px',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📹</div>
+                  <h3 style={{ margin: 0, marginBottom: '0.5rem', fontSize: '1.25rem', fontWeight: '600' }}>
+                    Join Google Meet Session
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                    Click the button below to join the live session in a new tab
                   </p>
-                  <a
-                    href={getMeetingEmbedUrl(meetingLink)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-block',
-                      padding: '0.75rem 1.5rem',
-                      background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
-                      color: 'white',
-                      textDecoration: 'none',
-                      borderRadius: '8px',
-                      fontWeight: '600',
-                      fontSize: '0.9375rem'
-                    }}
-                  >
-                    Join Google Meet →
-                  </a>
                 </div>
-                <div className="creator-video-container">
-                  <iframe
-                    className="creator-video-iframe"
-                    src={getMeetingEmbedUrl(meetingLink)}
-                    title="Live Class Meeting"
-                    allow="camera; microphone; fullscreen"
-                    allowFullScreen
-                  ></iframe>
-                </div>
+                <a
+                  href={getMeetingEmbedUrl(meetingLink)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-block',
+                    padding: '1rem 2.5rem',
+                    background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+                    color: 'white',
+                    textDecoration: 'none',
+                    borderRadius: '10px',
+                    fontWeight: '600',
+                    fontSize: '1rem',
+                    boxShadow: '0 4px 15px rgba(217, 42, 99, 0.4)',
+                    transition: 'transform 0.2s, box-shadow 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(217, 42, 99, 0.5)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(217, 42, 99, 0.4)';
+                  }}
+                >
+                  Join Google Meet →
+                </a>
               </div>
             ) : (
               <div style={{ padding: '2rem', textAlign: 'center', color: 'rgba(255, 255, 255, 0.7)' }}>

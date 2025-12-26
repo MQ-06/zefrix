@@ -192,7 +192,12 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
 
       const enrollmentsList: EnrollmentData[] = [];
       querySnapshot.forEach((doc: any) => {
-        enrollmentsList.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        enrollmentsList.push({ id: doc.id, ...data });
+        // Debug: Log attendance data
+        if (data.sessionAttendance) {
+          console.log(`Enrollment ${doc.id} - sessionAttendance:`, data.sessionAttendance);
+        }
       });
 
       setEnrollments(enrollmentsList);
@@ -237,10 +242,13 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
   // Calculate attendance from sessionAttendance data
   let totalAttended = 0;
   let totalAttendanceRate = 0;
+  let studentsWithSessions = 0;
+  
   enrollments.forEach(e => {
     const sessionAttendance = e.sessionAttendance || {};
     const sessions = Object.keys(sessionAttendance).length;
     if (sessions > 0) {
+      studentsWithSessions++;
       const attended = Object.values(sessionAttendance).filter((s: any) => s.attended).length;
       if (attended > 0) {
         totalAttended++;
@@ -249,7 +257,9 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
       totalAttendanceRate += rate;
     }
   });
-  const averageAttendanceRate = totalEnrollments > 0 ? totalAttendanceRate / totalEnrollments : 0;
+  
+  // Calculate average attendance rate only for students who have session data
+  const averageAttendanceRate = studentsWithSessions > 0 ? totalAttendanceRate / studentsWithSessions : 0;
   
   const averageRating = enrollments.filter(e => e.rating).length > 0
     ? (enrollments.reduce((sum, e) => sum + (e.rating || 0), 0) / enrollments.filter(e => e.rating).length).toFixed(1)
@@ -421,9 +431,77 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
                 </div>
                 <div className={styles.divider}></div>
                 <div className={styles.infoRow}>
-                  <span className={styles.infoLabel}>Sessions:</span>
-                  <span className={styles.infoValue}>{classData.numberSessions}</span>
+                  <span className={styles.infoLabel}>Number of Sessions:</span>
+                  <span className={styles.infoValue}>{classData.numberSessions || 1}</span>
                 </div>
+                {classData.scheduleType === 'recurring' && classData.startDate && (
+                  <>
+                    <div className={styles.divider}></div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Batch Start Date:</span>
+                      <span className={styles.infoValue}>
+                        {(() => {
+                          try {
+                            const date = new Date(classData.startDate);
+                            return date.toLocaleDateString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            });
+                          } catch {
+                            return classData.startDate;
+                          }
+                        })()}
+                        {classData.recurringStartTime && ` at ${classData.recurringStartTime}`}
+                      </span>
+                    </div>
+                    {classData.endDate && (
+                      <>
+                        <div className={styles.divider}></div>
+                        <div className={styles.infoRow}>
+                          <span className={styles.infoLabel}>Batch End Date:</span>
+                          <span className={styles.infoValue}>
+                            {(() => {
+                              try {
+                                const date = new Date(classData.endDate);
+                                return date.toLocaleDateString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                });
+                              } catch {
+                                return classData.endDate;
+                              }
+                            })()}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {classData.scheduleType === 'one-time' && classData.date && (
+                  <>
+                    <div className={styles.divider}></div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Class Date:</span>
+                      <span className={styles.infoValue}>
+                        {(() => {
+                          try {
+                            const date = new Date(classData.date);
+                            return date.toLocaleDateString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            });
+                          } catch {
+                            return classData.date;
+                          }
+                        })()}
+                        {classData.startTime && ` at ${classData.startTime}`}
+                      </span>
+                    </div>
+                  </>
+                )}
                 {classData.maxStudents && (
                   <>
                     <div className={styles.divider}></div>
@@ -666,7 +744,25 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
                       <div className={styles.tableCol}>
                         {session.status === 'completed' ? (
                           <span>
-                            {presentCount}/{totalEnrolled} ({attendanceRate}%)
+                            {(() => {
+                              // Calculate actual attendance from enrollments
+                              let actualPresent = 0;
+                              let actualTotal = 0;
+                              enrollments.forEach(e => {
+                                const sessionAttendance = e.sessionAttendance || {};
+                                if (sessionAttendance[session.id]) {
+                                  actualTotal++;
+                                  if (sessionAttendance[session.id].attended) {
+                                    actualPresent++;
+                                  }
+                                }
+                              });
+                              // Use actual data if available, otherwise fallback to session.attendance
+                              const displayPresent = actualTotal > 0 ? actualPresent : presentCount;
+                              const displayTotal = actualTotal > 0 ? actualTotal : (totalEnrolled || enrollments.length);
+                              const displayRate = displayTotal > 0 ? ((displayPresent / displayTotal) * 100).toFixed(0) : '0';
+                              return `${displayPresent}/${displayTotal} (${displayRate}%)`;
+                            })()}
                           </span>
                         ) : (
                           <span style={{ color: 'rgba(255, 255, 255, 0.5)' }}>Pending</span>

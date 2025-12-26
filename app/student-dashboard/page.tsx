@@ -511,7 +511,8 @@ export default function StudentDashboard() {
       if (!existingRatingSnapshot.empty) {
         // Rating already exists - update it instead of creating new one
         const existingRatingDoc = existingRatingSnapshot.docs[0];
-        await window.updateDoc(existingRatingDoc.ref, {
+        const ratingDocRef = window.doc(window.firebaseDb, 'ratings', existingRatingDoc.id);
+        await window.updateDoc(ratingDocRef, {
           rating: rating,
           feedback: feedback,
           updatedAt: new Date()
