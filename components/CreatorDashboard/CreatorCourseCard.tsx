@@ -64,6 +64,7 @@ export default function CreatorCourseCard({ classData, onViewClass }: CreatorCou
 
   const thumbnailUrl = classData.thumbnailUrl || classData.videoLink || 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b861_course-12.jpg';
   const instructorName = classData.creatorName || 'Creator';
+  const instructorInitials = instructorName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   const instructorImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(instructorName)}&background=D92A63&color=fff&size=200`;
 
   return (
@@ -79,59 +80,125 @@ export default function CreatorCourseCard({ classData, onViewClass }: CreatorCou
           }}
         />
         <div className="creator-course-teacher-wrap">
-          <img
-            alt={instructorName}
-            loading="lazy"
-            src={instructorImage}
-            className="creator-course-instructor-img"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(instructorName)}&background=D92A63&color=fff&size=200`;
-            }}
-          />
-          <div>{instructorName}</div>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            fontWeight: '600',
+            fontSize: '0.875rem',
+            flexShrink: 0
+          }}>
+            {instructorInitials}
+          </div>
+          <div style={{ 
+            fontSize: '0.875rem', 
+            fontWeight: '500',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: '120px'
+          }}>
+            {instructorName}
+          </div>
         </div>
       </div>
       <div className="creator-course-info">
-        <h3 className="creator-course-title">{classData.title}</h3>
-        <div className="creator-course-meta">
-          <div className="creator-course-meta-item">
+        <h3 className="creator-course-title" style={{
+          fontSize: '1rem',
+          fontWeight: '600',
+          marginBottom: '1rem',
+          color: '#fff',
+          lineHeight: '1.4',
+          minHeight: '2.8em',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden'
+        }}>
+          {classData.title}
+        </h3>
+        <div className="creator-course-meta" style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.75rem'
+        }}>
+          <div className="creator-course-meta-item" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: '0.875rem',
+            color: 'rgba(255, 255, 255, 0.8)'
+          }}>
             <img
               alt=""
               loading="lazy"
               src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg"
               className="creator-course-meta-icon"
+              style={{ width: '18px', height: '18px', flexShrink: 0 }}
             />
-            <div className="creator-course-meta-text">{classData.numberSessions || 0} {classData.numberSessions === 1 ? 'Session' : 'Sessions'}</div>
+            <span style={{ fontWeight: '500' }}>
+              {classData.numberSessions || 0} {classData.numberSessions === 1 ? 'Session' : 'Sessions'}
+            </span>
           </div>
-          <div className="creator-course-meta-item">
+          <div className="creator-course-meta-item" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: '0.875rem',
+            color: 'rgba(255, 255, 255, 0.8)'
+          }}>
             <img
               alt=""
               loading="lazy"
               src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg"
               className="creator-course-meta-icon"
+              style={{ width: '18px', height: '18px', flexShrink: 0 }}
             />
-            <div className="creator-course-meta-text">
+            <span style={{ fontWeight: '500' }}>
               {loadingStats ? '...' : enrollmentCount} {enrollmentCount === 1 ? 'Student' : 'Students'}
-            </div>
+            </span>
           </div>
           {classData.scheduleType && (
-            <div className="creator-course-meta-item">
+            <div className="creator-course-meta-item" style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.875rem',
+              color: 'rgba(255, 255, 255, 0.8)'
+            }}>
               <img
                 alt=""
                 loading="lazy"
                 src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg"
                 className="creator-course-meta-icon"
+                style={{ width: '18px', height: '18px', flexShrink: 0 }}
               />
-              <div className="creator-course-meta-text">
+              <span style={{ fontWeight: '500' }}>
                 {classData.scheduleType === 'one-time' ? 'One-time' : 'Recurring'}
-              </div>
+              </span>
             </div>
           )}
         </div>
       </div>
-      <div className="creator-course-bottom">
+      <div className="creator-course-bottom" style={{
+        padding: '1rem 1.25rem',
+        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+        marginTop: 'auto'
+      }}>
         <div className="creator-course-price-wrap">
-          <h4 className="creator-course-price">₹{classData.price.toFixed(2)}</h4>
+          <h4 className="creator-course-price" style={{
+            fontSize: '1.25rem',
+            fontWeight: '700',
+            color: '#FFD700',
+            margin: 0
+          }}>
+            ₹{classData.price.toFixed(2)}
+          </h4>
         </div>
       </div>
     </div>

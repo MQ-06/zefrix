@@ -56,7 +56,7 @@ export default function ProductPage({ params }: PageProps) {
       script.innerHTML = `
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         
         const firebaseConfig = {
           apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -100,6 +100,19 @@ export default function ProductPage({ params }: PageProps) {
           const data = docSnap.data();
           // Only show approved classes
           if (data.status === 'approved') {
+            // Fetch enrollment count
+            let enrollmentCount = 0;
+            if (window.collection && window.query && window.where && window.getDocs) {
+              try {
+                const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+                const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', docSnap.id));
+                const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+                enrollmentCount = enrollmentsSnapshot.size;
+              } catch (error) {
+                console.error('Error fetching enrollment count:', error);
+              }
+            }
+
             setCourse({
               id: docSnap.id,
               slug: docSnap.id,
@@ -116,14 +129,15 @@ export default function ProductPage({ params }: PageProps) {
               sections: data.numberSessions || 1,
               duration: data.duration || 1,
               students: 0,
+              enrollmentCount: enrollmentCount,
               originalPrice: data.price || 0,
               category: data.category || '',
               subCategory: data.subCategory || data.subcategory || '',
               maxSeats: data.maxSeats || undefined,
               scheduleType: data.scheduleType || '',
+              startDate: data.startDate || data.date || null,
             });
           } else {
-            // Class exists but not approved
             setCourse(null);
           }
         } else {
@@ -785,7 +799,7 @@ export default function ProductPage({ params }: PageProps) {
                       <Users className="w-5 h-5" />
                       <span>Students</span>
                     </div>
-                    <span className="text-white font-semibold">{course.students} Students</span>
+                    <span className="text-white font-semibold">{course.enrollmentCount || 0} Students</span>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -799,9 +813,9 @@ export default function ProductPage({ params }: PageProps) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-gray-400">
                       <BookOpen className="w-5 h-5" />
-                      <span>Lessons</span>
+                      <span>Sessions</span>
                     </div>
-                    <span className="text-white font-semibold">{course.sections} Sections</span>
+                    <span className="text-white font-semibold">{course.sections} Sessions</span>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -832,15 +846,28 @@ export default function ProductPage({ params }: PageProps) {
                     </div>
                   )}
 
-                  {earliestBatchDate ? (
+                  {course.scheduleType === 'recurring' && course.startDate ? (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-400">
                         <Calendar className="w-5 h-5" />
                         <span>Batch Starts</span>
                       </div>
-                      <span className="text-white font-semibold">{earliestBatchDate}</span>
+                      <span className="text-white font-semibold">
+                        {(() => {
+                          try {
+                            const date = new Date(course.startDate);
+                            return date.toLocaleDateString('en-US', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            });
+                          } catch {
+                            return course.startDate;
+                          }
+                        })()}
+                      </span>
                     </div>
-                  ) : (
+                  ) : course.scheduleType === 'recurring' ? (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-400">
                         <Calendar className="w-5 h-5" />
@@ -848,7 +875,7 @@ export default function ProductPage({ params }: PageProps) {
                       </div>
                       <span className="text-gray-500 text-sm">TBA</span>
                     </div>
-                  )}
+                  ) : null}
 
                   {course.maxSeats && (
                     <div className="flex items-center justify-between">
@@ -936,7 +963,7 @@ export default function ProductPage({ params }: PageProps) {
                   <div className="flex items-center gap-4 text-gray-400 text-sm mb-4">
                     <div className="flex items-center gap-1">
                       <BookOpen className="w-4 h-4" />
-                      <span>{relatedCourse.sections} Sections</span>
+                      <span>{relatedCourse.sections} Sessions</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
