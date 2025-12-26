@@ -324,84 +324,67 @@ export default function CreatorDashboard() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeSection]);
 
-  // Fetch approved classes for dashboard
+  // Fetch approved classes for dashboard with real-time updates
   useEffect(() => {
-    const fetchApprovedClasses = async () => {
-      // Wait for Firebase with retry logic
-      let retries = 0;
-      while (retries < 10) {
-        const currentUser = user || (window.firebaseAuth?.currentUser);
+    if (activeSection !== 'dashboard') {
+      return; // Only set up listener when on dashboard
+    }
 
-        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs && currentUser) {
-          // Firebase is ready!
-          console.log('✅ Firebase ready, fetching classes for creator:', currentUser.uid);
-          break;
-        }
+    let unsubscribe: (() => void) | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
 
-        console.log(`⏳ Waiting for Firebase... (attempt ${retries + 1}/10)`, {
-          firebaseDb: !!window.firebaseDb,
-          collection: !!window.collection,
-          query: !!window.query,
-          where: !!window.where,
-          getDocs: !!window.getDocs,
-          user: !!currentUser
-        });
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-        retries++;
-      }
-
-      // Final check after retries
+    const setupListener = () => {
       const currentUser = user || (window.firebaseAuth?.currentUser);
 
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !currentUser) {
-        console.error('❌ Firebase not ready after retries:', {
-          firebaseDb: !!window.firebaseDb,
-          collection: !!window.collection,
-          query: !!window.query,
-          where: !!window.where,
-          getDocs: !!window.getDocs,
-          user: !!currentUser
-        });
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot || !currentUser) {
+        // Retry after a short delay
+        retryTimeout = setTimeout(setupListener, 500);
         return;
       }
 
       setLoadingClasses(true);
       try {
-        console.log('📦 Fetching approved classes for creator:', currentUser.uid);
+        console.log('📦 Setting up real-time listener for approved classes:', currentUser.uid);
         const classesRef = window.collection(window.firebaseDb, 'classes');
         const q = window.query(
           classesRef,
           window.where('creatorId', '==', currentUser.uid),
           window.where('status', '==', 'approved')
         );
-        const querySnapshot = await window.getDocs(q);
+        
+        unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+          const classes: ApprovedClass[] = [];
+          snapshot.forEach((doc: any) => {
+            classes.push({ classId: doc.id, ...doc.data() });
+          });
 
-        const classes: ApprovedClass[] = [];
-        querySnapshot.forEach((doc: any) => {
-          classes.push({ classId: doc.id, ...doc.data() });
+          console.log(`✅ Real-time update: Found ${classes.length} approved classes for creator`);
+
+          // Sort by creation date (newest first)
+          classes.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+
+          setApprovedClasses(classes);
+          setLoadingClasses(false);
+        }, (error: any) => {
+          console.error('❌ Error in real-time listener:', error);
+          setLoadingClasses(false);
         });
-
-        console.log(`✅ Found ${classes.length} approved classes for creator`);
-
-        // Sort by creation date (newest first)
-        classes.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-
-        setApprovedClasses(classes);
       } catch (error) {
-        console.error('❌ Error fetching approved classes:', error);
-      } finally {
+        console.error('❌ Error setting up real-time listener:', error);
         setLoadingClasses(false);
       }
     };
 
-    if (activeSection === 'dashboard') {
-      fetchApprovedClasses();
-    }
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [activeSection, user]);
 
   // Reset pagination when switching to dashboard

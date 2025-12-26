@@ -14,6 +14,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
   }
 }
 
@@ -47,7 +48,7 @@ export default function CoursesPage() {
         script.type = 'module';
         script.textContent = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
           
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -65,6 +66,7 @@ export default function CoursesPage() {
           window.query = query;
           window.where = where;
           window.getDocs = getDocs;
+          window.onSnapshot = onSnapshot;
         `;
         document.head.appendChild(script);
       };
@@ -73,72 +75,56 @@ export default function CoursesPage() {
   }, []);
 
   useEffect(() => {
-    const fetchApprovedClasses = async () => {
-      // Check if Firebase is already ready
-      if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
-        await loadClasses();
-        return;
-      }
+    let unsubscribe: (() => void) | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
 
-      // Listen for firebaseReady event
-      const handleFirebaseReady = () => {
-        loadClasses();
-      };
-
-      window.addEventListener('firebaseReady', handleFirebaseReady);
-
-      // Fallback: try after a delay if event doesn't fire
-      const timeout = setTimeout(() => {
-        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
-          loadClasses();
-        } else {
-          console.warn('Firebase not ready after timeout, using fallback data');
-          setLoading(false);
-        }
-      }, 5000);
-
-      return () => {
-        window.removeEventListener('firebaseReady', handleFirebaseReady);
-        clearTimeout(timeout);
-      };
-    };
-
-    const loadClasses = async () => {
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+    const setupListener = () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+        timeoutId = setTimeout(setupListener, 500);
         return;
       }
 
       setLoading(true);
       try {
-        console.log('Fetching approved classes from Firestore...');
+        console.log('📦 Setting up real-time listener for approved classes...');
         const classesRef = window.collection(window.firebaseDb, 'classes');
         const q = window.query(classesRef, window.where('status', '==', 'approved'));
-        const querySnapshot = await window.getDocs(q);
         
-        const classes: ApprovedClass[] = [];
-        querySnapshot.forEach((doc: any) => {
-          classes.push({ classId: doc.id, ...doc.data() });
+        unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+          const classes: ApprovedClass[] = [];
+          snapshot.forEach((doc: any) => {
+            classes.push({ classId: doc.id, ...doc.data() });
+          });
+          
+          console.log(`✅ Real-time update: Found ${classes.length} approved classes`);
+          
+          // Sort by creation date (newest first)
+          classes.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+          
+          setApprovedClasses(classes);
+          setLoading(false);
+        }, (error: any) => {
+          console.error('Error in real-time listener:', error);
+          setApprovedClasses([]);
+          setLoading(false);
         });
-        
-        console.log(`Found ${classes.length} approved classes`);
-        
-        // Sort by creation date (newest first)
-        classes.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-        
-        setApprovedClasses(classes);
       } catch (error) {
-        console.error('Error fetching approved classes:', error);
+        console.error('Error setting up real-time listener:', error);
         setApprovedClasses([]);
-      } finally {
         setLoading(false);
       }
     };
 
-    fetchApprovedClasses();
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, []);
 
   // Convert approved classes to course format (only real classes, no dummy data)

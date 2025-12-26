@@ -17,6 +17,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
     doc: any;
     getDoc: any;
     setDoc: any;
@@ -258,41 +259,56 @@ export default function StudentDashboard() {
   };
 
 
-  // Fetch approved classes from Firestore
+  // Fetch approved classes from Firestore with real-time updates
   useEffect(() => {
-    const fetchApprovedClasses = async () => {
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        setTimeout(fetchApprovedClasses, 500);
+    let unsubscribe: (() => void) | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    const setupListener = () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+        retryTimeout = setTimeout(setupListener, 500);
         return;
       }
 
       setLoadingClasses(true);
       try {
+        console.log('📦 Setting up real-time listener for approved classes...');
         const classesRef = window.collection(window.firebaseDb, 'classes');
         const q = window.query(classesRef, window.where('status', '==', 'approved'));
-        const querySnapshot = await window.getDocs(q);
+        
+        unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+          const classes: ApprovedClass[] = [];
+          snapshot.forEach((doc: any) => {
+            classes.push({ classId: doc.id, ...doc.data() });
+          });
 
-        const classes: ApprovedClass[] = [];
-        querySnapshot.forEach((doc: any) => {
-          classes.push({ classId: doc.id, ...doc.data() });
+          console.log(`✅ Real-time update: Found ${classes.length} approved classes`);
+
+          // Sort by creation date (newest first)
+          classes.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+
+          setApprovedClasses(classes);
+          setLoadingClasses(false);
+        }, (error: any) => {
+          console.error('Error in real-time listener:', error);
+          setLoadingClasses(false);
         });
-
-        // Sort by creation date (newest first)
-        classes.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-
-        setApprovedClasses(classes);
       } catch (error) {
-        console.error('Error fetching approved classes:', error);
-      } finally {
+        console.error('Error setting up real-time listener:', error);
         setLoadingClasses(false);
       }
     };
 
-    fetchApprovedClasses();
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, []);
 
   // Fetch upcoming sessions for enrolled classes

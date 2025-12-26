@@ -16,6 +16,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
     doc: any;
     updateDoc: any;
     getDoc: any;
@@ -211,35 +212,42 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  // Fetch pending classes
-  const fetchPendingClasses = async () => {
-    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-      return;
+  // Set up real-time listener for pending classes
+  const setupPendingClassesListener = () => {
+    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+      return () => {};
     }
 
     setLoadingClasses(true);
     try {
       const classesRef = window.collection(window.firebaseDb, 'classes');
       const q = window.query(classesRef, window.where('status', '==', 'pending'));
-      const querySnapshot = await window.getDocs(q);
+      
+      const unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+        const classes: PendingClass[] = [];
+        snapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
 
-      const classes: PendingClass[] = [];
-      querySnapshot.forEach((doc: any) => {
-        classes.push({ classId: doc.id, ...doc.data() });
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setPendingClasses(classes);
+        setLoadingClasses(false);
+      }, (error: any) => {
+        console.error('Error in pending classes listener:', error);
+        showError('Failed to load pending classes. Please refresh the page.');
+        setLoadingClasses(false);
       });
 
-      classes.sort((a, b) => {
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
-      });
-
-      setPendingClasses(classes);
+      return unsubscribe;
     } catch (error) {
-      console.error('Error fetching pending classes:', error);
-      showError('Failed to load pending classes. Please refresh the page.');
-    } finally {
+      console.error('Error setting up pending classes listener:', error);
       setLoadingClasses(false);
+      return () => {};
     }
   };
 
@@ -367,33 +375,41 @@ export default function AdminDashboard() {
   };
 
   // Fetch approved classes
-  const fetchApprovedClasses = async () => {
-    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-      return;
+  // Set up real-time listener for approved classes
+  const setupApprovedClassesListener = () => {
+    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+      return () => {};
     }
 
     setLoadingApproved(true);
     try {
       const classesRef = window.collection(window.firebaseDb, 'classes');
       const q = window.query(classesRef, window.where('status', '==', 'approved'));
-      const querySnapshot = await window.getDocs(q);
+      
+      const unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+        const classes: PendingClass[] = [];
+        snapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
 
-      const classes: PendingClass[] = [];
-      querySnapshot.forEach((doc: any) => {
-        classes.push({ classId: doc.id, ...doc.data() });
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setApprovedClasses(classes);
+        setLoadingApproved(false);
+      }, (error: any) => {
+        console.error('Error in approved classes listener:', error);
+        setLoadingApproved(false);
       });
 
-      classes.sort((a, b) => {
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
-      });
-
-      setApprovedClasses(classes);
+      return unsubscribe;
     } catch (error) {
-      console.error('Error fetching approved classes:', error);
-    } finally {
+      console.error('Error setting up approved classes listener:', error);
       setLoadingApproved(false);
+      return () => {};
     }
   };
 
@@ -789,14 +805,15 @@ export default function AdminDashboard() {
     } else if (activePage === 'creators') {
       fetchRealCreators();
     } else if (activePage === 'approve-classes') {
-      // Run these in parallel for faster loading
-      Promise.all([
-        fetchPendingClasses(),
-        fetchApprovedClasses(),
-        calculateStats()
-      ]).catch((error) => {
-        console.error('Error loading approve-classes data:', error);
-      });
+      // Set up real-time listeners
+      const pendingUnsubscribe = setupPendingClassesListener();
+      const approvedUnsubscribe = setupApprovedClassesListener();
+      calculateStats();
+      
+      return () => {
+        if (pendingUnsubscribe) pendingUnsubscribe();
+        if (approvedUnsubscribe) approvedUnsubscribe();
+      };
     } else if (activePage === 'contact-messages') {
       fetchContactMessages();
     } else if (activePage === 'enrollments') {
