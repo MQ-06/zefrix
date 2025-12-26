@@ -161,17 +161,18 @@ export default function CoursesSection() {
   return (
     <section className="section-spacing-bottom">
       <div className="container">
-        <div className="flex items-center justify-between mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold text-white">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 mb-8 sm:mb-16">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
             Browse our courses
           </h2>
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            className="w-full sm:w-auto"
           >
             <Link
               href="/courses"
-              className="bg-gradient-to-r from-primary to-secondary px-8 py-4 rounded-lg text-white font-semibold text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
+              className="inline-block w-full sm:w-auto text-center bg-gradient-to-r from-primary to-secondary px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-white font-semibold text-base sm:text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
             >
               View all courses
             </Link>

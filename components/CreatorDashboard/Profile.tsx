@@ -444,7 +444,34 @@ export default function CreatorProfile() {
           type="submit" 
           className="creator-submit-btn"
           disabled={saving || !firebaseReady}
-          style={{ opacity: (saving || !firebaseReady) ? 0.6 : 1, cursor: (saving || !firebaseReady) ? 'not-allowed' : 'pointer' }}
+          style={{
+            background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+            color: 'white',
+            border: '2px solid rgba(255, 255, 255, 0.3)',
+            padding: '16px 40px',
+            borderRadius: '10px',
+            fontSize: '1.0625rem',
+            fontWeight: 600,
+            cursor: (saving || !firebaseReady) ? 'not-allowed' : 'pointer',
+            transition: 'all 0.3s',
+            width: 'auto',
+            opacity: (saving || !firebaseReady) ? 0.6 : 1,
+            marginTop: '1rem',
+          }}
+          onMouseEnter={(e) => {
+            if (!saving && firebaseReady) {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 20px rgba(217, 42, 99, 0.3)';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!saving && firebaseReady) {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+            }
+          }}
         >
           {saving ? 'Saving...' : 'Save Profile'}
         </button>

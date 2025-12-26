@@ -25,6 +25,9 @@ declare global {
     logout: any;
     doc: any;
     getDoc: any;
+    setDoc: any;
+    updateDoc: any;
+    deleteDoc: any;
     addDoc: any;
     Timestamp: any;
     updateProfile: any;
@@ -32,6 +35,15 @@ declare global {
     uploadBytes: any;
     getDownloadURL: any;
     deleteObject: any;
+    collection: any;
+    query: any;
+    where: any;
+    getDocs: any;
+    orderBy: any;
+    limit: any;
+    onSnapshot: any;
+    writeBatch: any;
+    serverTimestamp: any;
   }
 }
 

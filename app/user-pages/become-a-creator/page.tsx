@@ -33,6 +33,7 @@ const STEPS = [
 
 export default function BecomeACreatorPage() {
   const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false);
   const { signUp, signInWithGoogle, user, loading } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
   const [currentStep, setCurrentStep] = useState(1);
@@ -592,15 +593,25 @@ export default function BecomeACreatorPage() {
             <p className="step-description">Choose a strong password to secure your account</p>
             <div className="form-group">
               <label>Password *</label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                placeholder="Minimum 6 characters"
-                minLength={6}
-                required
-              />
+              <div className="password-input-wrapper">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  placeholder="Minimum 6 characters"
+                  minLength={6}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  <i className={showPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
+                </button>
+              </div>
             </div>
             <div className="form-summary">
               <h3>Review Your Information</h3>
@@ -828,6 +839,42 @@ export default function BecomeACreatorPage() {
           color: #000;
           margin: 8px 0;
           outline: none;
+        }
+
+        .password-input-wrapper {
+          position: relative;
+          width: 100%;
+        }
+
+        .password-input-wrapper input {
+          padding-right: 40px;
+          margin: 8px 0;
+        }
+
+        .password-toggle-btn {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none !important;
+          border: none !important;
+          cursor: pointer;
+          color: #000 !important;
+          font-size: 16px;
+          padding: 0 !important;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: auto !important;
+          height: auto !important;
+          border-radius: 0 !important;
+          transition: opacity 0.2s;
+          margin: 0 !important;
+        }
+
+        .password-toggle-btn:hover {
+          opacity: 0.7;
+          background: none !important;
         }
 
         .form-group input::placeholder,

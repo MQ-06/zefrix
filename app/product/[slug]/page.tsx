@@ -15,6 +15,12 @@ declare global {
     collection: any;
     doc: any;
     getDoc: any;
+    query: any;
+    where: any;
+    getDocs: any;
+    orderBy: any;
+    limit: any;
+    onSnapshot: any;
   }
 }
 
@@ -46,7 +52,7 @@ export default function ProductPage({ params }: PageProps) {
       script.innerHTML = `
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         
         const firebaseConfig = {
           apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -67,6 +73,9 @@ export default function ProductPage({ params }: PageProps) {
         window.query = query;
         window.where = where;
         window.getDocs = getDocs;
+        window.orderBy = orderBy;
+        window.limit = limit;
+        window.onSnapshot = onSnapshot;
       `;
       document.body.appendChild(script);
     }
@@ -681,16 +690,21 @@ export default function ProductPage({ params }: PageProps) {
                 </div>
 
                 {/* Add to Cart Button */}
-                <button
-                  onClick={handleAddToCart}
-                  disabled={isInCart}
-                  className={`w-full px-8 py-4 rounded-lg text-white font-semibold transition-opacity duration-200 shadow-lg ${isInCart
-                    ? 'bg-gray-600 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30'
-                    }`}
-                >
-                  {isInCart ? 'Already in Cart' : 'Add to Cart'}
-                </button>
+                {isInCart ? (
+                  <Link
+                    href="/checkout"
+                    className="w-full px-8 py-4 rounded-lg text-white font-semibold transition-all duration-200 shadow-lg bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30 flex items-center justify-center"
+                  >
+                    View Cart & Checkout
+                  </Link>
+                ) : (
+                  <button
+                    onClick={handleAddToCart}
+                    className="w-full px-8 py-4 rounded-lg text-white font-semibold transition-opacity duration-200 shadow-lg bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30"
+                  >
+                    Add to Cart
+                  </button>
+                )}
               </div>
             </div>
           </div>

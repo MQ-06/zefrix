@@ -10,6 +10,8 @@ import Footer from '@/components/Footer';
 export default function SignupLoginPage() {
   const [isActive, setIsActive] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const router = useRouter();
   const { signUp, signIn, signInWithGoogle, user, loading } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
@@ -296,6 +298,43 @@ export default function SignupLoginPage() {
             font-family: 'Poppins', sans-serif;
           }
 
+          .password-input-wrapper {
+            position: relative;
+            width: 100%;
+            margin: 8px 0;
+          }
+
+          .password-input-wrapper input {
+            padding-right: 40px;
+            margin: 0;
+          }
+
+          .password-toggle-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none !important;
+            border: none !important;
+            cursor: pointer;
+            color: #000 !important;
+            font-size: 16px;
+            padding: 0 !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: auto !important;
+            height: auto !important;
+            border-radius: 0 !important;
+            transition: opacity 0.2s;
+            margin: 0 !important;
+          }
+
+          .password-toggle-btn:hover {
+            opacity: 0.7;
+            background: none !important;
+          }
+
           .form-container {
             position: absolute;
             top: 0;
@@ -424,6 +463,146 @@ export default function SignupLoginPage() {
             visibility: visible !important;
             display: block !important;
           }
+
+          /* Hide mobile toggle links on desktop */
+          .form-container form p {
+            display: none;
+          }
+
+          /* Responsive Styles */
+          @media (max-width: 768px) {
+            .login-page-section {
+              padding: 100px 15px 40px;
+            }
+
+            .container {
+              width: 100%;
+              max-width: 100%;
+              min-height: auto;
+              border-radius: 20px;
+            }
+
+            .form-container {
+              position: relative;
+              width: 100% !important;
+              height: auto;
+              opacity: 1 !important;
+              transform: none !important;
+            }
+
+            .container.active .sign-in {
+              transform: none;
+              display: none;
+            }
+
+            .container.active .sign-up {
+              transform: none;
+              display: block;
+              opacity: 1;
+            }
+
+            .sign-in {
+              display: block;
+            }
+
+            .sign-up {
+              display: none;
+            }
+
+            .container.active .sign-up {
+              display: block;
+            }
+
+            .toggle-container {
+              display: none;
+            }
+
+            .container form {
+              padding: 30px 25px;
+              min-height: 400px;
+            }
+
+            .container h1 {
+              font-size: 22px !important;
+              margin-bottom: 15px !important;
+            }
+
+            .container input {
+              font-size: 14px;
+              padding: 12px 15px;
+            }
+
+            .container button {
+              padding: 12px 30px;
+              font-size: 13px;
+              width: 100%;
+            }
+
+            .container span {
+              font-size: 11px;
+            }
+
+            .social-icons {
+              margin: 15px 0;
+            }
+
+            .social-icons a {
+              width: 45px;
+              height: 45px;
+            }
+
+            .container form p {
+              margin-top: 20px;
+            }
+
+            .container form a {
+              color: #4e54c8;
+              text-decoration: underline;
+            }
+
+            .form-container form p {
+              display: block;
+            }
+          }
+
+          @media (max-width: 480px) {
+            .login-page-section {
+              padding: 80px 10px 30px;
+            }
+
+            .container {
+              border-radius: 15px;
+            }
+
+            .container form {
+              padding: 25px 20px;
+              min-height: 350px;
+            }
+
+            .container h1 {
+              font-size: 20px !important;
+              margin-bottom: 12px !important;
+            }
+
+            .container input {
+              font-size: 14px;
+              padding: 11px 12px;
+            }
+
+            .container button {
+              padding: 11px 25px;
+              font-size: 12px;
+            }
+
+            .container span {
+              font-size: 10px;
+            }
+
+            .social-icons a {
+              width: 40px;
+              height: 40px;
+            }
+          }
         `}</style>
 
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
@@ -441,10 +620,36 @@ export default function SignupLoginPage() {
               <span style={{ color: '#666' }}>or use your email for registration</span>
               <input type="text" id="signup-name" placeholder="Name" required autoComplete="name" />
               <input type="email" id="signup-email" placeholder="Email" required autoComplete="email" />
-              <input type="password" id="signup-password" placeholder="Password" required autoComplete="new-password" />
+              <div className="password-input-wrapper">
+                <input 
+                  type={showSignupPassword ? "text" : "password"} 
+                  id="signup-password" 
+                  placeholder="Password" 
+                  required 
+                  autoComplete="new-password" 
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowSignupPassword(!showSignupPassword)}
+                  aria-label={showSignupPassword ? "Hide password" : "Show password"}
+                >
+                  <i className={showSignupPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
+                </button>
+              </div>
               <button type="submit" id="emailSignUpBtn" disabled={isSubmitting}>
                 {isSubmitting ? 'Creating Account...' : 'Sign Up'}
               </button>
+              <p style={{ marginTop: '20px', fontSize: '14px', color: '#666' }}>
+                Already have an account?{' '}
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setIsActive(false); }}
+                  style={{ color: '#4e54c8', textDecoration: 'underline', cursor: 'pointer' }}
+                >
+                  Sign In
+                </a>
+              </p>
             </form>
           </div>
 
@@ -459,10 +664,36 @@ export default function SignupLoginPage() {
               </div>
               <span style={{ color: '#666' }}>or use your email password</span>
               <input type="email" id="login-email" placeholder="Email" required autoComplete="email" />
-              <input type="password" id="login-password" placeholder="Password" required autoComplete="current-password" />
+              <div className="password-input-wrapper">
+                <input 
+                  type={showLoginPassword ? "text" : "password"} 
+                  id="login-password" 
+                  placeholder="Password" 
+                  required 
+                  autoComplete="current-password" 
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                >
+                  <i className={showLoginPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
+                </button>
+              </div>
               <button type="submit" id="emailLoginBtn" disabled={isSubmitting}>
                 {isSubmitting ? 'Signing In...' : 'Sign In'}
               </button>
+              <p style={{ marginTop: '20px', fontSize: '14px', color: '#666' }}>
+                Don't have an account?{' '}
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setIsActive(true); }}
+                  style={{ color: '#4e54c8', textDecoration: 'underline', cursor: 'pointer' }}
+                >
+                  Sign Up
+                </a>
+              </p>
             </form>
           </div>
 
