@@ -12,14 +12,12 @@ service cloud.firestore {
                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       // Anyone can read creator profiles (for public instructor page)
       allow read: if resource.data.role == 'creator';
-      // Anyone can read public user profiles
-      allow read: if resource.data.isPublic == true;
     }
     
     // Classes collection
     match /classes/{classId} {
-      // PUBLIC: Anyone can read classes (for website listings)
-      allow read: if true;
+      // Anyone can read approved classes
+      allow read: if resource.data.status == 'approved';
       
       // Creators can read their own classes (any status)
       allow read: if request.auth != null && 
@@ -173,8 +171,8 @@ service cloud.firestore {
     
     // Ratings collection
     match /ratings/{ratingId} {
-      // PUBLIC: Anyone can read ratings (for viewing class ratings)
-      allow read: if true;
+      // Anyone authenticated can read ratings (for viewing class ratings)
+      allow read: if request.auth != null;
       
       // Students can create ratings for classes they're enrolled in
       allow create: if request.auth != null && 
@@ -279,22 +277,6 @@ service cloud.firestore {
       // Creators can read their own payouts
       allow read: if request.auth != null &&
                      request.auth.uid == resource.data.creatorId;
-    }
-    
-    // Courses collection (if exists) - public access
-    match /courses/{courseId} {
-      // PUBLIC: Anyone can read courses
-      allow read: if true;
-      // Authenticated users can write
-      allow write: if request.auth != null;
-    }
-
-    // Creators collection (if exists) - public access
-    match /creators/{creatorId} {
-      // PUBLIC: Anyone can read creator profiles
-      allow read: if true;
-      // Authenticated users can write
-      allow write: if request.auth != null;
     }
     
     // Default deny all other collections
