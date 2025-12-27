@@ -97,89 +97,111 @@ export default function BecomeACreatorPage() {
 
   // Sync profileImage URL with preview when it changes
   useEffect(() => {
-    if (formData.profileImage && formData.profileImage.trim() && formData.profileImage.startsWith('http')) {
-      // If there's a profileImage URL but no preview, set it
-      if (!profileImagePreview || profileImagePreview !== formData.profileImage.trim()) {
-        setProfileImagePreview(formData.profileImage.trim());
+    const trimmedImage = formData.profileImage?.trim() || '';
+    if (trimmedImage && trimmedImage.startsWith('http')) {
+      // Only update if different to prevent infinite loop
+      if (profileImagePreview !== trimmedImage) {
+        setProfileImagePreview(trimmedImage);
       }
+    } else if (!trimmedImage && profileImagePreview) {
+      // Clear preview if profileImage is cleared
+      setProfileImagePreview('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.profileImage]);
 
   // WhatsApp number validation utility
   const validateWhatsAppNumber = (phoneNumber: string): { valid: boolean; error?: string; formatted?: string } => {
-    if (!phoneNumber || !phoneNumber.trim()) {
-      return { valid: false, error: 'WhatsApp number is required' };
+    try {
+      if (!phoneNumber || typeof phoneNumber !== 'string' || !phoneNumber.trim()) {
+        return { valid: false, error: 'WhatsApp number is required' };
+      }
+
+      // Remove all whitespace
+      let cleaned = phoneNumber.trim().replace(/\s+/g, '');
+
+      // Must start with +
+      if (!cleaned.startsWith('+')) {
+        return { valid: false, error: 'WhatsApp number must start with + (country code). Example: +1234567890' };
+      }
+
+      // Remove the + and check if remaining are only digits
+      const digitsOnly = cleaned.substring(1);
+      
+      if (!digitsOnly || digitsOnly.length === 0) {
+        return { valid: false, error: 'WhatsApp number must include digits after the country code.' };
+      }
+
+      if (!/^\d+$/.test(digitsOnly)) {
+        return { valid: false, error: 'WhatsApp number can only contain digits after the country code. Please remove any letters or special characters.' };
+      }
+
+      // WhatsApp numbers should be between 7-15 digits (E.164 format allows up to 15 digits total)
+      // Country codes are 1-4 digits, so the number part should be at least 4 digits
+      if (digitsOnly.length < 7) {
+        return { valid: false, error: 'WhatsApp number is too short. Please include country code and number. Example: +1234567890' };
+      }
+
+      if (digitsOnly.length > 15) {
+        return { valid: false, error: 'WhatsApp number is too long. Maximum 15 digits allowed.' };
+      }
+
+      // Country code validation (should be 1-4 digits)
+      // Common country codes are 1-3 digits, but some regions use 4
+      const countryCodeLength = Math.min(4, digitsOnly.length);
+      const countryCode = digitsOnly.substring(0, countryCodeLength);
+      
+      // Country code should not start with 0
+      if (countryCode && countryCode.length > 0 && countryCode.startsWith('0')) {
+        return { valid: false, error: 'Country code cannot start with 0. Please use the correct format: +[country code][number]' };
+      }
+
+      // Format the number for storage (with + prefix)
+      const formatted = '+' + digitsOnly;
+
+      return { valid: true, formatted };
+    } catch (error) {
+      console.error('Error in validateWhatsAppNumber:', error);
+      return { valid: false, error: 'Invalid WhatsApp number format. Please check and try again.' };
     }
-
-    // Remove all whitespace
-    let cleaned = phoneNumber.trim().replace(/\s+/g, '');
-
-    // Must start with +
-    if (!cleaned.startsWith('+')) {
-      return { valid: false, error: 'WhatsApp number must start with + (country code). Example: +1234567890' };
-    }
-
-    // Remove the + and check if remaining are only digits
-    const digitsOnly = cleaned.substring(1);
-    
-    if (!/^\d+$/.test(digitsOnly)) {
-      return { valid: false, error: 'WhatsApp number can only contain digits after the country code. Please remove any letters or special characters.' };
-    }
-
-    // WhatsApp numbers should be between 7-15 digits (E.164 format allows up to 15 digits total)
-    // Country codes are 1-4 digits, so the number part should be at least 4 digits
-    if (digitsOnly.length < 7) {
-      return { valid: false, error: 'WhatsApp number is too short. Please include country code and number. Example: +1234567890' };
-    }
-
-    if (digitsOnly.length > 15) {
-      return { valid: false, error: 'WhatsApp number is too long. Maximum 15 digits allowed.' };
-    }
-
-    // Country code validation (should be 1-4 digits)
-    // Common country codes are 1-3 digits, but some regions use 4
-    const countryCodeLength = Math.min(4, digitsOnly.length);
-    const countryCode = digitsOnly.substring(0, countryCodeLength);
-    
-    // Country code should not start with 0
-    if (countryCode.startsWith('0')) {
-      return { valid: false, error: 'Country code cannot start with 0. Please use the correct format: +[country code][number]' };
-    }
-
-    // Format the number for storage (with + prefix)
-    const formatted = '+' + digitsOnly;
-
-    return { valid: true, formatted };
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    
-    // Real-time validation for WhatsApp number
-    if (name === 'whatsapp') {
-      setWhatsappError('');
-      // Only validate if user has typed something (not on empty)
-      if (value.trim()) {
-        const validation = validateWhatsAppNumber(value);
-        if (!validation.valid) {
-          setWhatsappError(validation.error || 'Invalid WhatsApp number');
+    try {
+      const { name, value } = e.target;
+      
+      // Real-time validation for WhatsApp number
+      if (name === 'whatsapp') {
+        try {
+          setWhatsappError('');
+          // Only validate if user has typed something (not on empty)
+          if (value && typeof value === 'string' && value.trim()) {
+            const validation = validateWhatsAppNumber(value);
+            if (!validation.valid) {
+              setWhatsappError(validation.error || 'Invalid WhatsApp number');
+            }
+          }
+        } catch (error) {
+          console.error('Error validating WhatsApp number:', error);
+          // Don't block input if validation fails
+          setWhatsappError('');
         }
       }
-    }
-    
-    // If category changes, clear subCategory
-    if (name === 'category') {
-      setFormData(prev => ({ ...prev, [name]: value, subCategory: '' }));
-    } else if (name === 'profileImage') {
-      // When profile image URL is entered, update preview
-      setFormData(prev => ({ ...prev, [name]: value }));
-      if (value.trim()) {
-        setProfileImagePreview(value.trim());
+      
+      // Always update form data, even if validation fails
+      // If category changes, clear subCategory
+      if (name === 'category') {
+        setFormData(prev => ({ ...prev, [name]: value || '', subCategory: '' }));
+      } else if (name === 'profileImage') {
+        // When profile image URL is entered, just update form data
+        // The useEffect will handle syncing the preview to prevent infinite loops
+        setFormData(prev => ({ ...prev, [name]: value || '' }));
       } else {
-        setProfileImagePreview('');
+        setFormData(prev => ({ ...prev, [name]: value || '' }));
       }
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+    } catch (error) {
+      console.error('Error in handleInputChange:', error);
+      // Don't crash the component - just log the error
     }
   };
 
@@ -231,12 +253,18 @@ export default function BecomeACreatorPage() {
         if (!formData.fullname || !formData.email || !formData.whatsapp) {
           return false;
         }
-        const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
-        if (!whatsappValidation.valid) {
-          setWhatsappError(whatsappValidation.error || 'Invalid WhatsApp number');
+        try {
+          const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
+          if (!whatsappValidation.valid) {
+            setWhatsappError(whatsappValidation.error || 'Invalid WhatsApp number');
+            return false;
+          }
+          return true;
+        } catch (error) {
+          console.error('Error validating WhatsApp in validateStep:', error);
+          setWhatsappError('Invalid WhatsApp number format. Please check and try again.');
           return false;
         }
-        return true;
       case 2:
         return !!formData.category;
       case 3:
@@ -320,9 +348,17 @@ export default function BecomeACreatorPage() {
       }
 
       // Validate WhatsApp number before saving
-      const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
-      if (!whatsappValidation.valid) {
-        showError(whatsappValidation.error || 'Invalid WhatsApp number');
+      let whatsappValidation;
+      try {
+        whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
+        if (!whatsappValidation.valid) {
+          showError(whatsappValidation.error || 'Invalid WhatsApp number');
+          setIsSubmitting(false);
+          return;
+        }
+      } catch (error) {
+        console.error('Error validating WhatsApp in handleSubmit:', error);
+        showError('Invalid WhatsApp number format. Please check and try again.');
         setIsSubmitting(false);
         return;
       }

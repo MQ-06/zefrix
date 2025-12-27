@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { BookOpen, Clock, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
+import { DEFAULT_COURSE_IMAGE, getAvatarUrl } from '@/lib/constants';
 
 interface Course {
   id: string;
@@ -24,16 +25,23 @@ interface CoursesPageCardProps {
   course: Course;
 }
 
-const DEFAULT_IMAGE = 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg';
-
 export default function CoursesPageCard({ course }: CoursesPageCardProps) {
   const [imageError, setImageError] = useState(false);
-  const [imageSrc, setImageSrc] = useState(course.image || DEFAULT_IMAGE);
+  const [instructorImageError, setInstructorImageError] = useState(false);
+  const [imageSrc, setImageSrc] = useState(course.image || DEFAULT_COURSE_IMAGE);
+  const [instructorImageSrc, setInstructorImageSrc] = useState(course.instructorImage || getAvatarUrl(course.instructor, 128));
 
   const handleImageError = () => {
     if (!imageError) {
       setImageError(true);
-      setImageSrc(DEFAULT_IMAGE);
+      setImageSrc(DEFAULT_COURSE_IMAGE);
+    }
+  };
+
+  const handleInstructorImageError = () => {
+    if (!instructorImageError) {
+      setInstructorImageError(true);
+      setInstructorImageSrc(getAvatarUrl(course.instructor, 128));
     }
   };
 
@@ -61,9 +69,10 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
           {/* Instructor Badge */}
           <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-white/95 backdrop-blur-sm px-3 py-2 rounded-full shadow-lg">
             <img
-              src={course.instructorImage}
+              src={instructorImageSrc}
               alt={course.instructor}
-              className="w-8 h-8 rounded-full border-2 border-white"
+              className="w-8 h-8 rounded-full border-2 border-white object-cover"
+              onError={handleInstructorImageError}
             />
             <span className="text-sm font-semibold text-gray-800">
               {course.instructor}

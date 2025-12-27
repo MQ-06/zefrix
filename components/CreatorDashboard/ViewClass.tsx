@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useNotification } from '@/contexts/NotificationContext';
 import SessionForm from './SessionForm';
 import styles from './ViewClass.module.css';
+import { DEFAULT_COURSE_IMAGE } from '@/lib/constants';
 
 declare global {
     interface Window {
@@ -424,11 +425,11 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                 <h3 className={styles.cardTitle}>Class Video/Image</h3>
                                 <div className={styles.videoPreview}>
                                     <img
-                                        src={classData.videoLink}
+                                        src={classData.videoLink || DEFAULT_COURSE_IMAGE}
                                         alt={classData.title}
                                         className={styles.videoImage}
                                         onError={(e) => {
-                                            (e.target as HTMLImageElement).src = 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b861_course-12.jpg';
+                                            (e.target as HTMLImageElement).src = DEFAULT_COURSE_IMAGE;
                                         }}
                                     />
                                 </div>

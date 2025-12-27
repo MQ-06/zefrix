@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { DEFAULT_COURSE_IMAGE } from '@/lib/constants';
 
 interface ClassData {
   classId: string;
@@ -62,10 +63,18 @@ export default function CreatorCourseCard({ classData, onViewClass }: CreatorCou
     }
   };
 
-  const thumbnailUrl = classData.thumbnailUrl || classData.videoLink || 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b861_course-12.jpg';
+  const [imageError, setImageError] = useState(false);
+  const thumbnailUrl = classData.thumbnailUrl || classData.videoLink || DEFAULT_COURSE_IMAGE;
   const instructorName = classData.creatorName || 'Creator';
   const instructorInitials = instructorName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   const instructorImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(instructorName)}&background=D92A63&color=fff&size=200`;
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    if (!imageError) {
+      setImageError(true);
+      e.currentTarget.src = DEFAULT_COURSE_IMAGE;
+    }
+  };
 
   return (
     <div onClick={handleClick} className="creator-course-card" style={{ cursor: onViewClass ? 'pointer' : 'default' }}>
@@ -75,9 +84,7 @@ export default function CreatorCourseCard({ classData, onViewClass }: CreatorCou
           loading="lazy"
           src={thumbnailUrl}
           className="creator-course-image"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b861_course-12.jpg';
-          }}
+          onError={handleImageError}
         />
         <div className="creator-course-teacher-wrap">
           <div style={{

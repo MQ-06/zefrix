@@ -364,8 +364,14 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                           {student.photoURL ? (
                             <img
-                              src={student.photoURL}
+                              src={student.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Student')}&background=D92A63&color=fff&size=128`}
                               alt={student.name}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (!target.src.includes('ui-avatars.com')) {
+                                  target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Student')}&background=D92A63&color=fff&size=128`;
+                                }
+                              }}
                               style={{
                                 width: '40px',
                                 height: '40px',

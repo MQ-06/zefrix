@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useNotification } from '@/contexts/NotificationContext';
 import styles from './ManageClasses.module.css';
+import { DEFAULT_COURSE_IMAGE } from '@/lib/constants';
 
 declare global {
   interface Window {
@@ -289,11 +290,11 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
             <div key={classItem.classId} className={styles.classItem}>
               <div className={styles.classGrid}>
                 <img
-                  src={(classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"}
+                  src={(classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : DEFAULT_COURSE_IMAGE}
                   alt={classItem.title}
                   className={styles.thumbnail}
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                    (e.target as HTMLImageElement).src = DEFAULT_COURSE_IMAGE;
                   }}
                 />
                 <h3 className={styles.classTitle}>{classItem.title}</h3>

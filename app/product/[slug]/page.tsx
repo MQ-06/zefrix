@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Footer from '@/components/Footer';
 import { useCart } from '@/contexts/CartContext';
 import { useNotification } from '@/contexts/NotificationContext';
+import { DEFAULT_COURSE_IMAGE, getAvatarUrl } from '@/lib/constants';
 
 declare global {
   interface Window {
@@ -47,6 +48,42 @@ export default function ProductPage({ params }: PageProps) {
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [averageRating, setAverageRating] = useState<number | null>(null);
+  const [imageError, setImageError] = useState(false);
+  const [relatedImageErrors, setRelatedImageErrors] = useState<{ [key: string]: boolean }>({});
+  const [instructorImageError, setInstructorImageError] = useState(false);
+  const [relatedInstructorImageErrors, setRelatedInstructorImageErrors] = useState<{ [key: string]: boolean }>({});
+
+  const handleCourseImageError = () => {
+    if (!imageError && course) {
+      setImageError(true);
+      setCourse({ ...course, image: DEFAULT_COURSE_IMAGE });
+    }
+  };
+
+  const handleInstructorImageError = () => {
+    if (!instructorImageError && course) {
+      setInstructorImageError(true);
+      setCourse({ ...course, instructorImage: getAvatarUrl(course.instructor || 'Instructor', 200) });
+    }
+  };
+
+  const handleRelatedImageError = (courseId: string) => {
+    if (!relatedImageErrors[courseId]) {
+      setRelatedImageErrors({ ...relatedImageErrors, [courseId]: true });
+      setRelatedCourses(relatedCourses.map(rc => 
+        rc.id === courseId ? { ...rc, image: DEFAULT_COURSE_IMAGE } : rc
+      ));
+    }
+  };
+
+  const handleRelatedInstructorImageError = (courseId: string) => {
+    if (!relatedInstructorImageErrors[courseId]) {
+      setRelatedInstructorImageErrors({ ...relatedInstructorImageErrors, [courseId]: true });
+      setRelatedCourses(relatedCourses.map(rc => 
+        rc.id === courseId ? { ...rc, instructorImage: getAvatarUrl(rc.instructor || 'Instructor', 128) } : rc
+      ));
+    }
+  };
 
   useEffect(() => {
     // Load Firebase if not already loaded
@@ -119,10 +156,10 @@ export default function ProductPage({ params }: PageProps) {
               title: data.title || 'Untitled Class',
               subtitle: data.subtitle || '',
               price: data.price || 0,
-              image: data.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
+              image: data.videoLink || DEFAULT_COURSE_IMAGE,
               instructor: data.creatorName || 'Instructor',
               instructorId: data.creatorId || '',
-              instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.creatorName || 'I')}&background=D92A63&color=fff`,
+              instructorImage: getAvatarUrl(data.creatorName || 'Instructor', 200),
               description: data.description || 'No description available.',
               whatStudentsWillLearn: data.whatStudentsWillLearn || '',
               level: data.level || '',
@@ -225,14 +262,14 @@ export default function ProductPage({ params }: PageProps) {
               slug: doc.id,
               title: data.title || 'Untitled Class',
               price: data.price || 0,
-              image: data.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
-              instructor: data.creatorName || 'Instructor',
-              instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.creatorName || 'I')}&background=D92A63&color=fff`,
-              sections: data.numberSessions || 1,
-              duration: data.duration || 1,
-              students: 0,
-              originalPrice: data.price || 0,
-            });
+              image: data.videoLink || DEFAULT_COURSE_IMAGE,
+            instructor: data.creatorName || 'Instructor',
+            instructorImage: getAvatarUrl(data.creatorName || 'Instructor', 128),
+            sections: data.numberSessions || 1,
+            duration: data.duration || 1,
+            students: 0,
+            originalPrice: data.price || 0,
+          });
           }
         });
 
@@ -492,10 +529,16 @@ export default function ProductPage({ params }: PageProps) {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] flex items-center justify-center text-white font-bold">
                     {user.photoURL ? (
-                      <img src={user.photoURL} alt={user.displayName || 'Student'} className="w-full h-full rounded-full object-cover" />
-                    ) : (
-                      userInitial
-                    )}
+                      <img 
+                        src={user.photoURL} 
+                        alt={user.displayName || 'Student'} 
+                        className="w-full h-full rounded-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : null}
+                    {!user.photoURL && userInitial}
                   </div>
                   <div>
                     <div className="text-white font-semibold text-sm">
@@ -696,9 +739,12 @@ export default function ProductPage({ params }: PageProps) {
                   <div>
                     <div className="flex gap-6 items-start">
                       <img
-                        src={creatorProfile?.profileImage || course.instructorImage}
+                        src={creatorProfile?.profileImage || course.instructorImage || getAvatarUrl(course.instructor || 'Instructor', 200)}
                         alt={creatorProfile?.name || course.instructor}
                         className="w-24 h-24 rounded-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = getAvatarUrl(course.instructor || 'Instructor', 200);
+                        }}
                       />
                       <div className="flex-1">
                         <h3 className="text-2xl font-bold text-white mb-1">
@@ -773,9 +819,10 @@ export default function ProductPage({ params }: PageProps) {
                 {/* Course Image */}
                 <div className="rounded-xl overflow-hidden mb-6">
                   <img
-                    src={course.image}
+                    src={course.image || DEFAULT_COURSE_IMAGE}
                     alt={course.title}
-                    className="w-full h-auto"
+                    className="w-full h-auto object-cover"
+                    onError={handleCourseImageError}
                   />
                 </div>
 
@@ -941,15 +988,17 @@ export default function ProductPage({ params }: PageProps) {
               >
                 <div className="relative">
                   <img
-                    src={relatedCourse.image}
+                    src={relatedCourse.image || DEFAULT_COURSE_IMAGE}
                     alt={relatedCourse.title}
                     className="w-full h-48 object-cover"
+                    onError={() => handleRelatedImageError(relatedCourse.id)}
                   />
                   <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1">
                     <img
-                      src={relatedCourse.instructorImage}
+                      src={relatedCourse.instructorImage || getAvatarUrl(relatedCourse.instructor || 'Instructor', 128)}
                       alt={relatedCourse.instructor}
-                      className="w-6 h-6 rounded-full"
+                      className="w-6 h-6 rounded-full object-cover"
+                      onError={() => handleRelatedInstructorImageError(relatedCourse.id)}
                     />
                     <span className="text-white text-sm">{relatedCourse.instructor}</span>
                   </div>
