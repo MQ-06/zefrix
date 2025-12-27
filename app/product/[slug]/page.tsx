@@ -192,13 +192,19 @@ export default function ProductPage({ params }: PageProps) {
     fetchCourse();
   }, [params.slug]);
 
-  // Fetch current user
+  // Fetch current user and listen for auth changes
   useEffect(() => {
     const checkUser = () => {
       if (window.firebaseAuth) {
         const currentUser = window.firebaseAuth.currentUser;
-        if (currentUser) {
-          setUser(currentUser);
+        setUser(currentUser || null);
+        
+        // Listen for auth state changes
+        if (window.firebaseAuth.onAuthStateChanged) {
+          const unsubscribe = window.firebaseAuth.onAuthStateChanged((user: any) => {
+            setUser(user);
+          });
+          return () => unsubscribe();
         }
       } else {
         setTimeout(checkUser, 500);
@@ -938,7 +944,23 @@ export default function ProductPage({ params }: PageProps) {
                 {/* Add to Cart Button - Hide if enrolled */}
                 {!isEnrolled && (
                   <>
-                    {isInCart ? (
+                    {!user ? (
+                      // Show login prompt for non-authenticated users
+                      <div className="space-y-3">
+                        <div className="w-full px-8 py-4 rounded-lg text-white font-semibold bg-gradient-to-r from-[#D92A63] to-[#FF654B] text-center border-2 border-transparent">
+                          Login Required to Enroll
+                        </div>
+                        <Link
+                          href={`/signup-login?redirect=/product/${params.slug}`}
+                          className="w-full px-8 py-4 rounded-lg text-white font-semibold transition-all duration-200 shadow-lg bg-gradient-to-r from-[#6C63FF] to-[#D92A63] hover:opacity-90 shadow-[#6C63FF]/30 flex items-center justify-center"
+                        >
+                          Login / Sign Up to Continue
+                        </Link>
+                        <p className="text-center text-gray-400 text-sm">
+                          Create an account to enroll in this class
+                        </p>
+                      </div>
+                    ) : isInCart ? (
                       <Link
                         href="/checkout"
                         className="w-full px-8 py-4 rounded-lg text-white font-semibold transition-all duration-200 shadow-lg bg-gradient-to-r from-[#D92A63] to-[#FF654B] hover:opacity-90 shadow-[#D92A63]/30 flex items-center justify-center"

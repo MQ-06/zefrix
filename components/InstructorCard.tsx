@@ -19,7 +19,7 @@ export default function InstructorCard({ instructor, index }: InstructorCardProp
       whileHover={{ y: -8, transition: { duration: 0.3 } }}
     >
       <Link
-        href={`/instructor/${instructor.slug}`}
+        href={`/creator/${instructor.id}`}
         className="group block text-center instructor-item"
         aria-label={`View ${instructor.name}'s profile`}
       >

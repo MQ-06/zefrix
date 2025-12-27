@@ -165,25 +165,37 @@ export default function CreatorProfilePage() {
 
         setClasses(classesList);
 
-        // Fetch reviews/ratings
-        const ratingsRef = window.collection(window.firebaseDb, 'ratings');
-        const ratingsQuery = window.query(ratingsRef, window.where('classId', 'in', classesList.map(c => c.classId).slice(0, 10)));
-        const ratingsSnapshot = await window.getDocs(ratingsQuery);
-
+        // Fetch reviews/ratings - only if there are classes
         const reviewsList: Review[] = [];
-        ratingsSnapshot.forEach((doc: any) => {
-          const data = doc.data();
-          // Only include reviews for this creator's classes
-          if (classesList.some(c => c.classId === data.classId)) {
-            reviewsList.push({
-              id: doc.id,
-              studentName: data.studentName || 'Student',
-              rating: data.rating || 0,
-              feedback: data.feedback || '',
-              createdAt: data.createdAt,
-            });
+        if (classesList.length > 0) {
+          try {
+            const ratingsRef = window.collection(window.firebaseDb, 'ratings');
+            const classIds = classesList.map(c => c.classId).slice(0, 10);
+            
+            // Firebase 'in' filter requires non-empty array
+            if (classIds.length > 0) {
+              const ratingsQuery = window.query(ratingsRef, window.where('classId', 'in', classIds));
+              const ratingsSnapshot = await window.getDocs(ratingsQuery);
+
+              ratingsSnapshot.forEach((doc: any) => {
+                const data = doc.data();
+                // Only include reviews for this creator's classes
+                if (classesList.some(c => c.classId === data.classId)) {
+                  reviewsList.push({
+                    id: doc.id,
+                    studentName: data.studentName || 'Student',
+                    rating: data.rating || 0,
+                    feedback: data.feedback || '',
+                    createdAt: data.createdAt,
+                  });
+                }
+              });
+            }
+          } catch (ratingsError) {
+            console.error('Error fetching ratings:', ratingsError);
+            // Continue without reviews if ratings fetch fails
           }
-        });
+        }
 
         // Sort by date (newest first)
         reviewsList.sort((a, b) => {
@@ -274,7 +286,8 @@ export default function CreatorProfilePage() {
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
         color: '#fff',
-        paddingTop: '2rem'
+        paddingTop: '6rem', // More space below header
+        paddingBottom: '4rem'
       }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 2rem' }}>
           {/* Creator Header */}
@@ -459,7 +472,15 @@ export default function CreatorProfilePage() {
           {/* Intro Video */}
           {creator.introVideo && (
             <div style={{ marginBottom: '3rem' }}>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '1rem' }}>
+              <h2 style={{ 
+                fontSize: '2rem', 
+                fontWeight: '700', 
+                marginBottom: '1rem',
+                background: 'linear-gradient(135deg, #D92A63, #6C63FF)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
                 About {creator.name}
               </h2>
               <div style={{
@@ -488,19 +509,91 @@ export default function CreatorProfilePage() {
           )}
 
           {/* Upcoming Classes */}
-          <div style={{ marginBottom: '3rem' }}>
-            <h2 style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '1.5rem' }}>
-              Upcoming Classes & Batches
-            </h2>
+          <div style={{ 
+            marginBottom: '3rem',
+            marginTop: '2rem' // Add top margin to separate from previous section
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'flex-start', 
+              justifyContent: 'space-between',
+              marginBottom: '2rem',
+              flexWrap: 'wrap',
+              gap: '1.5rem',
+              paddingBottom: '1.5rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)' // Add separator line
+            }}>
+              <div style={{ flex: 1, minWidth: '250px' }}>
+                <h2 style={{ 
+                  fontSize: '2.25rem', 
+                  fontWeight: '700', 
+                  marginBottom: '0.75rem',
+                  marginTop: 0,
+                  background: 'linear-gradient(135deg, #D92A63, #6C63FF)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  lineHeight: '1.2'
+                }}>
+                  {classes.length > 0 ? `My Classes & Courses (${classes.length})` : 'My Classes & Courses'}
+                </h2>
+                <p style={{ 
+                  color: 'rgba(255, 255, 255, 0.6)', 
+                  fontSize: '1rem',
+                  marginTop: '0.5rem',
+                  marginBottom: 0,
+                  lineHeight: '1.5'
+                }}>
+                  {classes.length > 0 
+                    ? 'Explore all available classes and batches' 
+                    : 'No classes available yet'}
+                </p>
+              </div>
+              {classes.length > 0 && (
+                <div style={{
+                  padding: '0.875rem 1.75rem',
+                  background: 'rgba(217, 42, 99, 0.2)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(217, 42, 99, 0.3)',
+                  color: '#fff',
+                  fontSize: '0.9375rem',
+                  fontWeight: '600',
+                  whiteSpace: 'nowrap',
+                  alignSelf: 'center'
+                }}>
+                  {classes.length} {classes.length === 1 ? 'Class' : 'Classes'} Available
+                </div>
+              )}
+            </div>
             {classes.length === 0 ? (
               <div style={{
                 background: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: '12px',
-                padding: '2rem',
+                borderRadius: '16px',
+                padding: '3rem 2rem',
                 textAlign: 'center',
-                color: 'rgba(255, 255, 255, 0.7)'
+                border: '2px dashed rgba(255, 255, 255, 0.1)'
               }}>
-                No upcoming classes available at the moment.
+                <div style={{
+                  fontSize: '3rem',
+                  marginBottom: '1rem',
+                  opacity: 0.5
+                }}>
+                  📚
+                </div>
+                <div style={{
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  fontSize: '1.125rem',
+                  fontWeight: '600',
+                  marginBottom: '0.5rem'
+                }}>
+                  No Classes Available Yet
+                </div>
+                <div style={{
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontSize: '0.9375rem'
+                }}>
+                  This creator hasn't published any classes yet. Check back soon!
+                </div>
               </div>
             ) : (
               <div style={{
@@ -588,9 +681,25 @@ export default function CreatorProfilePage() {
           {/* Reviews & Ratings */}
           {reviews.length > 0 && (
             <div style={{ marginBottom: '3rem' }}>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '1.5rem' }}>
-                Reviews & Ratings
-              </h2>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h2 style={{ 
+                  fontSize: '2rem', 
+                  fontWeight: '700', 
+                  marginBottom: '0.5rem',
+                  background: 'linear-gradient(135deg, #D92A63, #6C63FF)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  Student Reviews & Ratings
+                </h2>
+                <p style={{ 
+                  color: 'rgba(255, 255, 255, 0.6)', 
+                  fontSize: '0.9375rem'
+                }}>
+                  What students are saying about {creator.name}'s classes
+                </p>
+              </div>
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
