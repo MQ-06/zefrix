@@ -40,10 +40,11 @@ service cloud.firestore {
                        resource.data.status == 'approved' &&
                        request.resource.data.status == 'approved'; // Cannot change status
       
-      // Creators can delete their own classes (only if not approved)
+      // Creators can delete their own classes (only if pending or rejected)
+      // Approved classes cannot be deleted to protect student enrollments and data integrity
       allow delete: if request.auth != null && 
                        request.auth.uid == resource.data.creatorId &&
-                       resource.data.status != 'approved';
+                       (resource.data.status == 'pending' || resource.data.status == 'rejected');
       
       // Admins can do everything
       allow read, write: if request.auth != null && 
