@@ -1107,12 +1107,20 @@ export default function CreatorDashboard() {
 
         .creator-payments-list {
           width: 100%;
+          overflow-x: auto;
         }
 
         .creator-payments-list-wrapper {
           display: flex;
           flex-direction: column;
           gap: 0.75rem;
+          width: 100%;
+        }
+
+        @media (max-width: 991px) {
+          .creator-payments-list {
+            overflow-x: visible;
+          }
         }
 
         .creator-payments-list-item {
@@ -1148,6 +1156,12 @@ export default function CreatorDashboard() {
 
         .payment-info.grid {
           grid-template-columns: auto 1fr 1fr auto auto auto auto auto;
+        }
+
+        /* Payment info responsive wrapper */
+        .creator-payments-list-item .div-block-14.payment-info.grid > * {
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .thumbnail {
@@ -1560,6 +1574,27 @@ export default function CreatorDashboard() {
           .creator-action-btn {
             width: 100%;
           }
+
+          .div-block-14.payment-info.grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+
+          .payment-info.grid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .creator-payments-list-item .div-block-14.payment-info.grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+
+          .creator-pay-info-name,
+          .text-block-31 {
+            white-space: normal;
+            word-wrap: break-word;
+          }
         }
 
         /* Responsive */
@@ -1663,24 +1698,47 @@ export default function CreatorDashboard() {
 
           .div-block-14.payment-info.grid {
             grid-template-columns: 1fr;
-            gap: 0.75rem;
+            gap: 1rem;
+            align-items: flex-start;
+          }
+
+          .payment-info.grid {
+            grid-template-columns: 1fr !important;
+            gap: 1rem;
           }
 
           .creator-payments-list-item {
-            padding: 0.75rem;
+            padding: 1rem;
+          }
+
+          .creator-payments-list-item .div-block-14.payment-info.grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
           }
 
           .creator-pay-info-name {
             font-size: 0.8125rem;
+            white-space: normal;
+            word-wrap: break-word;
           }
 
           .text-block-31 {
             font-size: 0.75rem;
+            white-space: normal;
+            word-wrap: break-word;
           }
 
           .button-dark.button-new-style {
-            padding: 5px 12px;
-            font-size: 0.6875rem;
+            padding: 8px 16px;
+            font-size: 0.75rem;
+            width: 100%;
+            text-align: center;
+          }
+
+          .thumbnail {
+            width: 40px;
+            height: 40px;
           }
 
           .creator-details-card {
@@ -1825,21 +1883,47 @@ export default function CreatorDashboard() {
           }
 
           .thumbnail {
-            width: 40px;
-            height: 40px;
+            width: 35px;
+            height: 35px;
+          }
+
+          .div-block-14.payment-info.grid {
+            grid-template-columns: 1fr !important;
+            gap: 0.75rem;
+          }
+
+          .payment-info.grid {
+            grid-template-columns: 1fr !important;
+            gap: 0.75rem;
+          }
+
+          .creator-payments-list-item .div-block-14.payment-info.grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
           }
 
           .creator-pay-info-name {
             font-size: 0.75rem;
+            white-space: normal;
+            word-wrap: break-word;
           }
 
           .text-block-31 {
             font-size: 0.6875rem;
+            white-space: normal;
+            word-wrap: break-word;
           }
 
           .button-dark.button-new-style {
-            padding: 4px 10px;
-            font-size: 0.625rem;
+            padding: 6px 14px;
+            font-size: 0.6875rem;
+            width: 100%;
+            text-align: center;
+          }
+
+          .creator-payments-list-item {
+            padding: 0.875rem;
           }
 
           .creator-details-card {

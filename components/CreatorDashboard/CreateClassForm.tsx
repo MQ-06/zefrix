@@ -118,6 +118,14 @@ export default function CreateClassForm() {
   const [thumbnailURL, setThumbnailURL] = useState<string>('');
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
+  // Time validation state
+  const [oneTimeStartTime, setOneTimeStartTime] = useState('');
+  const [oneTimeEndTime, setOneTimeEndTime] = useState('');
+  const [oneTimeTimeError, setOneTimeTimeError] = useState('');
+  const [recurringStartTime, setRecurringStartTime] = useState('');
+  const [recurringEndTime, setRecurringEndTime] = useState('');
+  const [recurringTimeError, setRecurringTimeError] = useState('');
+
   // Wait for Firebase to be ready
   useEffect(() => {
     const checkFirebase = () => {
@@ -163,6 +171,52 @@ export default function CreateClassForm() {
     );
   };
 
+  // Handle one-time time changes with validation
+  const handleOneTimeStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setOneTimeStartTime(value);
+    if (value && oneTimeEndTime) {
+      const validation = validateTimes(value, oneTimeEndTime);
+      setOneTimeTimeError(validation.valid ? '' : (validation.error || ''));
+    } else {
+      setOneTimeTimeError('');
+    }
+  };
+
+  const handleOneTimeEndTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setOneTimeEndTime(value);
+    if (value && oneTimeStartTime) {
+      const validation = validateTimes(oneTimeStartTime, value);
+      setOneTimeTimeError(validation.valid ? '' : (validation.error || ''));
+    } else {
+      setOneTimeTimeError('');
+    }
+  };
+
+  // Handle recurring time changes with validation
+  const handleRecurringStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setRecurringStartTime(value);
+    if (value && recurringEndTime) {
+      const validation = validateTimes(value, recurringEndTime);
+      setRecurringTimeError(validation.valid ? '' : (validation.error || ''));
+    } else {
+      setRecurringTimeError('');
+    }
+  };
+
+  const handleRecurringEndTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setRecurringEndTime(value);
+    if (value && recurringStartTime) {
+      const validation = validateTimes(recurringStartTime, value);
+      setRecurringTimeError(validation.valid ? '' : (validation.error || ''));
+    } else {
+      setRecurringTimeError('');
+    }
+  };
+
   const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -187,7 +241,41 @@ export default function CreateClassForm() {
     // File will be uploaded to server storage after class is created (we need classId first)
   };
 
-  // Helper function to calculate minutes between two times
+  // Helper function to validate that end time is after start time
+  const validateTimes = (startTime: string, endTime: string): { valid: boolean; error?: string } => {
+    if (!startTime || !endTime) {
+      return { valid: false, error: 'Start time and end time are required' };
+    }
+
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+
+    // Validate that times are valid numbers
+    if (isNaN(startHour) || isNaN(startMin) || isNaN(endHour) || isNaN(endMin)) {
+      return { valid: false, error: 'Invalid time format' };
+    }
+
+    // Validate hour range (0-23) and minute range (0-59)
+    if (startHour < 0 || startHour > 23 || startMin < 0 || startMin > 59 ||
+        endHour < 0 || endHour > 23 || endMin < 0 || endMin > 59) {
+      return { valid: false, error: 'Invalid time values' };
+    }
+
+    const startTotal = startHour * 60 + startMin;
+    const endTotal = endHour * 60 + endMin;
+
+    // End time must be after start time (at least 1 minute difference)
+    if (endTotal <= startTotal) {
+      return { 
+        valid: false, 
+        error: 'End time must be after start time. Please select an end time that is later than the start time.' 
+      };
+    }
+
+    return { valid: true };
+  };
+
+  // Helper function to calculate minutes between two times (assumes validation passed)
   const calculateMinutes = (startTime: string, endTime: string): number => {
     const [startHour, startMin] = startTime.split(':').map(Number);
     const [endHour, endMin] = endTime.split(':').map(Number);
@@ -318,11 +406,27 @@ export default function CreateClassForm() {
 
       if (scheduleType === 'one-time') {
         const date = formData.get('date') as string;
-        const startTime = formData.get('startTime') as string;
-        const endTime = formData.get('endTime') as string;
+        // Use state values if available, otherwise fall back to form data
+        const startTime = oneTimeStartTime || (formData.get('startTime') as string);
+        const endTime = oneTimeEndTime || (formData.get('endTime') as string);
 
         if (!date || !startTime || !endTime) {
           throw new Error('Please fill all date and time fields for one-time session');
+        }
+
+        // Validate date is not in the past
+        const selectedDate = new Date(date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (selectedDate < today) {
+          throw new Error('Class date cannot be in the past. Please select today or a future date.');
+        }
+
+        // Validate that end time is after start time
+        const timeValidation = validateTimes(startTime, endTime);
+        if (!timeValidation.valid) {
+          setOneTimeTimeError(timeValidation.error || 'Invalid time selection');
+          throw new Error(timeValidation.error || 'Invalid time selection');
         }
 
         startISO = createISOString(date, startTime);
@@ -333,10 +437,11 @@ export default function CreateClassForm() {
         // Recurring batch
         const startDate = formData.get('startDate') as string;
         const endDate = formData.get('endDate') as string;
-        const recurringStartTime = formData.get('recurringStartTime') as string;
-        const recurringEndTime = formData.get('recurringEndTime') as string;
+        // Use state values if available, otherwise fall back to form data
+        const recurringStartTimeValue = recurringStartTime || (formData.get('recurringStartTime') as string);
+        const recurringEndTimeValue = recurringEndTime || (formData.get('recurringEndTime') as string);
 
-        if (!startDate || !endDate || !recurringStartTime || !recurringEndTime) {
+        if (!startDate || !endDate || !recurringStartTimeValue || !recurringEndTimeValue) {
           throw new Error('Please fill all date and time fields for recurring batch');
         }
 
@@ -344,8 +449,31 @@ export default function CreateClassForm() {
           throw new Error('Please select at least one day for recurring batch');
         }
 
-        startISO = createISOString(startDate, recurringStartTime);
-        sessionLengthMinutes = calculateMinutes(recurringStartTime, recurringEndTime);
+        // Validate date range
+        const startDateObj = new Date(startDate);
+        const endDateObj = new Date(endDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Start date cannot be in the past
+        if (startDateObj < today) {
+          throw new Error('Batch start date cannot be in the past. Please select today or a future date.');
+        }
+
+        // End date must be after start date
+        if (endDateObj <= startDateObj) {
+          throw new Error('Batch end date must be after the start date. Please select an end date that is later than the start date.');
+        }
+
+        // Validate that end time is after start time
+        const timeValidation = validateTimes(recurringStartTimeValue, recurringEndTimeValue);
+        if (!timeValidation.valid) {
+          setRecurringTimeError(timeValidation.error || 'Invalid time selection');
+          throw new Error(timeValidation.error || 'Invalid time selection');
+        }
+
+        startISO = createISOString(startDate, recurringStartTimeValue);
+        sessionLengthMinutes = calculateMinutes(recurringStartTimeValue, recurringEndTimeValue);
         numberSessions = calculateRecurringSessions(startDate, endDate, selectedDays);
         daysBetweenSessions = calculateDaysBetween(startDate, endDate, numberSessions);
       }
@@ -811,6 +939,9 @@ export default function CreateClassForm() {
                   id="start-time"
                   name="startTime"
                   className="creator-form-input"
+                  value={oneTimeStartTime}
+                  onChange={handleOneTimeStartTimeChange}
+                  style={oneTimeTimeError ? { borderColor: '#ff4444' } : undefined}
                   required
                 />
               </div>
@@ -821,8 +952,16 @@ export default function CreateClassForm() {
                   id="end-time"
                   name="endTime"
                   className="creator-form-input"
+                  value={oneTimeEndTime}
+                  onChange={handleOneTimeEndTimeChange}
+                  style={oneTimeTimeError ? { borderColor: '#ff4444' } : undefined}
                   required
                 />
+                {oneTimeTimeError && (
+                  <div style={{ color: '#fff', fontSize: '0.875rem', marginTop: '0.25rem', fontWeight: 500 }}>
+                    {oneTimeTimeError}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -877,6 +1016,9 @@ export default function CreateClassForm() {
                   id="recurring-start-time"
                   name="recurringStartTime"
                   className="creator-form-input"
+                  value={recurringStartTime}
+                  onChange={handleRecurringStartTimeChange}
+                  style={recurringTimeError ? { borderColor: '#ff4444' } : undefined}
                   required
                 />
               </div>
@@ -887,8 +1029,16 @@ export default function CreateClassForm() {
                   id="recurring-end-time"
                   name="recurringEndTime"
                   className="creator-form-input"
+                  value={recurringEndTime}
+                  onChange={handleRecurringEndTimeChange}
+                  style={recurringTimeError ? { borderColor: '#ff4444' } : undefined}
                   required
                 />
+                {recurringTimeError && (
+                  <div style={{ color: '#fff', fontSize: '0.875rem', marginTop: '0.25rem', fontWeight: 500 }}>
+                    {recurringTimeError}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -945,7 +1095,7 @@ export default function CreateClassForm() {
                 : 'rgba(239, 68, 68, 0.15)',
               color: submitMessage.type === 'success' 
                 ? '#22c55e' 
-                : '#ef4444',
+                : '#fff',
               border: `1px solid ${submitMessage.type === 'success' 
                 ? 'rgba(34, 197, 94, 0.3)' 
                 : 'rgba(239, 68, 68, 0.3)'}`,

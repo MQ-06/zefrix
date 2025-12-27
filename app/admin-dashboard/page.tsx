@@ -103,6 +103,7 @@ export default function AdminDashboard() {
   const [payouts, setPayouts] = useState<any[]>([]);
   const [loadingPayouts, setLoadingPayouts] = useState(false);
   const [processingPayout, setProcessingPayout] = useState<string | null>(null);
+  const [selectedPayout, setSelectedPayout] = useState<any | null>(null);
 
   // Modal state
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
@@ -204,13 +205,19 @@ export default function AdminDashboard() {
 
     const handleUserLoaded = (e: any) => {
       setUser(e.detail.user);
+      // Trigger initial data fetch when user is loaded
+      if (window.firebaseDb && activePage === 'dashboard') {
+        setTimeout(() => {
+          calculateStats();
+        }, 100);
+      }
     };
     window.addEventListener('userLoaded', handleUserLoaded);
 
     return () => {
       window.removeEventListener('userLoaded', handleUserLoaded);
     };
-  }, []);
+  }, [activePage]);
 
   // Set up real-time listener for pending classes
   const setupPendingClassesListener = () => {
@@ -796,33 +803,59 @@ export default function AdminDashboard() {
     }
   };
 
-  // Load data based on active page (optimized to run in parallel where possible)
+  // Wait for Firebase and user to be ready, then load initial data
   useEffect(() => {
-    if (!window.firebaseDb) return;
+    let retryCount = 0;
+    const MAX_RETRIES = 30; // 6 seconds max wait (30 * 200ms)
+    let timeoutId: NodeJS.Timeout | null = null;
+    let isMounted = true;
+    let pendingUnsubscribe: (() => void) | null = null;
+    let approvedUnsubscribe: (() => void) | null = null;
 
-    if (activePage === 'dashboard') {
-      calculateStats();
-    } else if (activePage === 'creators') {
-      fetchRealCreators();
-    } else if (activePage === 'approve-classes') {
-      // Set up real-time listeners
-      const pendingUnsubscribe = setupPendingClassesListener();
-      const approvedUnsubscribe = setupApprovedClassesListener();
-      calculateStats();
-      
-      return () => {
+    const checkAndLoadData = () => {
+      if (!isMounted) return;
+
+      if (!window.firebaseDb || !user) {
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          timeoutId = setTimeout(checkAndLoadData, 200);
+          return;
+        }
+        console.warn('Firebase or user not ready after maximum retries');
+        return;
+      }
+
+      // Firebase and user are ready, load data for current page
+      if (activePage === 'dashboard') {
+        calculateStats();
+      } else if (activePage === 'creators') {
+        fetchRealCreators();
+      } else if (activePage === 'approve-classes') {
+        // Clean up previous listeners if any
         if (pendingUnsubscribe) pendingUnsubscribe();
         if (approvedUnsubscribe) approvedUnsubscribe();
-      };
-    } else if (activePage === 'contact-messages') {
-      fetchContactMessages();
-    } else if (activePage === 'enrollments') {
-      fetchEnrollments();
-    } else if (activePage === 'payouts') {
-      fetchPayouts();
-    }
-    // Notifications page doesn't need data fetching - it fetches its own data
-  }, [activePage]);
+        pendingUnsubscribe = setupPendingClassesListener();
+        approvedUnsubscribe = setupApprovedClassesListener();
+        calculateStats();
+      } else if (activePage === 'contact-messages') {
+        fetchContactMessages();
+      } else if (activePage === 'enrollments') {
+        fetchEnrollments();
+      } else if (activePage === 'payouts') {
+        fetchPayouts();
+      }
+    };
+
+    checkAndLoadData();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+      if (pendingUnsubscribe) pendingUnsubscribe();
+      if (approvedUnsubscribe) approvedUnsubscribe();
+    };
+  }, [activePage, user]);
+
 
   const handleLogout = () => {
     if (confirm('Log out of Zefrix?')) {
@@ -1646,11 +1679,11 @@ export default function AdminDashboard() {
           <h2>Creator Payouts</h2>
           <p>Manage manual payouts to creators</p>
         </div>
-        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.875rem', textAlign: 'right' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#FFD700' }}>
+        <div className="payouts-total-summary">
+          <div className="payouts-total-amount">
             ₹{payouts.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.totalEarnings, 0).toFixed(2)}
           </div>
-          <div>Total Pending</div>
+          <div className="payouts-total-label">Total Pending</div>
         </div>
       </div>
 
@@ -1659,139 +1692,190 @@ export default function AdminDashboard() {
           Calculating payouts...
         </div>
       ) : payouts.length > 0 ? (
-        <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '16px', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.1)' }}>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Creator</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Classes</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Enrollments</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Total Earnings</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Bank Details</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Status</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payouts.map((payout) => (
-                <tr key={payout.creatorId} style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                  <td style={{ padding: '1rem' }}>
-                    <div>
-                      <div style={{ fontWeight: '600' }}>{payout.name}</div>
-                      <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)' }}>
-                        {payout.email}
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '1rem' }}>{payout.classCount}</td>
-                  <td style={{ padding: '1rem' }}>{payout.enrollmentCount}</td>
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#FFD700' }}>
-                      ₹{payout.totalEarnings.toFixed(2)}
-                    </div>
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    {payout.bankDetails && (payout.bankDetails.accountNumber || payout.bankDetails.ifscCode || payout.bankDetails.bankName) ? (
-                      <div style={{ fontSize: '0.875rem' }}>
-                        <div style={{ color: '#fff', marginBottom: '0.25rem' }}>
-                          <strong>{payout.bankDetails.accountHolderName || 'N/A'}</strong>
-                        </div>
-                        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
-                          {payout.bankDetails.accountNumber ? `A/C: ${payout.bankDetails.accountNumber}` : ''}
-                        </div>
-                        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
-                          {payout.bankDetails.ifscCode ? `IFSC: ${payout.bankDetails.ifscCode}` : ''}
-                        </div>
-                        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
-                          {payout.bankDetails.bankName || ''}
-                        </div>
-                      </div>
-                    ) : (
-                      <span style={{ color: 'rgba(255,152,0,0.8)', fontSize: '0.875rem' }}>
-                        Not provided
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <span style={{
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '12px',
-                      fontSize: '0.875rem',
-                      background: payout.status === 'paid' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 152, 0, 0.2)',
-                      color: payout.status === 'paid' ? '#4CAF50' : '#FF9800'
-                    }}>
-                      {payout.status === 'paid' ? 'Paid' : 'Pending'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    {payout.status === 'paid' ? (
-                      <span style={{ 
-                        padding: '0.5rem 1rem', 
-                        fontSize: '0.875rem',
-                        color: '#4CAF50',
-                        fontWeight: '600'
-                      }}>
-                        Paid
-                      </span>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
-                        <button
-                          className="button-dark"
-                          onClick={() => {
-                            const bankDetails = payout.bankDetails;
-                            const hasBankDetails = bankDetails && (bankDetails.accountNumber || bankDetails.ifscCode || bankDetails.bankName);
-                            
-                            let message = `Manual Payout Details\n\n`;
-                            message += `Creator: ${payout.name}\n`;
-                            message += `Email: ${payout.email}\n`;
-                            message += `Amount: ₹${payout.totalEarnings.toFixed(2)}\n\n`;
-                            
-                            if (hasBankDetails) {
-                              message += `Bank Details:\n`;
-                              message += `Account Holder: ${bankDetails.accountHolderName || 'N/A'}\n`;
-                              message += `Account Number: ${bankDetails.accountNumber || 'N/A'}\n`;
-                              message += `IFSC Code: ${bankDetails.ifscCode || 'N/A'}\n`;
-                              message += `Bank Name: ${bankDetails.bankName || 'N/A'}\n`;
-                              if (bankDetails.upiId) {
-                                message += `UPI ID: ${bankDetails.upiId}\n`;
-                              }
-                            } else {
-                              message += `⚠️ Bank details not provided by creator.\nPlease contact ${payout.email} to get bank account information.`;
-                            }
-                            
-                            message += `\n\nPlease process payment via bank transfer and then click "Mark as Paid".`;
-                            
-                            showInfo(message);
-                          }}
-                          style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                          disabled={processingPayout === payout.creatorId}
-                        >
-                          View Details
-                        </button>
-                        <button
-                          className="button-dark"
-                          onClick={() => {
-                            if (confirm(`Mark payout of ₹${payout.totalEarnings.toFixed(2)} as paid for ${payout.name}?`)) {
-                              handleMarkPayoutAsPaid(payout);
-                            }
-                          }}
-                          style={{ 
-                            padding: '0.5rem 1rem', 
-                            fontSize: '0.875rem',
-                            background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)'
-                          }}
-                          disabled={processingPayout === payout.creatorId}
-                        >
-                          {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
-                        </button>
-                      </div>
-                    )}
-                  </td>
+        <>
+          <div className="payouts-table-wrapper">
+            <table className="payouts-table">
+              <thead>
+                <tr>
+                  <th>Creator</th>
+                  <th>Classes</th>
+                  <th>Enrollments</th>
+                  <th>Total Earnings</th>
+                  <th>Bank Details</th>
+                  <th>Status</th>
+                  <th>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {payouts.map((payout) => (
+                  <tr key={payout.creatorId}>
+                    <td>
+                      <div>
+                        <div style={{ fontWeight: '600' }}>{payout.name}</div>
+                        <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)' }}>
+                          {payout.email}
+                        </div>
+                      </div>
+                    </td>
+                    <td>{payout.classCount}</td>
+                    <td>{payout.enrollmentCount}</td>
+                    <td>
+                      <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#FFD700' }}>
+                        ₹{payout.totalEarnings.toFixed(2)}
+                      </div>
+                    </td>
+                    <td>
+                      {payout.bankDetails && (payout.bankDetails.accountNumber || payout.bankDetails.ifscCode || payout.bankDetails.bankName) ? (
+                        <div style={{ fontSize: '0.875rem' }}>
+                          <div style={{ color: '#fff', marginBottom: '0.25rem' }}>
+                            <strong>{payout.bankDetails.accountHolderName || 'N/A'}</strong>
+                          </div>
+                          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                            {payout.bankDetails.accountNumber ? `A/C: ${payout.bankDetails.accountNumber}` : ''}
+                          </div>
+                          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                            {payout.bankDetails.ifscCode ? `IFSC: ${payout.bankDetails.ifscCode}` : ''}
+                          </div>
+                          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                            {payout.bankDetails.bankName || ''}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'rgba(255,152,0,0.8)', fontSize: '0.875rem' }}>
+                          Not provided
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '12px',
+                        fontSize: '0.875rem',
+                        background: payout.status === 'paid' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 152, 0, 0.2)',
+                        color: payout.status === 'paid' ? '#4CAF50' : '#FF9800'
+                      }}>
+                        {payout.status === 'paid' ? 'Paid' : 'Pending'}
+                      </span>
+                    </td>
+                    <td>
+                      {payout.status === 'paid' ? (
+                        <span style={{ 
+                          padding: '0.5rem 1rem', 
+                          fontSize: '0.875rem',
+                          color: '#4CAF50',
+                          fontWeight: '600'
+                        }}>
+                          Paid
+                        </span>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                          <button
+                            className="button-dark"
+                            onClick={() => {
+                              setSelectedPayout(payout);
+                            }}
+                            style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                            disabled={processingPayout === payout.creatorId}
+                          >
+                            View Details
+                          </button>
+                          <button
+                            className="button-dark"
+                            onClick={() => {
+                              if (confirm(`Mark payout of ₹${payout.totalEarnings.toFixed(2)} as paid for ${payout.name}?`)) {
+                                handleMarkPayoutAsPaid(payout);
+                              }
+                            }}
+                            style={{ 
+                              padding: '0.5rem 1rem', 
+                              fontSize: '0.875rem',
+                              background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)'
+                            }}
+                            disabled={processingPayout === payout.creatorId}
+                          >
+                            {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Mobile Card View */}
+          <div className="payouts-cards-wrapper">
+            {payouts.map((payout) => (
+              <div key={payout.creatorId} className="payout-card">
+                <div className="payout-card-header">
+                  <div>
+                    <div className="payout-card-name">{payout.name}</div>
+                    <div className="payout-card-email">{payout.email}</div>
+                  </div>
+                  <span className={`payout-card-status ${payout.status === 'paid' ? 'paid' : 'pending'}`}>
+                    {payout.status === 'paid' ? 'Paid' : 'Pending'}
+                  </span>
+                </div>
+                
+                <div className="payout-card-amount">
+                  ₹{payout.totalEarnings.toFixed(2)}
+                </div>
+                
+                <div className="payout-card-info">
+                  <div className="payout-card-info-item">
+                    <span className="payout-card-label">Classes:</span>
+                    <span className="payout-card-value">{payout.classCount}</span>
+                  </div>
+                  <div className="payout-card-info-item">
+                    <span className="payout-card-label">Enrollments:</span>
+                    <span className="payout-card-value">{payout.enrollmentCount}</span>
+                  </div>
+                </div>
+                
+                <div className="payout-card-bank">
+                  <div className="payout-card-label">Bank Details:</div>
+                  {payout.bankDetails && (payout.bankDetails.accountNumber || payout.bankDetails.ifscCode || payout.bankDetails.bankName) ? (
+                    <div className="payout-card-bank-details">
+                      <div><strong>{payout.bankDetails.accountHolderName || 'N/A'}</strong></div>
+                      {payout.bankDetails.accountNumber && <div>A/C: {payout.bankDetails.accountNumber}</div>}
+                      {payout.bankDetails.ifscCode && <div>IFSC: {payout.bankDetails.ifscCode}</div>}
+                      {payout.bankDetails.bankName && <div>{payout.bankDetails.bankName}</div>}
+                      {payout.bankDetails.upiId && <div>UPI: {payout.bankDetails.upiId}</div>}
+                    </div>
+                  ) : (
+                    <span className="payout-card-warning">Not provided</span>
+                  )}
+                </div>
+                
+                {payout.status !== 'paid' && (
+                  <div className="payout-card-actions">
+                    <button
+                      className="button-dark payout-card-btn"
+                      onClick={() => {
+                        setSelectedPayout(payout);
+                      }}
+                      disabled={processingPayout === payout.creatorId}
+                    >
+                      View Details
+                    </button>
+                    <button
+                      className="button-dark payout-card-btn payout-card-btn-primary"
+                      onClick={() => {
+                        if (confirm(`Mark payout of ₹${payout.totalEarnings.toFixed(2)} as paid for ${payout.name}?`)) {
+                          handleMarkPayoutAsPaid(payout);
+                        }
+                      }}
+                      disabled={processingPayout === payout.creatorId}
+                    >
+                      {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
           No payouts to process. Enrollments will appear here once students purchase classes.
@@ -3540,7 +3624,224 @@ export default function AdminDashboard() {
           }
         }
 
+        /* Payouts Table Styles */
+        .payouts-table-wrapper {
+          background: rgba(255,255,255,0.05);
+          border-radius: 16px;
+          overflow: hidden;
+          display: block;
+        }
+
+        .payouts-table {
+          width: 100%;
+          border-collapse: collapse;
+          display: table;
+        }
+
+        .payouts-table thead {
+          display: table-header-group;
+        }
+
+        .payouts-table tbody {
+          display: table-row-group;
+        }
+
+        .payouts-table tr {
+          display: table-row;
+        }
+
+        .payouts-table th,
+        .payouts-table td {
+          display: table-cell;
+          padding: 1rem;
+          text-align: left;
+        }
+
+        .payouts-table th {
+          background: rgba(255,255,255,0.1);
+          color: #FFD700;
+          font-weight: 600;
+        }
+
+        .payouts-table tbody tr {
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payouts-table tbody tr:hover {
+          background: rgba(255,255,255,0.03);
+        }
+
+        /* Payouts Mobile Cards */
+        .payouts-cards-wrapper {
+          display: none;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .payout-card {
+          background: rgba(255,255,255,0.05);
+          border-radius: 16px;
+          padding: 1.25rem;
+          border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payout-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 1rem;
+        }
+
+        .payout-card-name {
+          font-weight: 600;
+          color: #fff;
+          font-size: 1rem;
+          margin-bottom: 0.25rem;
+        }
+
+        .payout-card-email {
+          font-size: 0.875rem;
+          color: rgba(255,255,255,0.6);
+        }
+
+        .payout-card-status {
+          padding: 0.25rem 0.75rem;
+          border-radius: 12px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+
+        .payout-card-status.paid {
+          background: rgba(76, 175, 80, 0.2);
+          color: #4CAF50;
+        }
+
+        .payout-card-status.pending {
+          background: rgba(255, 152, 0, 0.2);
+          color: #FF9800;
+        }
+
+        .payout-card-amount {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #FFD700;
+          margin-bottom: 1rem;
+        }
+
+        .payout-card-info {
+          display: flex;
+          gap: 1.5rem;
+          margin-bottom: 1rem;
+          padding-bottom: 1rem;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payout-card-info-item {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .payout-card-label {
+          font-size: 0.75rem;
+          color: rgba(255,255,255,0.7);
+        }
+
+        .payout-card-value {
+          font-size: 0.9375rem;
+          color: #fff;
+          font-weight: 600;
+        }
+
+        .payout-card-bank {
+          margin-bottom: 1rem;
+          padding-bottom: 1rem;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payout-card-bank .payout-card-label {
+          margin-bottom: 0.5rem;
+          font-size: 0.875rem;
+        }
+
+        .payout-card-bank-details {
+          font-size: 0.875rem;
+          color: rgba(255,255,255,0.9);
+        }
+
+        .payout-card-bank-details div {
+          margin-bottom: 0.25rem;
+        }
+
+        .payout-card-bank-details strong {
+          color: #fff;
+        }
+
+        .payout-card-warning {
+          color: rgba(255,152,0,0.8);
+          font-size: 0.875rem;
+        }
+
+        .payout-card-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .payout-card-btn {
+          width: 100%;
+          padding: 0.75rem 1rem;
+          font-size: 0.875rem;
+        }
+
+        .payout-card-btn-primary {
+          background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%) !important;
+        }
+
+        .payouts-total-summary {
+          color: rgba(255,255,255,0.7);
+          font-size: 0.875rem;
+          text-align: right;
+        }
+
+        .payouts-total-amount {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #FFD700;
+        }
+
+        .payouts-total-label {
+          font-size: 0.875rem;
+        }
+
         @media (max-width: 767px) {
+          .payouts-total-summary {
+            text-align: left;
+            width: 100%;
+          }
+
+          .payouts-total-amount {
+            font-size: 1.25rem;
+          }
+          .payouts-table-wrapper {
+            display: none;
+          }
+
+          .payouts-cards-wrapper {
+            display: flex;
+          }
+
+          .dashboard-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+          }
+
+          .dashboard-header .welcome-section h2 {
+            font-size: 1.25rem;
+          }
+
           .main-content {
             padding: 1rem;
             padding-top: 80px;
@@ -4213,6 +4514,256 @@ export default function AdminDashboard() {
             font-size: 0.9375rem;
           }
         }
+
+        /* Payout Modal Styles */
+        .payout-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.75);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10000;
+          padding: 1rem;
+        }
+
+        .payout-modal-content {
+          background: linear-gradient(135deg, #1a0f2e 0%, #2d1b4e 100%);
+          border-radius: 20px;
+          width: 100%;
+          max-width: 600px;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          animation: payoutModalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes payoutModalSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .payout-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1.5rem;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .payout-modal-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #fff;
+          margin: 0;
+        }
+
+        .payout-modal-close {
+          background: rgba(255, 255, 255, 0.1);
+          border: none;
+          color: #fff;
+          font-size: 1.75rem;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s;
+          line-height: 1;
+        }
+
+        .payout-modal-close:hover {
+          background: rgba(255, 255, 255, 0.2);
+          transform: rotate(90deg);
+        }
+
+        .payout-modal-body {
+          padding: 1.5rem;
+        }
+
+        .payout-info-section {
+          margin-bottom: 1.5rem;
+        }
+
+        .payout-info-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.75rem 0;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .payout-info-item:last-child {
+          border-bottom: none;
+        }
+
+        .payout-amount-item {
+          background: rgba(217, 42, 99, 0.1);
+          padding: 1rem;
+          border-radius: 12px;
+          margin-top: 0.5rem;
+          border: 1px solid rgba(217, 42, 99, 0.3);
+        }
+
+        .payout-info-label {
+          font-size: 0.875rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 500;
+        }
+
+        .payout-info-value {
+          font-size: 0.9375rem;
+          color: #fff;
+          font-weight: 600;
+          text-align: right;
+        }
+
+        .payout-amount {
+          font-size: 1.5rem;
+          color: #FFD700;
+          font-weight: 700;
+        }
+
+        .payout-bank-section {
+          margin-bottom: 1.5rem;
+          padding: 1.25rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .payout-section-title {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #fff;
+          margin: 0 0 1rem 0;
+          padding-bottom: 0.75rem;
+          border-bottom: 2px solid rgba(217, 42, 99, 0.3);
+        }
+
+        .payout-bank-details {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .payout-warning {
+          display: flex;
+          align-items: flex-start;
+          padding: 1rem;
+          background: rgba(255, 152, 0, 0.1);
+          border-radius: 8px;
+          border: 1px solid rgba(255, 152, 0, 0.3);
+        }
+
+        .payout-instruction {
+          padding: 1rem;
+          background: rgba(217, 42, 99, 0.1);
+          border-radius: 12px;
+          border-left: 4px solid #D92A63;
+          margin-bottom: 1.5rem;
+        }
+
+        .payout-instruction p {
+          color: rgba(255, 255, 255, 0.9);
+          font-size: 0.875rem;
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        .payout-modal-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: flex-end;
+        }
+
+        .payout-modal-btn {
+          padding: 0.75rem 1.5rem;
+          border-radius: 8px;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s;
+          border: none;
+        }
+
+        .payout-btn-secondary {
+          background: rgba(255, 255, 255, 0.1);
+          color: #fff;
+        }
+
+        .payout-btn-secondary:hover {
+          background: rgba(255, 255, 255, 0.2);
+          transform: translateY(-1px);
+        }
+
+        .payout-btn-primary {
+          background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+          color: #fff;
+          box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+
+        .payout-btn-primary:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+        }
+
+        .payout-btn-primary:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        @media (max-width: 767px) {
+          .payout-modal-content {
+            max-width: 100%;
+            margin: 1rem;
+            border-radius: 16px;
+          }
+
+          .payout-modal-header {
+            padding: 1.25rem;
+          }
+
+          .payout-modal-title {
+            font-size: 1.125rem;
+          }
+
+          .payout-modal-body {
+            padding: 1.25rem;
+          }
+
+          .payout-modal-actions {
+            flex-direction: column;
+          }
+
+          .payout-modal-btn {
+            width: 100%;
+          }
+
+          .payout-info-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+          }
+
+          .payout-info-value {
+            text-align: left;
+          }
+        }
       `}</style>
 
       <div className="dashboard-container">
@@ -4280,6 +4831,118 @@ export default function AdminDashboard() {
           {renderCurrentPage()}
         </div>
       </div>
+
+      {/* Payout Details Modal */}
+      {selectedPayout && (
+        <div className="payout-modal-overlay" onClick={() => setSelectedPayout(null)}>
+          <div className="payout-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="payout-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: 'rgba(217, 42, 99, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  color: '#D92A63'
+                }}>
+                  ℹ
+                </div>
+                <h2 className="payout-modal-title">Manual Payout Details Creator:</h2>
+              </div>
+              <button 
+                className="payout-modal-close"
+                onClick={() => setSelectedPayout(null)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="payout-modal-body">
+              <div className="payout-info-section">
+                <div className="payout-info-item">
+                  <span className="payout-info-label">Creator:</span>
+                  <span className="payout-info-value">{selectedPayout.name}</span>
+                </div>
+                <div className="payout-info-item">
+                  <span className="payout-info-label">Email:</span>
+                  <span className="payout-info-value">{selectedPayout.email}</span>
+                </div>
+                <div className="payout-info-item payout-amount-item">
+                  <span className="payout-info-label">Amount:</span>
+                  <span className="payout-info-value payout-amount">₹{selectedPayout.totalEarnings.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="payout-bank-section">
+                <h3 className="payout-section-title">Bank Details</h3>
+                {selectedPayout.bankDetails && (selectedPayout.bankDetails.accountNumber || selectedPayout.bankDetails.ifscCode || selectedPayout.bankDetails.bankName) ? (
+                  <div className="payout-bank-details">
+                    <div className="payout-info-item">
+                      <span className="payout-info-label">Account Holder:</span>
+                      <span className="payout-info-value">{selectedPayout.bankDetails.accountHolderName || 'N/A'}</span>
+                    </div>
+                    <div className="payout-info-item">
+                      <span className="payout-info-label">Account Number:</span>
+                      <span className="payout-info-value">{selectedPayout.bankDetails.accountNumber || 'N/A'}</span>
+                    </div>
+                    <div className="payout-info-item">
+                      <span className="payout-info-label">IFSC Code:</span>
+                      <span className="payout-info-value">{selectedPayout.bankDetails.ifscCode || 'N/A'}</span>
+                    </div>
+                    <div className="payout-info-item">
+                      <span className="payout-info-label">Bank Name:</span>
+                      <span className="payout-info-value">{selectedPayout.bankDetails.bankName || 'N/A'}</span>
+                    </div>
+                    {selectedPayout.bankDetails.upiId && (
+                      <div className="payout-info-item">
+                        <span className="payout-info-label">UPI ID:</span>
+                        <span className="payout-info-value">{selectedPayout.bankDetails.upiId}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="payout-warning">
+                    <span style={{ color: '#FF9800', fontSize: '1rem', marginRight: '0.5rem' }}>⚠️</span>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                      Bank details not provided by creator. Please contact {selectedPayout.email} to get bank account information.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="payout-instruction">
+                <p>Please process payment via bank transfer and then click "Mark as Paid".</p>
+              </div>
+
+              <div className="payout-modal-actions">
+                <button
+                  className="payout-modal-btn payout-btn-secondary"
+                  onClick={() => setSelectedPayout(null)}
+                >
+                  Close
+                </button>
+                <button
+                  className="payout-modal-btn payout-btn-primary"
+                  onClick={() => {
+                    if (confirm(`Mark payout of ₹${selectedPayout.totalEarnings.toFixed(2)} as paid for ${selectedPayout.name}?`)) {
+                      handleMarkPayoutAsPaid(selectedPayout);
+                      setSelectedPayout(null);
+                    }
+                  }}
+                  disabled={processingPayout === selectedPayout.creatorId}
+                >
+                  {processingPayout === selectedPayout.creatorId ? 'Processing...' : 'Mark as Paid'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

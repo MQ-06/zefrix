@@ -14,7 +14,6 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
-    onSnapshot: any;
   }
 }
 
@@ -43,12 +42,17 @@ export default function CoursesPage() {
   useEffect(() => {
     // Initialize Firebase if not already loaded
     if (!window.firebaseDb) {
+      // Check if script is already being loaded to prevent duplicates
+      const existingScript = document.querySelector('script[data-firebase-init]');
+      if (existingScript) return;
+
       const loadFirebase = () => {
         const script = document.createElement('script');
         script.type = 'module';
+        script.setAttribute('data-firebase-init', 'true');
         script.textContent = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getFirestore, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
           
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -66,7 +70,6 @@ export default function CoursesPage() {
           window.query = query;
           window.where = where;
           window.getDocs = getDocs;
-          window.onSnapshot = onSnapshot;
         `;
         document.head.appendChild(script);
       };
@@ -75,54 +78,73 @@ export default function CoursesPage() {
   }, []);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
     let timeoutId: NodeJS.Timeout | null = null;
+    let isMounted = true;
+    const MAX_RETRIES = 10;
+    let retryCount = 0;
 
-    const setupListener = () => {
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
-        timeoutId = setTimeout(setupListener, 500);
-        return;
+    const fetchCourses = async () => {
+      // Wait for Firebase to be ready
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          timeoutId = setTimeout(fetchCourses, 200);
+          return;
+        } else {
+          console.error('❌ Firebase failed to load after maximum retries');
+          if (isMounted) {
+            setLoading(false);
+            setApprovedClasses([]);
+          }
+          return;
+        }
       }
+
+      if (!isMounted) return;
 
       setLoading(true);
       try {
-        console.log('📦 Setting up real-time listener for approved classes...');
+        console.log('📦 Fetching approved classes...');
+        const startTime = performance.now();
+        
         const classesRef = window.collection(window.firebaseDb, 'classes');
         const q = window.query(classesRef, window.where('status', '==', 'approved'));
         
-        unsubscribe = window.onSnapshot(q, (snapshot: any) => {
-          const classes: ApprovedClass[] = [];
-          snapshot.forEach((doc: any) => {
-            classes.push({ classId: doc.id, ...doc.data() });
-          });
-          
-          console.log(`✅ Real-time update: Found ${classes.length} approved classes`);
-          
-          // Sort by creation date (newest first)
-          classes.sort((a, b) => {
-            const aTime = a.createdAt?.toMillis?.() || 0;
-            const bTime = b.createdAt?.toMillis?.() || 0;
-            return bTime - aTime;
-          });
-          
+        // Use getDocs for one-time fetch (much faster than onSnapshot)
+        const snapshot = await window.getDocs(q);
+        
+        const classes: ApprovedClass[] = [];
+        snapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
+        
+        const endTime = performance.now();
+        console.log(`✅ Loaded ${classes.length} approved classes in ${(endTime - startTime).toFixed(2)}ms`);
+        
+        // Sort by creation date (newest first)
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+        
+        if (isMounted) {
           setApprovedClasses(classes);
           setLoading(false);
-        }, (error: any) => {
-          console.error('Error in real-time listener:', error);
+        }
+      } catch (error) {
+        console.error('❌ Error fetching classes:', error);
+        if (isMounted) {
           setApprovedClasses([]);
           setLoading(false);
-        });
-      } catch (error) {
-        console.error('Error setting up real-time listener:', error);
-        setApprovedClasses([]);
-        setLoading(false);
+        }
       }
     };
 
-    setupListener();
+    fetchCourses();
 
     return () => {
-      if (unsubscribe) unsubscribe();
+      isMounted = false;
       if (timeoutId) clearTimeout(timeoutId);
     };
   }, []);
@@ -212,8 +234,24 @@ export default function CoursesPage() {
       <section className="section-spacing-bottom bg-gradient-to-b from-transparent via-[#1A1A2E] to-[#1A1A2E]">
         <div className="container">
           {loading ? (
-            <div className="text-center py-12">
-              <p className="text-gray-400 text-lg">Loading courses...</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="animate-pulse">
+                  <div className="bg-gray-800 rounded-lg overflow-hidden">
+                    <div className="h-48 bg-gray-700"></div>
+                    <div className="p-6 space-y-4">
+                      <div className="h-6 bg-gray-700 rounded w-3/4"></div>
+                      <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+                      <div className="h-4 bg-gray-700 rounded w-full"></div>
+                      <div className="h-4 bg-gray-700 rounded w-2/3"></div>
+                      <div className="flex items-center justify-between pt-4">
+                        <div className="h-8 bg-gray-700 rounded w-24"></div>
+                        <div className="h-10 bg-gray-700 rounded w-32"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : currentCourses.length > 0 ? (
             <>

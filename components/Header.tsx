@@ -44,27 +44,40 @@ export default function Header() {
       `}</style>
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          isScrolled ? 'bg-dark/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
+          isScrolled || isMobileMenuOpen ? 'bg-dark/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
         }`}
       >
       <div className="container">
-        <div className="flex items-center justify-between h-20">
+        <div className="flex items-center justify-between h-16 md:h-20 gap-2 md:gap-4 min-w-0">
           {/* Logo */}
-          <Link href="/" className="flex items-center">
+          <Link href="/" className="flex items-center flex-shrink-0 min-w-0">
             <img
               src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/69111edc833f0aade04d058d_6907f6cf8f1c1a9c8e68ea5c_logo.png"
               alt="Zefrix Logo"
-              className="h-10 w-auto"
+              className="h-8 md:h-10 w-auto"
             />
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
+          <nav className="hidden lg:flex items-center space-x-4 xl:space-x-8">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-white hover:text-primary transition-colors duration-200 font-medium text-base"
+                className="text-white hover:text-primary transition-colors duration-200 font-medium text-sm lg:text-base whitespace-nowrap"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Tablet Navigation (shows hamburger) */}
+          <nav className="hidden md:flex lg:hidden items-center space-x-2 xl:space-x-3 flex-shrink-0 min-w-0">
+            {navLinks.slice(0, 3).map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-white hover:text-primary transition-colors duration-200 font-medium text-xs whitespace-nowrap"
               >
                 {link.label}
               </Link>
@@ -72,30 +85,32 @@ export default function Header() {
           </nav>
 
           {/* Right Side Actions */}
-          <div className="hidden md:flex items-center space-x-6">
+          <div className="hidden md:flex items-center space-x-2 lg:space-x-6 flex-shrink-0">
             {isAuthenticated ? null : (
               <>
                 {!isLoginPage && (
                   <Link
                     href="/signup-login"
-                    className="text-white hover:text-primary transition-colors duration-200 underline text-base"
+                    className="text-white hover:text-primary transition-colors duration-200 underline text-xs lg:text-base whitespace-nowrap"
                   >
                     Login
                   </Link>
                 )}
                 <Link
                   href="/user-pages/become-a-creator"
-                  className="bg-gradient-to-r from-primary to-secondary px-6 py-2.5 rounded-lg text-white font-medium text-base hover:opacity-90 transition-opacity duration-200"
+                  className="bg-gradient-to-r from-primary to-secondary px-2 md:px-3 lg:px-6 py-1.5 md:py-2 lg:py-2.5 rounded-lg text-white font-medium text-xs lg:text-base hover:opacity-90 transition-opacity duration-200 whitespace-nowrap"
                 >
-                  Become a Creator
+                  <span className="hidden xl:inline">Become a Creator</span>
+                  <span className="xl:hidden lg:inline">Creator</span>
+                  <span className="lg:hidden">Create</span>
                 </Link>
               </>
             )}
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Mobile/Tablet Menu Button */}
           <button
-            className="md:hidden text-white"
+            className="lg:hidden text-white bg-blue-600 hover:bg-blue-700 rounded-lg p-2 transition-colors duration-200 z-10 flex-shrink-0"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle menu"
           >
@@ -111,9 +126,9 @@ export default function Header() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-dark/98 backdrop-blur-md border-t border-gray-800"
+            className="lg:hidden bg-dark/98 backdrop-blur-md border-t border-gray-800 overflow-hidden"
           >
-            <nav className="container py-6 space-y-4">
+            <nav className="container py-4 md:py-6 space-y-3 md:space-y-4">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
