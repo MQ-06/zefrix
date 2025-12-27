@@ -12,8 +12,11 @@ export default function SignupLoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetEmailSent, setResetEmailSent] = useState(false);
   const router = useRouter();
-  const { signUp, signIn, signInWithGoogle, user, loading } = useAuth();
+  const { signUp, signIn, signInWithGoogle, resetPassword, user, loading } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
 
   // Redirect if already authenticated (with delay to show notifications)
@@ -136,6 +139,41 @@ export default function SignupLoginPage() {
       
       showError(errorMessage);
       console.error('Login error:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!resetEmail.trim()) {
+      showError('Please enter your email address');
+      return;
+    }
+
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      await resetPassword(resetEmail.trim());
+      setResetEmailSent(true);
+      showSuccess('Password reset email sent! Please check your inbox.');
+    } catch (err: any) {
+      let errorMessage = 'Failed to send reset email. ';
+      
+      if (err.code === 'auth/user-not-found') {
+        errorMessage += 'No account found with this email address.';
+      } else if (err.code === 'auth/invalid-email') {
+        errorMessage += 'Invalid email address.';
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Please try again or contact support.';
+      }
+      
+      showError(errorMessage);
+      console.error('Password reset error:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -662,38 +700,177 @@ export default function SignupLoginPage() {
                   <i className="fa-brands fa-google-plus-g"></i>
                 </a>
               </div>
-              <span style={{ color: '#666' }}>or use your email password</span>
-              <input type="email" id="login-email" placeholder="Email" required autoComplete="email" />
-              <div className="password-input-wrapper">
-                <input 
-                  type={showLoginPassword ? "text" : "password"} 
-                  id="login-password" 
-                  placeholder="Password" 
-                  required 
-                  autoComplete="current-password" 
-                />
-                <button
-                  type="button"
-                  className="password-toggle-btn"
-                  onClick={() => setShowLoginPassword(!showLoginPassword)}
-                  aria-label={showLoginPassword ? "Hide password" : "Show password"}
-                >
-                  <i className={showLoginPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
-                </button>
-              </div>
-              <button type="submit" id="emailLoginBtn" disabled={isSubmitting}>
-                {isSubmitting ? 'Signing In...' : 'Sign In'}
-              </button>
-              <p style={{ marginTop: '20px', fontSize: '14px', color: '#666' }}>
-                Don't have an account?{' '}
-                <a 
-                  href="#" 
-                  onClick={(e) => { e.preventDefault(); setIsActive(true); }}
-                  style={{ color: '#4e54c8', textDecoration: 'underline', cursor: 'pointer' }}
-                >
-                  Sign Up
-                </a>
-              </p>
+              {!showForgotPassword ? (
+                <>
+                  <span style={{ color: '#666' }}>or use your email password</span>
+                  <input type="email" id="login-email" placeholder="Email" required autoComplete="email" />
+                  <div className="password-input-wrapper">
+                    <input 
+                      type={showLoginPassword ? "text" : "password"} 
+                      id="login-password" 
+                      placeholder="Password" 
+                      required 
+                      autoComplete="current-password" 
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                    >
+                      <i className={showLoginPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
+                    </button>
+                  </div>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { 
+                      e.preventDefault(); 
+                      setShowForgotPassword(true); 
+                      setResetEmailSent(false);
+                    }}
+                    style={{ 
+                      fontSize: '12px', 
+                      color: '#4e54c8', 
+                      textDecoration: 'underline', 
+                      cursor: 'pointer',
+                      alignSelf: 'flex-start',
+                      marginTop: '-8px',
+                      marginBottom: '8px'
+                    }}
+                  >
+                    Forgot Password?
+                  </a>
+                  <button type="submit" id="emailLoginBtn" disabled={isSubmitting}>
+                    {isSubmitting ? 'Signing In...' : 'Sign In'}
+                  </button>
+                  <p style={{ marginTop: '20px', fontSize: '14px', color: '#666' }}>
+                    Don't have an account?{' '}
+                    <a 
+                      href="#" 
+                      onClick={(e) => { e.preventDefault(); setIsActive(true); }}
+                      style={{ color: '#4e54c8', textDecoration: 'underline', cursor: 'pointer' }}
+                    >
+                      Sign Up
+                    </a>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px', color: '#000' }}>Reset Password</h1>
+                  {resetEmailSent ? (
+                    <>
+                      <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                        <i className="fa-solid fa-check-circle" style={{ fontSize: '48px', color: '#4CAF50', marginBottom: '15px' }}></i>
+                        <p style={{ color: '#333', fontSize: '14px', marginBottom: '15px', lineHeight: '1.6' }}>
+                          Password reset email sent!
+                        </p>
+                        <p style={{ color: '#666', fontSize: '13px', marginBottom: '20px', lineHeight: '1.6' }}>
+                          Please check your email inbox and click the link to reset your password. The link will expire in 1 hour.
+                        </p>
+                        <p style={{ color: '#666', fontSize: '12px', marginBottom: '20px' }}>
+                          Didn't receive the email? Check your spam folder or try again.
+                        </p>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setShowForgotPassword(false);
+                          setResetEmailSent(false);
+                          setResetEmail('');
+                        }}
+                        style={{ 
+                          backgroundColor: '#4e54c8',
+                          color: '#fff',
+                          fontSize: '12px',
+                          padding: '10px 45px',
+                          border: '1px solid transparent',
+                          borderRadius: '8px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          width: '100%',
+                          marginTop: '10px'
+                        }}
+                      >
+                        Back to Login
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setResetEmailSent(false);
+                          setResetEmail('');
+                        }}
+                        style={{ 
+                          backgroundColor: 'transparent',
+                          color: '#4e54c8',
+                          fontSize: '12px',
+                          padding: '10px 45px',
+                          border: '1px solid #4e54c8',
+                          borderRadius: '8px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          width: '100%',
+                          marginTop: '10px'
+                        }}
+                      >
+                        Send Another Email
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ color: '#666', fontSize: '13px', marginBottom: '20px', textAlign: 'center', lineHeight: '1.6' }}>
+                        Enter your email address and we'll send you a link to reset your password.
+                      </p>
+                      <input 
+                        type="email" 
+                        placeholder="Email" 
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        required 
+                        autoComplete="email"
+                        style={{ marginBottom: '15px' }}
+                      />
+                      <button 
+                        type="button"
+                        onClick={handleForgotPassword}
+                        disabled={isSubmitting}
+                        style={{ 
+                          backgroundColor: '#4e54c8',
+                          color: '#fff',
+                          fontSize: '12px',
+                          padding: '10px 45px',
+                          border: '1px solid transparent',
+                          borderRadius: '8px',
+                          fontWeight: '600',
+                          cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                          opacity: isSubmitting ? 0.6 : 1,
+                          width: '100%'
+                        }}
+                      >
+                        {isSubmitting ? 'Sending...' : 'Send Reset Link'}
+                      </button>
+                      <a 
+                        href="#" 
+                        onClick={(e) => { 
+                          e.preventDefault(); 
+                          setShowForgotPassword(false);
+                          setResetEmail('');
+                        }}
+                        style={{ 
+                          fontSize: '14px', 
+                          color: '#4e54c8', 
+                          textDecoration: 'underline', 
+                          cursor: 'pointer',
+                          marginTop: '20px',
+                          display: 'block',
+                          textAlign: 'center'
+                        }}
+                      >
+                        Back to Login
+                      </a>
+                    </>
+                  )}
+                </>
+              )}
             </form>
           </div>
 

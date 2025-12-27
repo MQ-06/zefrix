@@ -20,6 +20,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -36,6 +37,7 @@ declare global {
     GoogleAuthProvider: any;
     signInWithPopup: any;
     onAuthStateChanged: any;
+    sendPasswordResetEmail: any;
     doc: any;
     setDoc: any;
     getDoc: any;
@@ -79,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initScript.type = 'module';
     initScript.textContent = `
       import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-      import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+      import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
       import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
       
       const firebaseConfig = {
@@ -106,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.GoogleAuthProvider = GoogleAuthProvider;
         window.signInWithPopup = signInWithPopup;
         window.onAuthStateChanged = onAuthStateChanged;
+        window.sendPasswordResetEmail = sendPasswordResetEmail;
         window.doc = doc;
         window.setDoc = setDoc;
         window.getDoc = getDoc;
@@ -471,6 +474,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const resetPassword = async (email: string) => {
+    await waitForFirebase();
+
+    if (!window.sendPasswordResetEmail) {
+      throw new Error('Firebase Auth methods not available. Please refresh the page.');
+    }
+
+    try {
+      await window.sendPasswordResetEmail(window.firebaseAuth, email.trim());
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -480,6 +497,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signInWithGoogle,
         signOut,
+        resetPassword,
         isAuthenticated: !!user,
       }}
     >
