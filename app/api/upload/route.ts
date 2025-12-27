@@ -61,9 +61,31 @@ export async function POST(request: NextRequest) {
     
     const uploadDir = baseDir;
     
-    // Ensure directory exists
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true });
+    // Ensure directory exists with error handling
+    try {
+      if (!existsSync(uploadDir)) {
+        await mkdir(uploadDir, { recursive: true });
+      }
+      
+      // Test write permissions by checking if we can access the directory
+      // Note: On some serverless platforms, this may fail even if directory exists
+      if (!existsSync(uploadDir)) {
+        throw new Error(`Failed to create upload directory: ${uploadDir}. Check server write permissions.`);
+      }
+    } catch (dirError: any) {
+      console.error('Directory creation error:', dirError);
+      // Provide helpful error message
+      if (dirError.code === 'EACCES' || dirError.code === 'EPERM') {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Server does not have write permissions. Please configure your server to allow file uploads. See UPLOAD_SETUP.md for instructions.',
+            details: `Directory: ${uploadDir}, Error: ${dirError.message}`
+          },
+          { status: 500 }
+        );
+      }
+      throw dirError;
     }
 
     // Generate unique filename
@@ -73,12 +95,36 @@ export async function POST(request: NextRequest) {
     const baseName = path.basename(originalName, extension);
     const uniqueFileName = `${baseName}_${timestamp}${extension}`;
 
-    // Save file
+    // Save file with error handling
     const filePath = path.join(uploadDir, uniqueFileName);
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
-    await writeFile(filePath, buffer);
+    try {
+      await writeFile(filePath, buffer);
+    } catch (writeError: any) {
+      console.error('File write error:', writeError);
+      if (writeError.code === 'EACCES' || writeError.code === 'EPERM') {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Server does not have write permissions for file uploads. Please check server configuration.',
+            details: `Path: ${filePath}, Error: ${writeError.message}`
+          },
+          { status: 500 }
+        );
+      }
+      if (writeError.code === 'ENOSPC') {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Server storage is full. Please contact administrator.',
+          },
+          { status: 500 }
+        );
+      }
+      throw writeError;
+    }
 
     // Generate public URL
     // Detect base URL from request (works for both localhost and production)

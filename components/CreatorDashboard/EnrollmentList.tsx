@@ -86,8 +86,11 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
 
       setEnrollments(enrollmentsList);
       
-      // Fetch student info for each enrollment
-      await fetchStudentsInfo(enrollmentsList);
+      // Fetch student info in background (non-blocking)
+      // This allows UI to show enrollments immediately
+      fetchStudentsInfo(enrollmentsList).catch(err => {
+        console.error('Error fetching student info:', err);
+      });
     } catch (error) {
       console.error('Error fetching enrollments:', error);
       showError('Failed to load enrollments');
@@ -133,14 +136,27 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
       const fetchedEnrollments: Enrollment[] = [];
 
       // Firestore 'in' query has limit of 10, so we need to batch
+      // Process batches in parallel for better performance
+      const batchPromises: Promise<any>[] = [];
       for (let i = 0; i < classIds.length; i += 10) {
         const batch = classIds.slice(i, i + 10);
-        const q = window.query(enrollmentsRef, window.where('classId', 'in', batch));
-        const querySnapshot = await window.getDocs(q);
-        querySnapshot.forEach((doc: any) => {
-          fetchedEnrollments.push({ id: doc.id, ...doc.data() });
-        });
+        const batchPromise = (async () => {
+          const q = window.query(enrollmentsRef, window.where('classId', 'in', batch));
+          const querySnapshot = await window.getDocs(q);
+          const batchEnrollments: Enrollment[] = [];
+          querySnapshot.forEach((doc: any) => {
+            batchEnrollments.push({ id: doc.id, ...doc.data() });
+          });
+          return batchEnrollments;
+        })();
+        batchPromises.push(batchPromise);
       }
+
+      // Wait for all batches to complete in parallel
+      const batchResults = await Promise.all(batchPromises);
+      batchResults.forEach(batchEnrollments => {
+        fetchedEnrollments.push(...batchEnrollments);
+      });
 
       // Sort by enrollment date (newest first)
       fetchedEnrollments.sort((a, b) => {
@@ -151,7 +167,10 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
 
       setAllEnrollments(fetchedEnrollments);
       setEnrollments(fetchedEnrollments);
-      await fetchStudentsInfo(fetchedEnrollments);
+      
+      fetchStudentsInfo(fetchedEnrollments).catch(err => {
+        console.error('Error fetching student info:', err);
+      });
     } catch (error) {
       console.error('Error fetching enrollments:', error);
       showError('Failed to load enrollments');
@@ -166,44 +185,63 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
     const studentsMap: Record<string, StudentInfo> = {};
     const uniqueStudentIds = Array.from(new Set(enrollmentsList.map(e => e.studentId)));
 
-    for (const studentId of uniqueStudentIds) {
-      // Start with enrollment data as fallback
+    // First, populate with enrollment data immediately (fast)
+    uniqueStudentIds.forEach(studentId => {
       const enrollment = enrollmentsList.find(e => e.studentId === studentId);
-      const fallbackInfo: StudentInfo = {
+      studentsMap[studentId] = {
         name: enrollment?.studentName || 'Student',
         email: enrollment?.studentEmail || '',
       };
+    });
 
-      // Try to fetch additional user info, but don't fail if permissions are insufficient
+    // Update UI immediately with enrollment data
+    setStudentsInfo({ ...studentsMap });
+
+    // Then try to fetch additional user info in parallel (non-blocking)
+    // Use Promise.allSettled to fetch all in parallel and handle failures gracefully
+    const userFetchPromises = uniqueStudentIds.map(async (studentId) => {
       try {
         const userRef = window.doc(window.firebaseDb, 'users', studentId);
         const userSnap = await window.getDoc(userRef);
         if (userSnap.exists()) {
           const userData = userSnap.data();
-          studentsMap[studentId] = {
-            name: userData.name || userData.displayName || fallbackInfo.name,
-            email: userData.email || fallbackInfo.email,
-            phone: userData.phone || userData.whatsapp || '',
-            photoURL: userData.photoURL || userData.profileImage || '',
+          const enrollment = enrollmentsList.find(e => e.studentId === studentId);
+          const fallbackInfo: StudentInfo = {
+            name: enrollment?.studentName || 'Student',
+            email: enrollment?.studentEmail || '',
           };
-        } else {
-          // Use enrollment data if user document doesn't exist
-          studentsMap[studentId] = fallbackInfo;
+          
+          return {
+            studentId,
+            info: {
+              name: userData.name || userData.displayName || fallbackInfo.name,
+              email: userData.email || fallbackInfo.email,
+              phone: userData.phone || userData.whatsapp || '',
+              photoURL: userData.photoURL || userData.profileImage || '',
+            }
+          };
         }
       } catch (error: any) {
-        // If permission denied or any other error, use enrollment data
-        // This is expected for creators who cannot read student user documents
-        if (error.code === 'permission-denied' || error.code === 'PERMISSION_DENIED') {
-          // Silently use enrollment data - this is expected behavior
-          studentsMap[studentId] = fallbackInfo;
-        } else {
+        // Silently ignore permission errors - this is expected
+        if (error.code !== 'permission-denied' && error.code !== 'PERMISSION_DENIED') {
           console.error(`Error fetching student ${studentId}:`, error);
-          studentsMap[studentId] = fallbackInfo;
         }
       }
-    }
+      return null;
+    });
 
-    setStudentsInfo(studentsMap);
+    // Wait for all fetches to complete (in parallel)
+    const results = await Promise.allSettled(userFetchPromises);
+    
+    // Update students map with any additional info we got
+    results.forEach((result) => {
+      if (result.status === 'fulfilled' && result.value) {
+        studentsMap[result.value.studentId] = result.value.info;
+      }
+    });
+
+    // Update UI with complete info
+    setStudentsInfo({ ...studentsMap });
   };
 
   const formatDate = (date: any) => {
@@ -221,6 +259,54 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
       return 'Invalid Date';
     }
   };
+
+  // Get current user
+  useEffect(() => {
+    const getCurrentUser = () => {
+      if (window.firebaseAuth?.currentUser) {
+        setUser(window.firebaseAuth.currentUser);
+        return window.firebaseAuth.currentUser;
+      }
+      return null;
+    };
+
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      const checkInterval = setInterval(() => {
+        const user = getCurrentUser();
+        if (user) {
+          setUser(user);
+          clearInterval(checkInterval);
+        }
+      }, 500);
+      return () => clearInterval(checkInterval);
+    }
+  }, []);
+
+  // Initialize: Fetch enrollments when component mounts
+  useEffect(() => {
+    if (!user) return;
+
+    if (classId) {
+      // Fetch enrollments for specific class
+      fetchEnrollments(classId);
+    } else {
+      // Fetch all enrollments for creator
+      fetchClassesAndEnrollments(user.uid);
+    }
+  }, [user, classId]);
+
+  // Filter enrollments when selectedClassId changes
+  useEffect(() => {
+    if (!classId && allEnrollments.length > 0) {
+      if (selectedClassId) {
+        const filtered = allEnrollments.filter(e => e.classId === selectedClassId);
+        setEnrollments(filtered);
+      } else {
+        setEnrollments(allEnrollments);
+      }
+    }
+  }, [selectedClassId, allEnrollments, classId]);
 
   if (loading) {
     return (
