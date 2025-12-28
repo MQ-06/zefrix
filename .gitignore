@@ -41,3 +41,7 @@ next-env.d.ts
 /public/uploads/
 /uploads/
 
+firebase-service-account-fixed.json
+firebase-service-account.json
+*.json
+.env*
