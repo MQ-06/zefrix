@@ -86,48 +86,89 @@ export default function ProductPage({ params }: PageProps) {
   };
 
   useEffect(() => {
-    // Load Firebase if not already loaded
-    if (typeof window !== 'undefined' && !window.firebaseDb) {
-      const script = document.createElement('script');
-      script.type = 'module';
-      script.innerHTML = `
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        
-        const firebaseConfig = {
-          apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-          authDomain: "zefrix-custom.firebaseapp.com",
-          projectId: "zefrix-custom",
-          storageBucket: "zefrix-custom.firebasestorage.app",
-          messagingSenderId: "50732408558",
-          appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-          measurementId: "G-27HS1SWB5X"
-        };
+    let isMounted = true;
+    let retryCount = 0;
+    const MAX_RETRIES = 20; // Increased retries for hard refresh scenarios
+    let retryTimeout: NodeJS.Timeout | null = null;
 
-        const app = initializeApp(firebaseConfig);
-        window.firebaseAuth = getAuth(app);
-        window.firebaseDb = getFirestore(app);
-        window.doc = doc;
-        window.getDoc = getDoc;
-        window.collection = collection;
-        window.query = query;
-        window.where = where;
-        window.getDocs = getDocs;
-        window.orderBy = orderBy;
-        window.limit = limit;
-        window.onSnapshot = onSnapshot;
-        window.Timestamp = Timestamp;
-      `;
-      document.body.appendChild(script);
-    }
+    // Load Firebase if not already loaded
+    const initializeFirebase = () => {
+      if (typeof window !== 'undefined' && !window.firebaseDb) {
+        // Check if script is already being loaded
+        const existingScript = document.querySelector('script[data-firebase-product-init]');
+        if (existingScript) {
+          // Script is loading, wait for it
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.setAttribute('data-firebase-product-init', 'true');
+        script.innerHTML = `
+          import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+          import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+          import { getFirestore, doc, getDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          
+          const firebaseConfig = {
+            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+            authDomain: "zefrix-custom.firebaseapp.com",
+            projectId: "zefrix-custom",
+            storageBucket: "zefrix-custom.firebasestorage.app",
+            messagingSenderId: "50732408558",
+            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+            measurementId: "G-27HS1SWB5X"
+          };
+
+          const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+          window.firebaseAuth = getAuth(app);
+          window.firebaseDb = getFirestore(app);
+          window.doc = doc;
+          window.getDoc = getDoc;
+          window.collection = collection;
+          window.query = query;
+          window.where = where;
+          window.getDocs = getDocs;
+          window.orderBy = orderBy;
+          window.limit = limit;
+          window.onSnapshot = onSnapshot;
+          window.Timestamp = Timestamp;
+          
+          // Dispatch event when Firebase is ready
+          window.dispatchEvent(new CustomEvent('firebaseProductReady'));
+        `;
+        script.onerror = () => {
+          console.error('Failed to load Firebase script');
+          if (isMounted && retryCount < MAX_RETRIES) {
+            retryCount++;
+            retryTimeout = setTimeout(initializeFirebase, 1000);
+          }
+        };
+        document.head.appendChild(script);
+      }
+    };
+
+    initializeFirebase();
 
     const fetchCourse = async () => {
-      // Wait for Firebase to load
-      if (!window.firebaseDb || !window.doc || !window.getDoc) {
-        setTimeout(fetchCourse, 500);
-        return;
+      if (!isMounted) return;
+
+      // Wait for Firebase to load with better retry logic
+      if (!window.firebaseDb || !window.doc || !window.getDoc || !window.collection || !window.query || !window.where || !window.getDocs) {
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          retryTimeout = setTimeout(fetchCourse, 300);
+          return;
+        } else {
+          console.error('Firebase failed to initialize after maximum retries');
+          if (isMounted) {
+            setLoading(false);
+            setCourse(null);
+          }
+          return;
+        }
       }
+
+      retryCount = 0; // Reset retry count on success
 
       try {
         const docRef = window.doc(window.firebaseDb, 'classes', params.slug);
@@ -189,7 +230,27 @@ export default function ProductPage({ params }: PageProps) {
       }
     };
 
-    fetchCourse();
+    // Listen for Firebase ready event
+    const handleFirebaseReady = () => {
+      if (isMounted) {
+        fetchCourse();
+      }
+    };
+    window.addEventListener('firebaseProductReady', handleFirebaseReady);
+
+    // Try fetching immediately if Firebase is already loaded
+    if (window.firebaseDb && window.doc && window.getDoc) {
+      fetchCourse();
+    } else {
+      // Otherwise, start retry loop
+      fetchCourse();
+    }
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('firebaseProductReady', handleFirebaseReady);
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [params.slug]);
 
   // Fetch current user and listen for auth changes
@@ -273,11 +334,53 @@ export default function ProductPage({ params }: PageProps) {
             instructorImage: getAvatarUrl(data.creatorName || 'Instructor', 128),
             sections: data.numberSessions || 1,
             duration: data.duration || 1,
-            students: 0,
+            students: 0, // Will be updated below
             originalPrice: data.price || 0,
           });
           }
         });
+
+        // Fetch enrollment counts for related courses
+        if (classes.length > 0 && window.collection && window.query && window.where && window.getDocs) {
+          try {
+            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+            
+            // Fetch enrollment counts for all related classes in parallel
+            const enrollmentPromises = classes.map(async (classItem) => {
+              try {
+                const enrollmentsQuery = window.query(
+                  enrollmentsRef,
+                  window.where('classId', '==', classItem.id)
+                );
+                const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+                return {
+                  classId: classItem.id,
+                  enrollmentCount: enrollmentsSnapshot.size
+                };
+              } catch (error) {
+                console.error(`Error fetching enrollment count for related class ${classItem.id}:`, error);
+                return {
+                  classId: classItem.id,
+                  enrollmentCount: 0
+                };
+              }
+            });
+
+            const enrollmentCounts = await Promise.all(enrollmentPromises);
+            
+            // Add enrollment counts to classes
+            const enrollmentMap = new Map(
+              enrollmentCounts.map(ec => [ec.classId, ec.enrollmentCount])
+            );
+            
+            classes.forEach(classItem => {
+              classItem.students = enrollmentMap.get(classItem.id) || 0;
+            });
+          } catch (error) {
+            console.error('Error fetching enrollment counts for related courses:', error);
+            // Continue without enrollment counts if fetch fails
+          }
+        }
 
         // Take only first 3
         setRelatedCourses(classes.slice(0, 3));
@@ -1003,12 +1106,12 @@ export default function ProductPage({ params }: PageProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {relatedCourses.map((relatedCourse) => (
-              <Link
-                key={relatedCourse.id}
-                href={`/product/${relatedCourse.slug}`}
-                className="bg-white/5 backdrop-blur-lg rounded-xl overflow-hidden border border-white/10 hover:border-[#D92A63]/50 transition-all group"
-              >
-                <div className="relative">
+              <div key={relatedCourse.id} className="h-full">
+                <Link
+                  href={`/product/${relatedCourse.slug}`}
+                  className="bg-white/5 backdrop-blur-lg rounded-xl overflow-hidden border border-white/10 hover:border-[#D92A63]/50 transition-all group h-full flex flex-col block"
+                >
+                <div className="relative flex-shrink-0">
                   <img
                     src={relatedCourse.image || DEFAULT_COURSE_IMAGE}
                     alt={relatedCourse.title}
@@ -1026,15 +1129,15 @@ export default function ProductPage({ params }: PageProps) {
                   </div>
                 </div>
 
-                <div className="p-6">
-                  <h3 className="text-xl font-bold text-white mb-4 group-hover:text-[#FF654B] transition-colors">
+                <div className="p-6 flex flex-col flex-grow">
+                  <h3 className="text-xl font-bold text-white mb-4 group-hover:text-[#FF654B] transition-colors line-clamp-2 min-h-[3.5rem]">
                     {relatedCourse.title}
                   </h3>
 
-                  <div className="flex items-center gap-4 text-gray-400 text-sm mb-4">
+                  <div className="flex items-center gap-4 text-gray-400 text-sm mb-4 flex-wrap">
                     <div className="flex items-center gap-1">
                       <BookOpen className="w-4 h-4" />
-                      <span>{relatedCourse.sections} Sessions</span>
+                      <span>{relatedCourse.sections} {relatedCourse.sections === 1 ? 'Session' : 'Sessions'}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
@@ -1042,11 +1145,11 @@ export default function ProductPage({ params }: PageProps) {
                     </div>
                     <div className="flex items-center gap-1">
                       <Users className="w-4 h-4" />
-                      <span>{relatedCourse.students} Students</span>
+                      <span>{relatedCourse.students} {relatedCourse.students === 1 ? 'Student' : 'Students'}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 mt-auto">
                     <h4 className="text-2xl font-bold text-white">
                       ₹{relatedCourse.price.toFixed(2)}
                     </h4>
@@ -1057,7 +1160,8 @@ export default function ProductPage({ params }: PageProps) {
                     )}
                   </div>
                 </div>
-              </Link>
+                </Link>
+              </div>
             ))}
           </div>
         </div>

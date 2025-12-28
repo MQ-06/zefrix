@@ -128,6 +128,51 @@ export default function CoursesPage() {
           const bTime = b.createdAt?.toMillis?.() || 0;
           return bTime - aTime;
         });
+
+        // Fetch enrollment counts for all classes
+        if (classes.length > 0 && window.collection && window.query && window.where && window.getDocs) {
+          try {
+            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+            
+            // Fetch enrollment counts for all classes in parallel
+            const enrollmentPromises = classes.map(async (classItem) => {
+              try {
+                const enrollmentsQuery = window.query(
+                  enrollmentsRef,
+                  window.where('classId', '==', classItem.classId)
+                );
+                const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+                return {
+                  classId: classItem.classId,
+                  enrollmentCount: enrollmentsSnapshot.size
+                };
+              } catch (error) {
+                console.error(`Error fetching enrollment count for class ${classItem.classId}:`, error);
+                return {
+                  classId: classItem.classId,
+                  enrollmentCount: 0
+                };
+              }
+            });
+
+            const enrollmentCounts = await Promise.all(enrollmentPromises);
+            
+            // Add enrollment counts to classes
+            const enrollmentMap = new Map(
+              enrollmentCounts.map(ec => [ec.classId, ec.enrollmentCount])
+            );
+            
+            classes.forEach(classItem => {
+              (classItem as any).enrollmentCount = enrollmentMap.get(classItem.classId) || 0;
+            });
+          } catch (error) {
+            console.error('Error fetching enrollment counts:', error);
+            // Continue without enrollment counts if fetch fails
+            classes.forEach(classItem => {
+              (classItem as any).enrollmentCount = 0;
+            });
+          }
+        }
         
         if (isMounted) {
           setApprovedClasses(classes);
@@ -165,9 +210,9 @@ export default function CoursesPage() {
     image: (classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : DEFAULT_COURSE_IMAGE,
     price: classItem.price,
     originalPrice: classItem.price * 1.2,
-    sections: classItem.numberSessions,
+    sections: classItem.numberSessions, // This is actually sessions, but kept as 'sections' for component compatibility
     duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
-    students: 0,
+    students: (classItem as any).enrollmentCount || 0, // Use actual enrollment count
     level: 'Beginner' as const,
   }));
 
@@ -264,6 +309,7 @@ export default function CoursesPage() {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ duration: 0.6, delay: index * 0.1 }}
+                    className="h-full"
                   >
                     <CoursesPageCard course={course} />
                   </motion.div>

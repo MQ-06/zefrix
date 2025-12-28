@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { BookOpen, Users, Calendar } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -113,9 +114,15 @@ export default function CreatorProfilePage() {
       }
 
       try {
-        // Fetch creator profile
-        const userRef = window.doc(window.firebaseDb, 'users', creatorId);
-        const userSnap = await window.getDoc(userRef);
+        // Fetch creator profile and classes in parallel for faster loading
+        const [userSnap, classesSnapshot] = await Promise.all([
+          window.getDoc(window.doc(window.firebaseDb, 'users', creatorId)),
+          window.getDocs(window.query(
+            window.collection(window.firebaseDb, 'classes'),
+            window.where('creatorId', '==', creatorId),
+            window.where('status', '==', 'approved')
+          ))
+        ]);
 
         if (!userSnap.exists()) {
           setError('Creator not found');
@@ -123,6 +130,7 @@ export default function CreatorProfilePage() {
           return;
         }
 
+        // Set creator data immediately
         const userData = userSnap.data();
         setCreator({
           uid: creatorId,
@@ -142,15 +150,7 @@ export default function CreatorProfilePage() {
           },
         });
 
-        // Fetch approved classes
-        const classesRef = window.collection(window.firebaseDb, 'classes');
-        const classesQuery = window.query(
-          classesRef,
-          window.where('creatorId', '==', creatorId),
-          window.where('status', '==', 'approved')
-        );
-        const classesSnapshot = await window.getDocs(classesQuery);
-
+        // Process classes immediately
         const classesList: ClassData[] = [];
         classesSnapshot.forEach((doc: any) => {
           classesList.push({ classId: doc.id, ...doc.data() });
@@ -163,52 +163,113 @@ export default function CreatorProfilePage() {
           return bTime - aTime;
         });
 
+        // Set classes immediately (without enrollment counts first)
         setClasses(classesList);
+        setLoading(false); // Show page immediately
 
-        // Fetch reviews/ratings - only if there are classes
-        const reviewsList: Review[] = [];
-        if (classesList.length > 0) {
-          try {
-            const ratingsRef = window.collection(window.firebaseDb, 'ratings');
-            const classIds = classesList.map(c => c.classId).slice(0, 10);
-            
-            // Firebase 'in' filter requires non-empty array
-            if (classIds.length > 0) {
-              const ratingsQuery = window.query(ratingsRef, window.where('classId', 'in', classIds));
-              const ratingsSnapshot = await window.getDocs(ratingsQuery);
-
-              ratingsSnapshot.forEach((doc: any) => {
-                const data = doc.data();
-                // Only include reviews for this creator's classes
-                if (classesList.some(c => c.classId === data.classId)) {
-                  reviewsList.push({
-                    id: doc.id,
-                    studentName: data.studentName || 'Student',
-                    rating: data.rating || 0,
-                    feedback: data.feedback || '',
-                    createdAt: data.createdAt,
+        // Fetch enrollment counts and reviews in background (non-blocking)
+        if (classesList.length > 0 && window.collection && window.query && window.where && window.getDocs) {
+          // Fetch enrollment counts in parallel batches (Firestore 'in' limit is 10)
+          const fetchEnrollmentCounts = async () => {
+            try {
+              const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+              const classIds = classesList.map(c => c.classId);
+              
+              // Process in batches of 10 (Firestore 'in' query limit)
+              const enrollmentCounts: { classId: string; enrollmentCount: number }[] = [];
+              
+              for (let i = 0; i < classIds.length; i += 10) {
+                const batch = classIds.slice(i, i + 10);
+                try {
+                  const enrollmentsQuery = window.query(
+                    enrollmentsRef,
+                    window.where('classId', 'in', batch)
+                  );
+                  const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+                  
+                  // Count enrollments per class
+                  const batchCounts = new Map<string, number>();
+                  enrollmentsSnapshot.forEach((doc: any) => {
+                    const classId = doc.data().classId;
+                    batchCounts.set(classId, (batchCounts.get(classId) || 0) + 1);
+                  });
+                  
+                  batch.forEach(classId => {
+                    enrollmentCounts.push({
+                      classId,
+                      enrollmentCount: batchCounts.get(classId) || 0
+                    });
+                  });
+                } catch (error) {
+                  console.error(`Error fetching enrollment batch:`, error);
+                  // Set 0 for failed batch
+                  batch.forEach(classId => {
+                    enrollmentCounts.push({ classId, enrollmentCount: 0 });
                   });
                 }
-              });
+              }
+              
+              // Update classes with enrollment counts
+              const enrollmentMap = new Map(
+                enrollmentCounts.map(ec => [ec.classId, ec.enrollmentCount])
+              );
+              
+              setClasses(prevClasses => 
+                prevClasses.map(classItem => ({
+                  ...classItem,
+                  enrollmentCount: enrollmentMap.get(classItem.classId) || 0
+                }))
+              );
+            } catch (error) {
+              console.error('Error fetching enrollment counts:', error);
             }
-          } catch (ratingsError) {
-            console.error('Error fetching ratings:', ratingsError);
-            // Continue without reviews if ratings fetch fails
-          }
+          };
+
+          // Fetch reviews in background
+          const fetchReviews = async () => {
+            try {
+              const ratingsRef = window.collection(window.firebaseDb, 'ratings');
+              const classIds = classesList.map(c => c.classId).slice(0, 10);
+              
+              if (classIds.length > 0) {
+                const ratingsQuery = window.query(ratingsRef, window.where('classId', 'in', classIds));
+                const ratingsSnapshot = await window.getDocs(ratingsQuery);
+
+                const reviewsList: Review[] = [];
+                ratingsSnapshot.forEach((doc: any) => {
+                  const data = doc.data();
+                  if (classesList.some(c => c.classId === data.classId)) {
+                    reviewsList.push({
+                      id: doc.id,
+                      studentName: data.studentName || 'Student',
+                      rating: data.rating || 0,
+                      feedback: data.feedback || '',
+                      createdAt: data.createdAt,
+                    });
+                  }
+                });
+
+                reviewsList.sort((a, b) => {
+                  const aTime = a.createdAt?.toMillis?.() || 0;
+                  const bTime = b.createdAt?.toMillis?.() || 0;
+                  return bTime - aTime;
+                });
+
+                setReviews(reviewsList.slice(0, 10));
+              }
+            } catch (error) {
+              console.error('Error fetching reviews:', error);
+            }
+          };
+
+          // Fetch both in parallel, non-blocking
+          Promise.all([fetchEnrollmentCounts(), fetchReviews()]).catch(err => {
+            console.error('Error in background data fetch:', err);
+          });
         }
-
-        // Sort by date (newest first)
-        reviewsList.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-
-        setReviews(reviewsList.slice(0, 10)); // Limit to 10 most recent
       } catch (err) {
         console.error('Error fetching creator profile:', err);
         setError('Failed to load creator profile');
-      } finally {
         setLoading(false);
       }
     };
@@ -653,22 +714,59 @@ export default function CreatorProfilePage() {
                       )}
                       <div style={{
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
+                        flexDirection: 'column',
+                        gap: '0.75rem',
                         marginTop: '1rem'
                       }}>
-                        <div>
-                          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
-                            {classItem.scheduleType === 'recurring' ? 'Batch' : 'One-time'} • {classItem.numberSessions} Sessions
+                        {/* Course Meta Info */}
+                        <div style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '1rem',
+                          color: 'rgba(255, 255, 255, 0.7)',
+                          fontSize: '0.875rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <BookOpen style={{ width: '18px', height: '18px', color: 'rgba(255, 255, 255, 0.6)' }} />
+                            <span>{classItem.numberSessions || 1} {classItem.numberSessions === 1 ? 'Session' : 'Sessions'}</span>
                           </div>
-                          {classItem.startDate && (
-                            <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                              Starts: {formatDate(classItem.startDate)}
-                            </div>
-                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Users style={{ width: '18px', height: '18px', color: 'rgba(255, 255, 255, 0.6)' }} />
+                            <span>{(classItem as any).enrollmentCount || 0} {(classItem as any).enrollmentCount === 1 ? 'Student' : 'Students'}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Calendar style={{ width: '18px', height: '18px', color: 'rgba(255, 255, 255, 0.6)' }} />
+                            <span>{classItem.scheduleType === 'recurring' ? 'Batch' : 'One-time'}</span>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#FFD700' }}>
-                          ₹{classItem.price.toFixed(2)}
+                        
+                        {/* Start Date */}
+                        {classItem.startDate && (
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '0.5rem',
+                            color: 'rgba(255, 255, 255, 0.6)', 
+                            fontSize: '0.8125rem' 
+                          }}>
+                            <Calendar style={{ width: '16px', height: '16px', color: 'rgba(255, 255, 255, 0.5)' }} />
+                            <span>Starts: {formatDate(classItem.startDate)}</span>
+                          </div>
+                        )}
+                        
+                        {/* Price */}
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginTop: '0.5rem',
+                          paddingTop: '0.75rem',
+                          borderTop: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}>
+                          <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>Price:</span>
+                          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#FFD700' }}>
+                            ₹{classItem.price.toFixed(2)}
+                          </div>
                         </div>
                       </div>
                     </div>

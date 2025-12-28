@@ -531,6 +531,7 @@ export default function BecomeACreatorPage() {
                 required
                 pattern="^\+[1-9]\d{6,14}$"
                 maxLength={16}
+                suppressHydrationWarning
                 style={{
                   borderColor: whatsappError ? '#ef4444' : undefined,
                   borderWidth: whatsappError ? '2px' : undefined

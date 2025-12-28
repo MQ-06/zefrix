@@ -55,10 +55,10 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
     >
       <Link
         href={`/product/${course.slug}`}
-        className="group block bg-dark-light rounded-2xl overflow-hidden transition-all duration-300"
+        className="group block bg-dark-light rounded-2xl overflow-hidden transition-all duration-300 h-full flex flex-col"
       >
         {/* Course Image */}
-        <div className="relative h-56 overflow-hidden">
+        <div className="relative h-56 overflow-hidden flex-shrink-0">
           <img
             src={imageSrc}
             alt={course.title}
@@ -81,8 +81,8 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
         </div>
 
         {/* Course Info */}
-        <div className="p-6">
-          <h2 className="text-white font-bold text-xl mb-5 line-clamp-2 group-hover:text-primary transition-colors duration-300 min-h-[3rem]">
+        <div className="p-6 flex flex-col flex-grow">
+          <h2 className="text-white font-bold text-xl mb-5 line-clamp-2 group-hover:text-primary transition-colors duration-300 min-h-[3.5rem]">
             {course.title}
           </h2>
 
@@ -91,7 +91,7 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
               <BookOpen className="w-5 h-5 text-gray-400" />
               <span className="text-base">
                 <span className="font-bold text-white text-lg">{course.sections}</span>{' '}
-                <span className="text-gray-400">Sections</span>
+                <span className="text-gray-400">{course.sections === 1 ? 'Session' : 'Sessions'}</span>
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -110,7 +110,7 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-5 border-t border-gray-700">
+          <div className="flex items-center justify-between pt-5 border-t border-gray-700 mt-auto">
             <div>
               <h3 className="text-yellow-400 font-bold text-2xl mb-1">
                 ₹{course.price.toFixed(2)}
