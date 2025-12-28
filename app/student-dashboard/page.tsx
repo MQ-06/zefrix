@@ -75,6 +75,14 @@ export default function StudentDashboard() {
   const [selectedClassForRating, setSelectedClassForRating] = useState<any>(null);
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState('');
+  
+  // Personalized feed state
+  const [recommendedClasses, setRecommendedClasses] = useState<ApprovedClass[]>([]);
+  const [trendingClasses, setTrendingClasses] = useState<ApprovedClass[]>([]);
+  const [loadingRecommended, setLoadingRecommended] = useState(false);
+  const [loadingTrending, setLoadingTrending] = useState(false);
+  const [classEnrollmentCounts, setClassEnrollmentCounts] = useState<Record<string, number>>({});
+  const [classRatings, setClassRatings] = useState<Record<string, { avg: number; count: number }>>({});
 
   const router = useRouter();
   const userInitial = ((user?.displayName || user?.email || 'S')[0] || 'S').toUpperCase();
@@ -467,6 +475,211 @@ export default function StudentDashboard() {
       fetchUpcomingSessions();
     }
   }, [user, enrollments]);
+
+  // Fetch enrollment counts for all classes
+  useEffect(() => {
+    const fetchEnrollmentCounts = async () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || approvedClasses.length === 0) {
+        return;
+      }
+
+      try {
+        const enrollmentCounts: Record<string, number> = {};
+        const classIds = approvedClasses.map(c => c.classId);
+        
+        // Fetch in batches of 10 (Firestore 'in' query limit)
+        const batchSize = 10;
+        for (let i = 0; i < classIds.length; i += batchSize) {
+          const batch = classIds.slice(i, i + batchSize);
+          const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+          const q = window.query(enrollmentsRef, window.where('classId', 'in', batch));
+          const snapshot = await window.getDocs(q);
+          
+          snapshot.forEach((doc: any) => {
+            const data = doc.data();
+            const classId = data.classId;
+            if (classId) {
+              enrollmentCounts[classId] = (enrollmentCounts[classId] || 0) + 1;
+            }
+          });
+        }
+        
+        setClassEnrollmentCounts(enrollmentCounts);
+      } catch (error) {
+        console.error('Error fetching enrollment counts:', error);
+      }
+    };
+
+    fetchEnrollmentCounts();
+  }, [approvedClasses]);
+
+  // Fetch ratings for all classes
+  useEffect(() => {
+    const fetchRatings = async () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || approvedClasses.length === 0) {
+        return;
+      }
+
+      try {
+        const ratings: Record<string, { avg: number; count: number }> = {};
+        const classIds = approvedClasses.map(c => c.classId);
+        
+        // Fetch in batches of 10
+        const batchSize = 10;
+        for (let i = 0; i < classIds.length; i += batchSize) {
+          const batch = classIds.slice(i, i + batchSize);
+          const ratingsRef = window.collection(window.firebaseDb, 'ratings');
+          const q = window.query(ratingsRef, window.where('classId', 'in', batch));
+          const snapshot = await window.getDocs(q);
+          
+          snapshot.forEach((doc: any) => {
+            const data = doc.data();
+            const classId = data.classId;
+            const rating = data.rating || 0;
+            
+            if (classId) {
+              if (!ratings[classId]) {
+                ratings[classId] = { avg: 0, count: 0 };
+              }
+              ratings[classId].count += 1;
+              ratings[classId].avg = ((ratings[classId].avg * (ratings[classId].count - 1)) + rating) / ratings[classId].count;
+            }
+          });
+        }
+        
+        setClassRatings(ratings);
+      } catch (error) {
+        console.error('Error fetching ratings:', error);
+      }
+    };
+
+    fetchRatings();
+  }, [approvedClasses]);
+
+  // Calculate recommended classes
+  useEffect(() => {
+    const calculateRecommended = async () => {
+      if (!user || approvedClasses.length === 0 || Object.keys(classEnrollmentCounts).length === 0) {
+        return;
+      }
+
+      setLoadingRecommended(true);
+      try {
+        // Get enrolled class IDs to exclude
+        const enrolledClassIds = new Set(enrollments.map(e => e.classId));
+        
+        // Get user's enrolled categories
+        const enrolledCategories = new Set<string>();
+        enrollments.forEach(enrollment => {
+          const classData = enrollmentClasses[enrollment.classId] || {};
+          if (classData.category) {
+            enrolledCategories.add(classData.category);
+          }
+        });
+
+        // Get user's interests from profile
+        const userInterests = (profileInterests || '').toLowerCase().split(',').map(i => i.trim()).filter(Boolean);
+        
+        // Score each class
+        const scoredClasses = approvedClasses
+          .filter(cls => !enrolledClassIds.has(cls.classId)) // Exclude already enrolled
+          .map(cls => {
+            let score = 0;
+            
+            // Category match (40% weight)
+            if (enrolledCategories.has(cls.category)) {
+              score += 40;
+            }
+            
+            // Interest match (30% weight)
+            const classTitleLower = cls.title.toLowerCase();
+            const classCategoryLower = cls.category.toLowerCase();
+            const classSubCategoryLower = (cls.subCategory || '').toLowerCase();
+            userInterests.forEach(interest => {
+              if (classTitleLower.includes(interest) || 
+                  classCategoryLower.includes(interest) || 
+                  classSubCategoryLower.includes(interest)) {
+                score += 10; // Max 30 if all 3 match
+              }
+            });
+            
+            // Rating boost (20% weight)
+            const rating = classRatings[cls.classId];
+            if (rating && rating.count > 0) {
+              score += (rating.avg / 5) * 20; // Normalize to 0-20
+            }
+            
+            // Enrollment count boost (10% weight) - more popular = slightly better
+            const enrollmentCount = classEnrollmentCounts[cls.classId] || 0;
+            score += Math.min(enrollmentCount / 10, 10); // Cap at 10
+            
+            return { ...cls, recommendationScore: score };
+          })
+          .sort((a, b) => (b as any).recommendationScore - (a as any).recommendationScore)
+          .slice(0, 6); // Top 6 recommendations
+        
+        setRecommendedClasses(scoredClasses);
+      } catch (error) {
+        console.error('Error calculating recommendations:', error);
+      } finally {
+        setLoadingRecommended(false);
+      }
+    };
+
+    calculateRecommended();
+  }, [user, approvedClasses, enrollments, enrollmentClasses, profileInterests, classEnrollmentCounts, classRatings]);
+
+  // Calculate trending classes
+  useEffect(() => {
+    const calculateTrending = async () => {
+      if (approvedClasses.length === 0 || Object.keys(classEnrollmentCounts).length === 0) {
+        return;
+      }
+
+      setLoadingTrending(true);
+      try {
+        // Get enrolled class IDs to exclude
+        const enrolledClassIds = new Set(enrollments.map(e => e.classId));
+        
+        // Score each class based on trending factors
+        const now = Date.now();
+        const scoredClasses = approvedClasses
+          .filter(cls => !enrolledClassIds.has(cls.classId)) // Exclude already enrolled
+          .map(cls => {
+            let score = 0;
+            
+            // Recent enrollment activity (50% weight)
+            const enrollmentCount = classEnrollmentCounts[cls.classId] || 0;
+            score += Math.min(enrollmentCount * 5, 50); // Cap at 50
+            
+            // Rating quality (30% weight)
+            const rating = classRatings[cls.classId];
+            if (rating && rating.count >= 3) { // Need at least 3 ratings
+              score += (rating.avg / 5) * 30; // Normalize to 0-30
+            }
+            
+            // Recency boost (20% weight) - newer classes get a boost
+            const createdAt = cls.createdAt?.toMillis?.() || 0;
+            const daysSinceCreation = (now - createdAt) / (1000 * 60 * 60 * 24);
+            if (daysSinceCreation < 30) {
+              score += 20 * (1 - daysSinceCreation / 30); // Decay over 30 days
+            }
+            
+            return { ...cls, trendingScore: score };
+          })
+          .sort((a, b) => (b as any).trendingScore - (a as any).trendingScore)
+          .slice(0, 6); // Top 6 trending
+        
+        setTrendingClasses(scoredClasses);
+      } catch (error) {
+        console.error('Error calculating trending:', error);
+      } finally {
+        setLoadingTrending(false);
+      }
+    };
+
+    calculateTrending();
+  }, [approvedClasses, enrollments, classEnrollmentCounts, classRatings]);
 
   // Filter classes based on search and category
   const filteredClasses = approvedClasses.filter((cls) => {
@@ -1832,6 +2045,127 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
+              {/* Recommended Classes Section */}
+              <div className="section" style={{ marginTop: '3rem' }}>
+                <div className="section-title-inline">
+                  <h2 className="section-title" style={{ marginBottom: 0 }}>Recommended for You</h2>
+                  <a
+                    href="#"
+                    onClick={(e) => handleNavClick(e, 'browse-classes')}
+                    className="widget-view-all"
+                    style={{ fontSize: '0.875rem' }}
+                  >
+                    View All →
+                  </a>
+                </div>
+                {loadingRecommended ? (
+                  <div className="text-white text-center py-8">Loading recommendations...</div>
+                ) : recommendedClasses.length > 0 ? (
+                  <div className="course-grid">
+                    {recommendedClasses.map((course) => {
+                      const enrollmentCount = classEnrollmentCounts[course.classId] || 0;
+                      const rating = classRatings[course.classId];
+                      return (
+                        <Link key={course.classId} href={`/product/${course.classId}`} className="course-card">
+                          <div className="course-image-wrap">
+                            <img 
+                              src={(course.videoLink && course.videoLink.trim() !== '') ? course.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} 
+                              alt={course.title} 
+                              className="course-image"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                              }}
+                            />
+                            <div className="course-teacher-wrap">
+                              <div style={{
+                                width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'
+                              }}>
+                                {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
+                              </div>
+                              <div>{course.creatorName || 'Instructor'}</div>
+                            </div>
+                            <div style={{
+                              position: 'absolute',
+                              top: '0.75rem',
+                              right: '0.75rem',
+                              background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              color: '#fff',
+                              fontWeight: '600'
+                            }}>
+                              Recommended
+                            </div>
+                          </div>
+                          <div className="course-info">
+                            <h3 className="course-title">{course.title}</h3>
+                            <div className="course-meta">
+                              <div className="course-meta-item">
+                                <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
+                                <div>{course.numberSessions || 1} Sessions</div>
+                              </div>
+                              <div className="course-meta-item">
+                                <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
+                                <div>{course.category || 'General'}</div>
+                              </div>
+                            </div>
+                            {rating && rating.count > 0 && (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.5rem', 
+                                marginTop: '0.5rem',
+                                fontSize: '0.875rem',
+                                color: '#FFD700'
+                              }}>
+                                <span>⭐</span>
+                                <span>{rating.avg.toFixed(1)} ({rating.count} {rating.count === 1 ? 'review' : 'reviews'})</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="course-bottom">
+                            <div className="course-price-wrap">
+                              <h4 className="course-price">₹{(course.price || 0).toFixed(2)}</h4>
+                            </div>
+                            {enrollmentCount > 0 && (
+                              <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                                {enrollmentCount} {enrollmentCount === 1 ? 'student' : 'students'}
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '2rem',
+                    textAlign: 'center',
+                    color: 'rgba(255, 255, 255, 0.7)'
+                  }}>
+                    {enrollments.length === 0 ? (
+                      <>
+                        Complete your profile and enroll in classes to get personalized recommendations!
+                        <br />
+                        <a
+                          href="#"
+                          onClick={(e) => handleNavClick(e, 'profile')}
+                          style={{ color: '#D92A63', textDecoration: 'underline', marginTop: '0.5rem', display: 'inline-block' }}
+                        >
+                          Update Profile →
+                        </a>
+                      </>
+                    ) : (
+                      'No recommendations available at the moment. Check back later!'
+                    )}
+                  </div>
+                )}
+              </div>
+
             </>
           )}
 
@@ -2176,27 +2510,44 @@ export default function StudentDashboard() {
                   Showing {filteredClasses.length} of {approvedClasses.length} classes
                 </div>
                 <div className="course-grid">
-                  {filteredClasses.map((course) => (
-                    <Link key={course.classId} href={`/product/${course.classId}`} className="course-card">
-                      <div className="course-image-wrap">
-                        <img 
-                          src={(course.videoLink && course.videoLink.trim() !== '') ? course.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} 
-                          alt={course.title} 
-                          className="course-image"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
-                          }}
-                        />
-                        <div className="course-teacher-wrap">
-                          <div style={{
-                            width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'
-                          }}>
-                            {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
+                  {filteredClasses.map((course) => {
+                    const isTrending = trendingClasses.some(tc => tc.classId === course.classId);
+                    return (
+                      <Link key={course.classId} href={`/product/${course.classId}`} className="course-card">
+                        <div className="course-image-wrap">
+                          <img 
+                            src={(course.videoLink && course.videoLink.trim() !== '') ? course.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} 
+                            alt={course.title} 
+                            className="course-image"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                            }}
+                          />
+                          <div className="course-teacher-wrap">
+                            <div style={{
+                              width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'
+                            }}>
+                              {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
+                            </div>
+                            <div>{course.creatorName || 'Instructor'}</div>
                           </div>
-                          <div>{course.creatorName || 'Instructor'}</div>
+                          {isTrending && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '0.75rem',
+                              right: '0.75rem',
+                              background: 'linear-gradient(135deg, #FF654B 0%, #FF9800 100%)',
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              color: '#fff',
+                              fontWeight: '600'
+                            }}>
+                              Trending
+                            </div>
+                          )}
                         </div>
-                      </div>
                       <div className="course-info">
                         <h3 className="course-title">{course.title}</h3>
                         <div className="course-meta">
@@ -2220,7 +2571,8 @@ export default function StudentDashboard() {
                         </div>
                       </div>
                     </Link>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             ) : (

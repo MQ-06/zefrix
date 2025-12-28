@@ -65,6 +65,17 @@ interface Review {
   createdAt: any;
 }
 
+interface SimilarCreator {
+  id: string;
+  name: string;
+  bio: string;
+  expertise: string;
+  photoURL: string;
+  profileImage: string;
+  category: string;
+  classCount: number;
+}
+
 export default function CreatorProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -73,6 +84,7 @@ export default function CreatorProfilePage() {
   const [creator, setCreator] = useState<CreatorProfile | null>(null);
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [similarCreators, setSimilarCreators] = useState<SimilarCreator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -267,6 +279,101 @@ export default function CreatorProfilePage() {
             console.error('Error in background data fetch:', err);
           });
         }
+
+        // Fetch similar creators in background
+        const fetchSimilarCreators = async () => {
+          try {
+            console.log('🔍 Fetching similar creators for:', creatorId);
+            
+            // Get categories from current creator's classes
+            const creatorCategories = new Set<string>();
+            classesList.forEach(cls => {
+              if (cls.category) creatorCategories.add(cls.category);
+            });
+
+            // Get expertise keywords
+            const expertiseKeywords = (userData.expertise || userData.skills || '').toLowerCase().split(/[,\s]+/).filter(Boolean);
+            
+            console.log('📊 Creator categories:', Array.from(creatorCategories));
+            console.log('🎯 Expertise keywords:', expertiseKeywords);
+
+            // Fetch all creators (excluding current)
+            const usersRef = window.collection(window.firebaseDb, 'users');
+            const creatorsQuery = window.query(usersRef, window.where('role', '==', 'creator'));
+            const creatorsSnapshot = await window.getDocs(creatorsQuery);
+
+            const creatorsData: Array<{ id: string; data: any; matchScore: number; categories: Set<string>; classCount: number }> = [];
+
+            // Fetch all creators and their classes in parallel
+            const creatorPromises = Array.from(creatorsSnapshot.docs)
+              .filter((doc: any) => doc.id !== creatorId)
+              .map(async (doc: any) => {
+                const data = doc.data();
+                const classesRef = window.collection(window.firebaseDb, 'classes');
+                const creatorClassesQuery = window.query(
+                  classesRef,
+                  window.where('creatorId', '==', doc.id),
+                  window.where('status', '==', 'approved')
+                );
+                const classesSnap = await window.getDocs(creatorClassesQuery);
+
+                const otherCreatorCategories = new Set<string>();
+                classesSnap.forEach((classDoc: any) => {
+                  const classData = classDoc.data();
+                  if (classData.category) otherCreatorCategories.add(classData.category);
+                });
+
+                let matchScore = 0;
+                // Category match (higher weight)
+                creatorCategories.forEach(cat => {
+                  if (otherCreatorCategories.has(cat)) matchScore += 2;
+                });
+
+                // Expertise match
+                const otherExpertise = (data.expertise || data.skills || '').toLowerCase();
+                expertiseKeywords.forEach(keyword => {
+                  if (keyword && otherExpertise.includes(keyword)) matchScore += 1;
+                });
+
+                return {
+                  id: doc.id,
+                  data,
+                  matchScore,
+                  categories: otherCreatorCategories,
+                  classCount: classesSnap.size
+                };
+              });
+
+            const results = await Promise.allSettled(creatorPromises);
+            
+            results.forEach((result) => {
+              if (result.status === 'fulfilled' && result.value.matchScore > 0) {
+                creatorsData.push(result.value);
+              }
+            });
+
+            // Sort by match score and take top 6
+            creatorsData.sort((a, b) => b.matchScore - a.matchScore);
+            const topSimilar = creatorsData.slice(0, 6).map(item => ({
+              id: item.id,
+              name: item.data.name || item.data.displayName || 'Creator',
+              bio: item.data.bio || '',
+              expertise: item.data.expertise || item.data.skills || '',
+              photoURL: item.data.photoURL || item.data.profileImage || '',
+              profileImage: item.data.profileImage || item.data.photoURL || '',
+              category: Array.from(item.categories)[0] || '',
+              classCount: item.classCount
+            }));
+
+            console.log(`✅ Found ${topSimilar.length} similar creators:`, topSimilar.map(c => ({ name: c.name, score: creatorsData.find(d => d.id === c.id)?.matchScore })));
+            setSimilarCreators(topSimilar);
+          } catch (error) {
+            console.error('❌ Error fetching similar creators:', error);
+          }
+        };
+
+        // Fetch similar creators (non-blocking) - fetch even if no classes (based on expertise)
+        fetchSimilarCreators();
       } catch (err) {
         console.error('Error fetching creator profile:', err);
         setError('Failed to load creator profile');
@@ -295,6 +402,29 @@ export default function CreatorProfilePage() {
     } catch {
       return 'Invalid Date';
     }
+  };
+
+  const getYouTubeEmbedUrl = (url: string): string | null => {
+    if (!url) return null;
+    
+    // Handle various YouTube URL formats
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return `https://www.youtube.com/embed/${match[1]}`;
+      }
+    }
+    
+    return null;
+  };
+
+  const isYouTubeUrl = (url: string): boolean => {
+    return /youtube\.com|youtu\.be/.test(url);
   };
 
   if (loading) {
@@ -549,20 +679,47 @@ export default function CreatorProfilePage() {
                 borderRadius: '16px',
                 overflow: 'hidden',
                 aspectRatio: '16/9',
-                maxWidth: '800px'
+                maxWidth: '800px',
+                position: 'relative'
               }}>
-                {creator.introVideo.includes('youtube.com') || creator.introVideo.includes('youtu.be') ? (
-                  <iframe
-                    src={creator.introVideo.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
-                    style={{ width: '100%', height: '100%', border: 'none' }}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
+                {isYouTubeUrl(creator.introVideo) ? (
+                  (() => {
+                    const embedUrl = getYouTubeEmbedUrl(creator.introVideo);
+                    return embedUrl ? (
+                      <iframe
+                        src={embedUrl}
+                        style={{ width: '100%', height: '100%', border: 'none' }}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        title={`${creator.name}'s Intro Video`}
+                      />
+                    ) : (
+                      <div style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        padding: '2rem'
+                      }}>
+                        Invalid YouTube URL. Please check the video link.
+                      </div>
+                    );
+                  })()
                 ) : (
                   <video
                     src={creator.introVideo}
                     controls
-                    style={{ width: '100%', height: '100%' }}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    onError={(e) => {
+                      console.error('Error loading video:', e);
+                      (e.target as HTMLVideoElement).style.display = 'none';
+                      const errorDiv = document.createElement('div');
+                      errorDiv.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.7); padding: 2rem;';
+                      errorDiv.textContent = 'Unable to load video. Please check the video URL.';
+                      (e.target as HTMLVideoElement).parentElement?.appendChild(errorDiv);
+                    }}
                   />
                 )}
               </div>
@@ -854,6 +1011,233 @@ export default function CreatorProfilePage() {
               </div>
             </div>
           )}
+
+          {/* Connect Section - About the Creator & Similar Creators */}
+          <div style={{ marginBottom: '3rem' }}>
+            <div style={{ marginBottom: '2rem' }}>
+              <h2 style={{ 
+                fontSize: '2rem', 
+                fontWeight: '700', 
+                marginBottom: '0.5rem',
+                background: 'linear-gradient(135deg, #D92A63, #6C63FF)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                Connect
+              </h2>
+              <p style={{ 
+                color: 'rgba(255, 255, 255, 0.6)', 
+                fontSize: '0.9375rem'
+              }}>
+                Learn more about {creator.name} and discover similar creators
+              </p>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+              gap: '2rem',
+              marginBottom: '3rem'
+            }}>
+              {/* About the Creator */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '16px',
+                padding: '2rem',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <h3 style={{
+                  fontSize: '1.5rem',
+                  fontWeight: '700',
+                  marginBottom: '1rem',
+                  color: '#fff'
+                }}>
+                  About {creator.name}
+                </h3>
+                {creator.bio ? (
+                  <p style={{
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    lineHeight: '1.6',
+                    marginBottom: '1rem'
+                  }}>
+                    {creator.bio}
+                  </p>
+                ) : (
+                  <p style={{
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    fontStyle: 'italic'
+                  }}>
+                    No bio available yet.
+                  </p>
+                )}
+                {creator.expertise && (
+                  <div style={{ marginTop: '1.5rem' }}>
+                    <div style={{
+                      fontSize: '0.875rem',
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      marginBottom: '0.5rem',
+                      fontWeight: '600'
+                    }}>
+                      Expertise
+                    </div>
+                    <div style={{
+                      color: 'rgba(255, 255, 255, 0.9)',
+                      fontSize: '0.9375rem'
+                    }}>
+                      {creator.expertise}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Similar Creators */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '16px',
+                padding: '2rem',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <h3 style={{
+                  fontSize: '1.5rem',
+                  fontWeight: '700',
+                  marginBottom: '1rem',
+                  color: '#fff'
+                }}>
+                  Similar Creators
+                </h3>
+                <p style={{
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontSize: '0.875rem',
+                  marginBottom: '1.5rem'
+                }}>
+                  Creators teaching similar topics
+                </p>
+                {similarCreators.length > 0 ? (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1rem'
+                  }}>
+                    {similarCreators.map((similarCreator) => (
+                      <Link
+                        key={similarCreator.id}
+                        href={`/creator/${similarCreator.id}`}
+                        style={{
+                          display: 'flex',
+                          gap: '1rem',
+                          alignItems: 'center',
+                          padding: '1rem',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          borderRadius: '12px',
+                          textDecoration: 'none',
+                          color: 'inherit',
+                          transition: 'all 0.3s',
+                          border: '1px solid rgba(255, 255, 255, 0.05)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                          e.currentTarget.style.borderColor = 'rgba(217, 42, 99, 0.3)';
+                          e.currentTarget.style.transform = 'translateX(5px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                          e.currentTarget.style.transform = 'translateX(0)';
+                        }}
+                      >
+                        <div style={{
+                          width: '60px',
+                          height: '60px',
+                          borderRadius: '50%',
+                          background: 'linear-gradient(135deg, #D92A63, #6C63FF)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'hidden',
+                          flexShrink: 0,
+                          border: '2px solid rgba(255, 255, 255, 0.1)'
+                        }}>
+                          {similarCreator.photoURL ? (
+                            <img
+                              src={similarCreator.photoURL}
+                              alt={similarCreator.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : null}
+                          {!similarCreator.photoURL && (
+                            <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#fff' }}>
+                              {similarCreator.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            fontWeight: '600',
+                            marginBottom: '0.25rem',
+                            color: '#fff',
+                            fontSize: '1rem'
+                          }}>
+                            {similarCreator.name}
+                          </div>
+                          {similarCreator.expertise && (
+                            <div style={{
+                              color: 'rgba(255, 255, 255, 0.6)',
+                              fontSize: '0.8125rem',
+                              marginBottom: '0.25rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {similarCreator.expertise}
+                            </div>
+                          )}
+                          <div style={{
+                            display: 'flex',
+                            gap: '0.75rem',
+                            alignItems: 'center',
+                            marginTop: '0.25rem'
+                          }}>
+                            {similarCreator.classCount > 0 && (
+                              <span style={{
+                                color: 'rgba(255, 255, 255, 0.5)',
+                                fontSize: '0.75rem'
+                              }}>
+                                {similarCreator.classCount} {similarCreator.classCount === 1 ? 'class' : 'classes'}
+                              </span>
+                            )}
+                            {similarCreator.category && (
+                              <span style={{
+                                color: 'rgba(217, 42, 99, 0.8)',
+                                fontSize: '0.75rem',
+                                background: 'rgba(217, 42, 99, 0.1)',
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '4px'
+                              }}>
+                                {similarCreator.category}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: '2rem',
+                    textAlign: 'center',
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    fontStyle: 'italic'
+                  }}>
+                    No similar creators found at the moment.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <Footer />
