@@ -113,21 +113,30 @@ function InstructorsContent() {
         });
 
         // Get class count for each creator (only approved classes)
-        const classesRef = window.collection(window.firebaseDb, 'classes');
-        const classesQuery = window.query(classesRef, window.where('status', '==', 'approved'));
-        const classesSnapshot = await window.getDocs(classesQuery);
+        // Wrap in try-catch to handle potential errors gracefully
+        try {
+          const classesRef = window.collection(window.firebaseDb, 'classes');
+          const classesQuery = window.query(classesRef, window.where('status', '==', 'approved'));
+          const classesSnapshot = await window.getDocs(classesQuery);
 
-        const creatorClassCount: { [key: string]: number } = {};
-        classesSnapshot.forEach((doc: any) => {
-          const classData = doc.data();
-          if (classData.creatorId && classData.status === 'approved') {
-            creatorClassCount[classData.creatorId] = (creatorClassCount[classData.creatorId] || 0) + 1;
-          }
-        });
+          const creatorClassCount: { [key: string]: number } = {};
+          classesSnapshot.forEach((doc: any) => {
+            const classData = doc.data();
+            if (classData.creatorId && classData.status === 'approved') {
+              creatorClassCount[classData.creatorId] = (creatorClassCount[classData.creatorId] || 0) + 1;
+            }
+          });
 
-        creatorsData.forEach(creator => {
-          creator.totalClasses = creatorClassCount[creator.id] || 0;
-        });
+          creatorsData.forEach(creator => {
+            creator.totalClasses = creatorClassCount[creator.id] || 0;
+          });
+        } catch (classCountError: any) {
+          console.warn('Error fetching class counts (non-blocking):', classCountError);
+          // Continue without class counts - set all to 0
+          creatorsData.forEach(creator => {
+            creator.totalClasses = 0;
+          });
+        }
 
         console.log(`Setting ${creatorsData.length} creators`);
         return creatorsData;
@@ -138,6 +147,8 @@ function InstructorsContent() {
         // Show error to user
         if (error.code === 'permission-denied') {
           console.error('Permission denied - check Firestore rules');
+        } else if (error.message?.includes('404') || error.message?.includes('QUIC')) {
+          console.warn('Network/Firestore connection error - this may be temporary');
         }
         throw error;
       }

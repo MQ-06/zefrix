@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       relativePath,
       publicUrl,
       envBaseUrl: process.env.NEXT_PUBLIC_BASE_URL,
-      requestOrigin: requestUrl.origin,
+      requestOrigin: baseUrl,
     });
 
     return NextResponse.json({
