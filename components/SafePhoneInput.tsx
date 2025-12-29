@@ -19,6 +19,10 @@ interface SafePhoneInputProps {
   required?: boolean;
   name?: string;
   className?: string;
+  pattern?: string;
+  maxLength?: number;
+  suppressHydrationWarning?: boolean;
+  style?: React.CSSProperties;
 }
 
 export default function SafePhoneInput({
@@ -27,7 +31,11 @@ export default function SafePhoneInput({
   placeholder = "Phone number",
   required = false,
   name = "phone",
-  className = ""
+  className = "",
+  pattern,
+  maxLength,
+  suppressHydrationWarning,
+  style
 }: SafePhoneInputProps) {
   // Initialize with prop value to ensure server/client match
   const [displayValue, setDisplayValue] = useState(value);
@@ -56,6 +64,10 @@ export default function SafePhoneInput({
       placeholder={placeholder}
       required={required}
       className={className}
+      pattern={pattern}
+      maxLength={maxLength}
+      suppressHydrationWarning={suppressHydrationWarning}
+      style={style}
       autoComplete="tel"
       inputMode="tel"
     />
