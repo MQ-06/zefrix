@@ -41,55 +41,162 @@ function CoursesContent() {
 
   useEffect(() => {
     // Initialize Firebase if not already loaded
-    if (!window.firebaseDb) {
+    if (typeof window === 'undefined') return;
+    
+    // Check if Firebase is already initialized but missing query functions
+    const needsQueryFunctions = !window.collection || !window.query || !window.where || !window.getDocs;
+    
+    if (!window.firebaseDb || needsQueryFunctions) {
       // Check if script is already being loaded to prevent duplicates
-      const existingScript = document.querySelector('script[data-firebase-init]');
-      if (existingScript) return;
+      const existingScript = document.querySelector('script[data-firebase-courses-init]');
+      if (existingScript) {
+        // Script already exists, Firebase will be ready via event
+        return;
+      }
 
       const script = document.createElement('script');
       script.type = 'module';
-      script.setAttribute('data-firebase-init', 'true');
+      script.setAttribute('data-firebase-courses-init', 'true');
       script.textContent = `
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        
-        const firebaseConfig = {
-          apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-          authDomain: "zefrix-custom.firebaseapp.com",
-          projectId: "zefrix-custom",
-          storageBucket: "zefrix-custom.firebasestorage.app",
-          messagingSenderId: "50732408558",
-          appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-          measurementId: "G-27HS1SWB5X"
-        };
-        
-        const app = initializeApp(firebaseConfig);
-        window.firebaseDb = getFirestore(app);
-        window.collection = collection;
-        window.query = query;
-        window.where = where;
-        window.getDocs = getDocs;
-        window.dispatchEvent(new CustomEvent('firebaseReady'));
+        (async () => {
+          try {
+            console.log('🔄 Loading Firebase query functions...');
+            const { initializeApp, getApps } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js");
+            const { getFirestore, collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+            
+            const firebaseConfig = {
+              apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+              authDomain: "zefrix-custom.firebaseapp.com",
+              projectId: "zefrix-custom",
+              storageBucket: "zefrix-custom.firebasestorage.app",
+              messagingSenderId: "50732408558",
+              appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+              measurementId: "G-27HS1SWB5X"
+            };
+            
+            // Use existing app if already initialized (from AuthContext)
+            const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+            
+            // Set Firestore database if not already set
+            if (!window.firebaseDb) {
+              window.firebaseDb = getFirestore(app);
+              console.log('✅ Set window.firebaseDb');
+            } else {
+              console.log('✅ window.firebaseDb already exists');
+            }
+            
+            // Always set query functions (they might be missing even if firebaseDb exists)
+            console.log('Setting query functions...', {
+              collection: typeof collection,
+              query: typeof query,
+              where: typeof where,
+              getDocs: typeof getDocs
+            });
+            
+            window.collection = collection;
+            window.query = query;
+            window.where = where;
+            window.getDocs = getDocs;
+            
+            // Wait a moment for assignments to complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Verify all functions are set
+            const allSet = window.firebaseDb && 
+                          typeof window.collection === 'function' && 
+                          typeof window.query === 'function' && 
+                          typeof window.where === 'function' && 
+                          typeof window.getDocs === 'function';
+            
+            console.log('Verification:', {
+              firebaseDb: !!window.firebaseDb,
+              collection: typeof window.collection,
+              query: typeof window.query,
+              where: typeof window.where,
+              getDocs: typeof window.getDocs,
+              allSet
+            });
+            
+            if (allSet) {
+              console.log('✅ Firebase query functions initialized in courses page');
+              window.dispatchEvent(new CustomEvent('firebaseReady'));
+            } else {
+              console.error('❌ Firebase functions not properly set after assignment');
+              window.dispatchEvent(new CustomEvent('firebaseError', { detail: new Error('Functions not set') }));
+            }
+          } catch (error) {
+            console.error('❌ Firebase initialization error:', error);
+            window.dispatchEvent(new CustomEvent('firebaseError', { detail: error }));
+          }
+        })();
       `;
+      script.onerror = () => {
+        console.error('❌ Failed to load Firebase script');
+        window.dispatchEvent(new CustomEvent('firebaseError', { detail: new Error('Script load failed') }));
+      };
       document.head.appendChild(script);
+    } else {
+      // Firebase is already fully initialized, dispatch ready event immediately
+      console.log('✅ Firebase already initialized with all functions');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('firebaseReady'));
+      }, 100);
     }
   }, []);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | null = null;
     let isMounted = true;
-    const MAX_RETRIES = 10;
+    const MAX_RETRIES = 20; // Increased retries
     let retryCount = 0;
+    let eventListenerAdded = false;
+    let eventHandler: (() => void) | null = null;
 
     const fetchCourses = async () => {
-      // Wait for Firebase to be ready
+      // Wait for Firebase to be ready - check ALL required functions
       if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        // Listen for firebaseReady event on first attempt only
+        if (!eventListenerAdded) {
+          eventListenerAdded = true;
+          eventHandler = () => {
+            console.log('✅ firebaseReady event received, retrying fetch...');
+            window.removeEventListener('firebaseReady', eventHandler!);
+            if (isMounted) {
+              retryCount = 0; // Reset retry count when Firebase is ready
+              fetchCourses();
+            }
+          };
+          window.addEventListener('firebaseReady', eventHandler);
+          console.log('👂 Listening for firebaseReady event...');
+        }
+        
+        // Retry with increasing delay
         if (retryCount < MAX_RETRIES) {
           retryCount++;
-          timeoutId = setTimeout(fetchCourses, 200);
+          const delay = Math.min(200 * retryCount, 1000); // Max 1 second delay
+          if (retryCount % 3 === 0) {
+            console.log(`⏳ Waiting for Firebase... (attempt ${retryCount}/${MAX_RETRIES})`, {
+              firebaseDb: !!window.firebaseDb,
+              collection: !!window.collection,
+              query: !!window.query,
+              where: !!window.where,
+              getDocs: !!window.getDocs
+            });
+          }
+          timeoutId = setTimeout(fetchCourses, delay);
           return;
         } else {
           console.error('❌ Firebase failed to load after maximum retries');
+          console.error('Firebase state:', {
+            firebaseDb: !!window.firebaseDb,
+            collection: !!window.collection,
+            query: !!window.query,
+            where: !!window.where,
+            getDocs: !!window.getDocs
+          });
+          if (eventHandler) {
+            window.removeEventListener('firebaseReady', eventHandler);
+          }
           if (isMounted) {
             setLoading(false);
             setApprovedClasses([]);
@@ -97,6 +204,15 @@ function CoursesContent() {
           return;
         }
       }
+      
+      // Reset retry count on success
+      retryCount = 0;
+      if (eventHandler) {
+        window.removeEventListener('firebaseReady', eventHandler);
+        eventHandler = null;
+        eventListenerAdded = false;
+      }
+      console.log('✅ Firebase is ready, fetching courses...');
 
       if (!isMounted) return;
 
@@ -189,6 +305,9 @@ function CoursesContent() {
     return () => {
       isMounted = false;
       if (timeoutId) clearTimeout(timeoutId);
+      if (eventHandler) {
+        window.removeEventListener('firebaseReady', eventHandler);
+      }
     };
   }, []);
 

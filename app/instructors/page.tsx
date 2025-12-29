@@ -46,46 +46,66 @@ function InstructorsContent() {
 
       // If Firebase is not initialized, try to initialize it
       if (!window.firebaseDb) {
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.textContent = `
-          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-          
-          const firebaseConfig = {
-            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-            authDomain: "zefrix-custom.firebaseapp.com",
-            projectId: "zefrix-custom",
-            storageBucket: "zefrix-custom.firebasestorage.app",
-            messagingSenderId: "50732408558",
-            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-            measurementId: "G-27HS1SWB5X"
+        // Check if script is already being loaded
+        const existingScript = document.querySelector('script[data-firebase-instructors-init]');
+        if (existingScript) {
+          // Wait for existing script to load
+          await new Promise<void>((resolve) => {
+            const handleReady = () => {
+              window.removeEventListener('firebaseReady', handleReady);
+              resolve();
+            };
+            window.addEventListener('firebaseReady', handleReady);
+            setTimeout(() => resolve(), 5000); // Timeout after 5 seconds
+          });
+        } else {
+          const script = document.createElement('script');
+          script.type = 'module';
+          script.setAttribute('data-firebase-instructors-init', 'true');
+          script.textContent = `
+            try {
+              import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+              import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+              
+              const firebaseConfig = {
+                apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+                authDomain: "zefrix-custom.firebaseapp.com",
+                projectId: "zefrix-custom",
+                storageBucket: "zefrix-custom.firebasestorage.app",
+                messagingSenderId: "50732408558",
+                appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+                measurementId: "G-27HS1SWB5X"
+              };
+              
+              // Use existing app if already initialized
+              const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+              window.firebaseDb = getFirestore(app);
+              window.collection = collection;
+              window.query = query;
+              window.where = where;
+              window.getDocs = getDocs;
+              window.dispatchEvent(new CustomEvent('firebaseReady'));
+            } catch (error) {
+              console.error('Firebase initialization error:', error);
+              window.dispatchEvent(new CustomEvent('firebaseError', { detail: error }));
+            }
+          `;
+          script.onerror = () => {
+            console.error('❌ Failed to load Firebase script');
+            window.dispatchEvent(new CustomEvent('firebaseError', { detail: new Error('Script load failed') }));
           };
+          document.head.appendChild(script);
           
-          const app = initializeApp(firebaseConfig);
-          window.firebaseDb = getFirestore(app);
-          window.collection = collection;
-          window.query = query;
-          window.where = where;
-          window.getDocs = getDocs;
-          window.dispatchEvent(new CustomEvent('firebaseReady'));
-        `;
-        document.head.appendChild(script);
-        
-        // Wait for Firebase to be ready
-        await new Promise<void>((resolve) => {
-          const handleReady = () => {
-            window.removeEventListener('firebaseReady', handleReady);
-            resolve();
-          };
-          window.addEventListener('firebaseReady', handleReady);
-          
-          // Timeout after 5 seconds
-          setTimeout(() => {
-            window.removeEventListener('firebaseReady', handleReady);
-            resolve();
-          }, 5000);
-        });
+          // Wait for Firebase to be ready
+          await new Promise<void>((resolve) => {
+            const handleReady = () => {
+              window.removeEventListener('firebaseReady', handleReady);
+              resolve();
+            };
+            window.addEventListener('firebaseReady', handleReady);
+            setTimeout(() => resolve(), 5000); // Timeout after 5 seconds
+          });
+        }
       }
 
       try {

@@ -37,13 +37,23 @@ export default function SafePhoneInput({
   suppressHydrationWarning,
   style
 }: SafePhoneInputProps) {
-  // Initialize with prop value to ensure server/client match
-  const [displayValue, setDisplayValue] = useState(value);
+  // CRITICAL: Initialize with empty string to ensure server/client match
+  // Only update after mount to prevent hydration mismatches
+  const [displayValue, setDisplayValue] = useState('');
+  const [isMounted, setIsMounted] = useState(false);
   
-  // Update display value when prop changes
+  // Set mounted flag and initial value after first render
   useEffect(() => {
-    setDisplayValue(value);
-  }, [value]);
+    setIsMounted(true);
+    setDisplayValue(value || '');
+  }, []);
+  
+  // Update display value when prop changes (only after mount)
+  useEffect(() => {
+    if (isMounted) {
+      setDisplayValue(value || '');
+    }
+  }, [value, isMounted]);
   
   /**
    * Handle input change safely
@@ -55,18 +65,21 @@ export default function SafePhoneInput({
     onChange(newValue);
   }, [onChange]);
   
+  // On server or initial render, always render empty to prevent hydration mismatch
+  const safeValue = isMounted ? displayValue : '';
+  
   return (
     <input
       type="tel"
       name={name}
-      value={displayValue}
+      value={safeValue}
       onChange={handleChange}
       placeholder={placeholder}
       required={required}
       className={className}
       pattern={pattern}
       maxLength={maxLength}
-      suppressHydrationWarning={suppressHydrationWarning}
+      suppressHydrationWarning={true}
       style={style}
       autoComplete="tel"
       inputMode="tel"
