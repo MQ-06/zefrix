@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import InstructorCard from '@/components/InstructorCard';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
@@ -28,17 +28,30 @@ function InstructorContent() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const fetchingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // Debug effect to track state changes
   useEffect(() => {
-    if (!mounted) return;
+    console.log('🔄 State changed - loading:', loading, 'creators:', creators.length);
+  }, [loading, creators]);
+
+  useEffect(() => {
+    console.log('🔄 Main effect running, mounted:', mounted);
+    if (!mounted) {
+      console.log('⏸️ Effect skipped - not mounted yet');
+      return;
+    }
     
-    let isMounted = true;
+    console.log('✅ Component is mounted, initializing fetch');
+    isMountedRef.current = true;
     let retryTimeout: NodeJS.Timeout | null = null;
     let eventListenerAdded = false;
+    const hasInitializedRef = { current: false };
 
     // Load Firebase if not already loaded
     if (typeof window !== 'undefined' && !window.firebaseDb) {
@@ -92,9 +105,17 @@ function InstructorContent() {
     }
 
     const checkFirebaseAndFetch = () => {
+      console.log('🔍 checkFirebaseAndFetch called, fetchingRef.current:', fetchingRef.current);
       if (typeof window === 'undefined') return;
       
+      // Prevent multiple simultaneous fetches
+      if (fetchingRef.current) {
+        console.log('⚠️ Already fetching, skipping checkFirebaseAndFetch');
+        return;
+      }
+      
       if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        console.log('⏳ Firebase not ready in checkFirebaseAndFetch, retrying...');
         // Retry after 200ms if not ready
         retryTimeout = setTimeout(checkFirebaseAndFetch, 200);
         return;
@@ -106,27 +127,50 @@ function InstructorContent() {
         retryTimeout = null;
       }
 
+      console.log('✅ Firebase ready in checkFirebaseAndFetch, calling fetchCreators');
       fetchCreators();
     };
 
     const fetchCreators = async () => {
-      if (!isMounted || typeof window === 'undefined') return;
+      console.log('🚀 fetchCreators called, isMountedRef.current:', isMountedRef.current, 'already fetching:', fetchingRef.current);
+      
+      // Prevent multiple simultaneous fetches
+      if (fetchingRef.current) {
+        console.log('⚠️ Already fetching, skipping...');
+        return;
+      }
+      
+      if (!isMountedRef.current || typeof window === 'undefined') {
+        console.log('⚠️ Returning early - not mounted or window undefined');
+        return;
+      }
+      
+      fetchingRef.current = true;
 
       if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        console.log('Firebase not ready yet, retrying...');
+        console.log('⏳ Firebase not ready yet, retrying...');
         retryTimeout = setTimeout(checkFirebaseAndFetch, 200);
         return;
       }
 
       try {
-        console.log('Fetching creators from Firestore...');
+        console.log('🔍 Fetching creators from Firestore...');
+        console.log('Firebase DB:', !!window.firebaseDb);
+        console.log('Collection function:', !!window.collection);
         const usersRef = window.collection(window.firebaseDb, 'users');
+        console.log('Users ref created:', !!usersRef);
         const q = window.query(usersRef, window.where('role', '==', 'creator'));
+        console.log('Query created:', !!q);
+        console.log('📡 Executing getDocs...');
         const querySnapshot = await window.getDocs(q);
 
-        console.log(`Found ${querySnapshot.size} creators in query`);
+        console.log(`✅ Query executed! Found ${querySnapshot.size} creators in query`);
 
-        if (!isMounted) return;
+        if (!isMountedRef.current) {
+          console.log('⚠️ Component unmounted during query processing');
+          fetchingRef.current = false;
+          return;
+        }
 
         const creatorsData: Creator[] = [];
         querySnapshot.forEach((doc: any) => {
@@ -170,25 +214,59 @@ function InstructorContent() {
           });
         }
 
-        if (!isMounted) return;
+        if (!isMountedRef.current) {
+          console.log('⚠️ Component unmounted before setting state');
+          fetchingRef.current = false;
+          return;
+        }
 
-        console.log(`Setting ${creatorsData.length} creators`);
-        setCreators(creatorsData);
+        console.log(`✅ Setting ${creatorsData.length} creators`);
+        console.log('📋 Creators data:', creatorsData);
+        console.log('📋 First creator sample:', creatorsData[0]);
+        
+        // IMPORTANT: Set loading to false FIRST, then creators
+        // This ensures the loading state changes before the creators array
+        console.log('🔄 About to set state - current loading:', loading);
         setLoading(false);
+        setCreators(creatorsData);
+        
+        console.log('✅ State updates called - loading=false, creators set to', creatorsData.length);
+        console.log('📊 State should now trigger re-render');
+        fetchingRef.current = false;
+        
+        // Force a re-render check
+        setTimeout(() => {
+          console.log('🔍 Post-state-update check - if you see this, state was set');
+        }, 0);
+        
+        // Force a check after state updates
+        setTimeout(() => {
+          console.log('🔍 Post-update check after 100ms');
+        }, 100);
+        
+        // Also check after React's render cycle
+        requestAnimationFrame(() => {
+          console.log('🔍 Post-update check after animation frame');
+        });
       } catch (error: any) {
-        console.error('Error fetching creators:', error);
+        console.error('❌ Error fetching creators:', error);
         console.error('Error code:', error.code);
         console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
         // Show error to user
         if (error.code === 'permission-denied') {
           console.error('Permission denied - check Firestore rules');
         } else if (error.message?.includes('404') || error.message?.includes('QUIC')) {
           console.warn('Network/Firestore connection error - this may be temporary');
         }
-        if (isMounted) {
+        if (isMountedRef.current) {
+          console.log('⚠️ Setting empty creators and loading false due to error');
           setCreators([]);
           setLoading(false);
+        } else {
+          console.log('⚠️ Component unmounted, not setting state');
         }
+        fetchingRef.current = false;
       }
     };
 
@@ -197,15 +275,28 @@ function InstructorContent() {
 
     // Define event handler outside conditional so it's available for cleanup
     const handleFirebaseReady = () => {
-      if (isMounted) {
+      console.log('📢 firebaseReady event received');
+      if (isMountedRef.current) {
+        console.log('✅ Component mounted, calling checkFirebaseAndFetch');
         checkFirebaseAndFetch();
+      } else {
+        console.log('⚠️ Component not mounted, ignoring firebaseReady');
       }
     };
 
+    // Prevent multiple initializations
+    if (hasInitializedRef.current) {
+      console.log('⚠️ Already initialized, skipping');
+      return;
+    }
+    hasInitializedRef.current = true;
+    
     // Try to fetch immediately if Firebase is already loaded
     if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
-      fetchCreators();
+      console.log('🔥 Firebase already ready, calling checkFirebaseAndFetch');
+      checkFirebaseAndFetch();
     } else {
+      console.log('⏳ Firebase not ready, setting up event listener and polling');
       // Wait for firebaseReady event
       window.addEventListener('firebaseReady', handleFirebaseReady);
       eventListenerAdded = true;
@@ -215,7 +306,8 @@ function InstructorContent() {
     }
 
     return () => {
-      isMounted = false;
+      console.log('🧹 Cleanup: Setting isMountedRef to false');
+      isMountedRef.current = false;
       if (retryTimeout) {
         clearTimeout(retryTimeout);
         retryTimeout = null;
@@ -224,7 +316,29 @@ function InstructorContent() {
         window.removeEventListener('firebaseReady', handleFirebaseReady);
       }
     };
-  }, [mounted]);
+  }, [mounted]); // Only re-run when mounted changes from false to true
+
+  // Separate effect to prevent infinite loops - only run fetch once
+  const hasFetchedRef = useRef(false);
+  
+  useEffect(() => {
+    if (mounted && !hasFetchedRef.current && !loading && creators.length === 0) {
+      // This is a safety check - if somehow we're mounted but haven't fetched
+      // But actually, the main effect should handle this
+      console.log('⚠️ Safety check: mounted but no data, but main effect should handle this');
+    }
+  }, [mounted, loading, creators.length]);
+  // Debug render
+  console.log('🎨 InstructorContent render:', {
+    loading,
+    creatorsCount: creators.length,
+    mounted,
+    shouldShowLoading: loading,
+    shouldShowEmpty: !loading && creators.length === 0,
+    shouldShowCreators: !loading && creators.length > 0,
+    creatorsArray: creators
+  });
+
   return (
     <>
       {/* Hero Section */}
@@ -268,16 +382,34 @@ function InstructorContent() {
       {/* Instructors Grid Section */}
       <section className="instructor-section section-spacing-bottom bg-gradient-to-b from-transparent via-[#1A1A2E] to-[#1A1A2E]">
         <div className="container">
-          {loading ? (
-            <div className="text-center py-16">
-              <div className="text-white text-xl">Loading creators...</div>
-            </div>
-          ) : (creators || []).length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-white text-xl mb-4">No creators found</div>
-              <p className="text-gray-400">Check back soon for amazing instructors!</p>
-            </div>
-          ) : (
+          {(() => {
+            console.log('🔍 Render condition check:', {
+              loading,
+              creatorsLength: creators.length,
+              creatorsExists: !!creators
+            });
+            
+            if (loading) {
+              console.log('📊 Rendering: Loading state');
+              return (
+                <div className="text-center py-16">
+                  <div className="text-white text-xl">Loading creators...</div>
+                </div>
+              );
+            }
+            
+            if (!creators || creators.length === 0) {
+              console.log('📊 Rendering: Empty state');
+              return (
+                <div className="text-center py-16">
+                  <div className="text-white text-xl mb-4">No creators found</div>
+                  <p className="text-gray-400">Check back soon for amazing instructors!</p>
+                </div>
+              );
+            }
+            
+            console.log('📊 Rendering: Creators grid with', creators.length, 'creators');
+            return (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
               {creators.map((creator, index) => {
                 // Use photoURL if available, otherwise fallback to avatar API with initials
@@ -307,7 +439,8 @@ function InstructorContent() {
                 );
               })}
             </div>
-          )}
+            );
+          })()}
         </div>
       </section>
 
