@@ -211,7 +211,7 @@ function InstructorsContent() {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
-              {creators.map((creator, index) => {
+              {(creators || []).map((creator, index) => {
                 // Use photoURL if available, otherwise fallback to avatar API with initials
                 const photoURL = creator.photoURL || '';
                 const hasImage = photoURL.trim() !== '';
