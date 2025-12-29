@@ -244,25 +244,18 @@ export default function AdminDashboard() {
 
         setPendingClasses(classes);
         setLoadingClasses(false);
+        
+        console.log('📥 Pending classes fetched (admin)', classes.map(c => ({
+          classId: c.classId,
+          status: c.status,
+          videoLink: c.videoLink,
+        })));
       }, (error: any) => {
         console.error('Error in pending classes listener:', error);
         showError('Failed to load pending classes. Please refresh the page.');
         setLoadingClasses(false);
       });
 
-      classes.sort((a, b) => {
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
-      });
-
-      console.log('📥 Pending classes fetched (admin)', classes.map(c => ({
-        classId: c.classId,
-        status: c.status,
-        videoLink: c.videoLink,
-      })));
-
-      setPendingClasses(classes);
       return unsubscribe;
     } catch (error) {
       console.error('Error setting up pending classes listener:', error);
@@ -420,24 +413,17 @@ export default function AdminDashboard() {
 
         setApprovedClasses(classes);
         setLoadingApproved(false);
+        
+        console.log('✅ Approved classes fetched (admin)', classes.map(c => ({
+          classId: c.classId,
+          status: c.status,
+          videoLink: c.videoLink,
+        })));
       }, (error: any) => {
         console.error('Error in approved classes listener:', error);
         setLoadingApproved(false);
       });
 
-      classes.sort((a, b) => {
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
-      });
-
-      console.log('✅ Approved classes fetched (admin)', classes.map(c => ({
-        classId: c.classId,
-        status: c.status,
-        videoLink: c.videoLink,
-      })));
-
-      setApprovedClasses(classes);
       return unsubscribe;
     } catch (error) {
       console.error('Error setting up approved classes listener:', error);
