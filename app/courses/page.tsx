@@ -40,108 +40,53 @@ function CoursesContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initialize Firebase if not already loaded
+    // Initialize Firebase query functions if missing
     if (typeof window === 'undefined') return;
     
-    // Check if Firebase is already initialized but missing query functions
-    const needsQueryFunctions = !window.collection || !window.query || !window.where || !window.getDocs;
-    
-    if (!window.firebaseDb || needsQueryFunctions) {
-      // Check if script is already being loaded to prevent duplicates
-      const existingScript = document.querySelector('script[data-firebase-courses-init]');
-      if (existingScript) {
-        // Script already exists, Firebase will be ready via event
-        return;
-      }
+    const addQueryFunctions = async () => {
+      try {
+        // Check if we need to add query functions
+        if (window.collection && window.query && window.where && window.getDocs) {
+          console.log('✅ Firebase query functions already available');
+          window.dispatchEvent(new CustomEvent('firebaseReady'));
+          return;
+        }
 
-      const script = document.createElement('script');
-      script.type = 'module';
-      script.setAttribute('data-firebase-courses-init', 'true');
-      script.textContent = `
-        (async () => {
-          try {
-            console.log('🔄 Loading Firebase query functions...');
-            const { initializeApp, getApps } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js");
-            const { getFirestore, collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
-            
-            const firebaseConfig = {
-              apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-              authDomain: "zefrix-custom.firebaseapp.com",
-              projectId: "zefrix-custom",
-              storageBucket: "zefrix-custom.firebasestorage.app",
-              messagingSenderId: "50732408558",
-              appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-              measurementId: "G-27HS1SWB5X"
-            };
-            
-            // Use existing app if already initialized (from AuthContext)
-            const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-            
-            // Set Firestore database if not already set
-            if (!window.firebaseDb) {
-              window.firebaseDb = getFirestore(app);
-              console.log('✅ Set window.firebaseDb');
-            } else {
-              console.log('✅ window.firebaseDb already exists');
-            }
-            
-            // Always set query functions (they might be missing even if firebaseDb exists)
-            console.log('Setting query functions...', {
-              collection: typeof collection,
-              query: typeof query,
-              where: typeof where,
-              getDocs: typeof getDocs
-            });
-            
-            window.collection = collection;
-            window.query = query;
-            window.where = where;
-            window.getDocs = getDocs;
-            
-            // Wait a moment for assignments to complete
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // Verify all functions are set
-            const allSet = window.firebaseDb && 
-                          typeof window.collection === 'function' && 
-                          typeof window.query === 'function' && 
-                          typeof window.where === 'function' && 
-                          typeof window.getDocs === 'function';
-            
-            console.log('Verification:', {
-              firebaseDb: !!window.firebaseDb,
-              collection: typeof window.collection,
-              query: typeof window.query,
-              where: typeof window.where,
-              getDocs: typeof window.getDocs,
-              allSet
-            });
-            
-            if (allSet) {
-              console.log('✅ Firebase query functions initialized in courses page');
-              window.dispatchEvent(new CustomEvent('firebaseReady'));
-            } else {
-              console.error('❌ Firebase functions not properly set after assignment');
-              window.dispatchEvent(new CustomEvent('firebaseError', { detail: new Error('Functions not set') }));
-            }
-          } catch (error) {
-            console.error('❌ Firebase initialization error:', error);
-            window.dispatchEvent(new CustomEvent('firebaseError', { detail: error }));
-          }
-        })();
-      `;
-      script.onerror = () => {
-        console.error('❌ Failed to load Firebase script');
-        window.dispatchEvent(new CustomEvent('firebaseError', { detail: new Error('Script load failed') }));
-      };
-      document.head.appendChild(script);
-    } else {
-      // Firebase is already fully initialized, dispatch ready event immediately
-      console.log('✅ Firebase already initialized with all functions');
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('firebaseReady'));
-      }, 100);
-    }
+        // Wait for firebaseDb to be available (from AuthContext)
+        let attempts = 0;
+        while (!window.firebaseDb && attempts < 50) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+
+        if (!window.firebaseDb) {
+          console.error('❌ firebaseDb not available after waiting');
+          return;
+        }
+
+        // Dynamically import and add query functions
+        console.log('🔄 Adding Firebase query functions...');
+        const { getFirestore, collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+        
+        // Set query functions
+        window.collection = collection;
+        window.query = query;
+        window.where = where;
+        window.getDocs = getDocs;
+        
+        // Verify they're set
+        if (window.collection && window.query && window.where && window.getDocs) {
+          console.log('✅ Firebase query functions added successfully');
+          window.dispatchEvent(new CustomEvent('firebaseReady'));
+        } else {
+          console.error('❌ Failed to set query functions');
+        }
+      } catch (error) {
+        console.error('❌ Error adding query functions:', error);
+      }
+    };
+
+    addQueryFunctions();
   }, []);
 
   useEffect(() => {
@@ -213,11 +158,34 @@ function CoursesContent() {
         eventListenerAdded = false;
       }
       console.log('✅ Firebase is ready, fetching courses...');
+      } catch (error: any) {
+        // Catch any errors in the fetchCourses function itself
+        console.error('❌ Error in fetchCourses:', error);
+        if (isMounted) {
+          try {
+            setLoading(false);
+            setApprovedClasses([]);
+          } catch (setStateError) {
+            // Silently handle setState errors
+          }
+        }
+        return;
+      }
 
       if (!isMounted) return;
 
       setLoading(true);
       try {
+        // Double-check all functions are available before using them
+        if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+          console.error('❌ Firebase functions not available when trying to fetch');
+          if (isMounted) {
+            setLoading(false);
+            setApprovedClasses([]);
+          }
+          return;
+        }
+
         console.log('📦 Fetching approved classes...');
         const startTime = performance.now();
         
@@ -291,11 +259,17 @@ function CoursesContent() {
           setApprovedClasses(classes);
           setLoading(false);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Error fetching classes:', error);
+        // Prevent error from propagating to Next.js error boundary
         if (isMounted) {
-          setApprovedClasses([]);
-          setLoading(false);
+          try {
+            setApprovedClasses([]);
+            setLoading(false);
+          } catch (setStateError) {
+            // Silently handle setState errors during unmount
+            console.warn('Component unmounted during error handling');
+          }
         }
       }
     };
