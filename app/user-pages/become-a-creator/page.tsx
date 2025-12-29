@@ -7,6 +7,9 @@ import { useNotification } from '@/contexts/NotificationContext';
 import { categoryDetails } from '@/lib/categoriesData';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import HydrationGuard from '@/components/HydrationGuard';
+import SafePhoneInput from '@/components/SafePhoneInput';
+import { isClient } from '@/app/utils/environment';
 
 declare global {
   interface Window {
@@ -55,13 +58,17 @@ export default function BecomeACreatorPage() {
   });
 
   // Initialize Firestore for creator profile data
+  // Only run on client-side to prevent hydration errors
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (!isClient) return;
 
     // Check if Firestore is already initialized
-    if (window.firebaseDb && window.doc && window.setDoc && window.serverTimestamp) {
+    if (typeof window !== 'undefined' && window.firebaseDb && window.doc && window.setDoc && window.serverTimestamp) {
       return;
     }
+
+    // Wait for document to be available
+    if (typeof document === 'undefined') return;
 
     // Load Firestore initialization script
     const initScript = document.createElement('script');
@@ -129,7 +136,8 @@ export default function BecomeACreatorPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     
-    if (!window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
+    // Safely check for Firebase (client-side only)
+    if (!isClient || typeof window === 'undefined' || !window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
       showError('Firebase not initialized. Please wait...');
       setIsSubmitting(false);
       return;
@@ -159,8 +167,8 @@ export default function BecomeACreatorPage() {
       // Create user account using AuthContext
       await signUp(formData.email.trim(), formData.password, formData.fullname.trim());
       
-      // Get the current user from Firebase Auth directly
-      if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
+      // Get the current user from Firebase Auth directly (client-side only)
+      if (!isClient || typeof window === 'undefined' || !window.firebaseAuth || !window.firebaseAuth.currentUser) {
         showError('User creation successful, but could not update profile. Please try logging in.');
         router.push('/signup-login');
         return;
@@ -225,7 +233,8 @@ export default function BecomeACreatorPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     
-    if (!window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
+    // Safely check for Firebase (client-side only)
+    if (!isClient || typeof window === 'undefined' || !window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
       showError('Firebase not initialized. Please wait...');
       setIsSubmitting(false);
       return;
@@ -234,8 +243,8 @@ export default function BecomeACreatorPage() {
     try {
       await signInWithGoogle();
       
-      // Get the current user from Firebase Auth directly
-      if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
+      // Get the current user from Firebase Auth directly (client-side only)
+      if (!isClient || typeof window === 'undefined' || !window.firebaseAuth || !window.firebaseAuth.currentUser) {
         showError('Google authentication successful, but could not update profile. Please try again.');
         return;
       }
@@ -304,11 +313,10 @@ export default function BecomeACreatorPage() {
             </div>
             <div className="form-group">
               <label>WhatsApp Number *</label>
-              <input
-                type="tel"
+              <SafePhoneInput
                 name="whatsapp"
                 value={formData.whatsapp}
-                onChange={handleInputChange}
+                onChange={(value) => setFormData(prev => ({ ...prev, whatsapp: value }))}
                 placeholder="+1234567890"
                 required
               />
@@ -484,7 +492,7 @@ export default function BecomeACreatorPage() {
   };
 
   return (
-    <>
+    <HydrationGuard>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
       <style jsx global>{`
         * {
@@ -986,6 +994,6 @@ export default function BecomeACreatorPage() {
         </div>
       </div>
       <Footer />
-    </>
+    </HydrationGuard>
   );
 }

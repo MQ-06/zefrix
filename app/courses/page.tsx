@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import CoursesPageCard from '@/components/CoursesPageCard';
 import FooterCTA from '@/components/FooterCTA';
 import { motion } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
+import { useReliableFetch } from '@/app/hooks/useReliableFetch';
+import { isClient } from '@/app/utils/environment';
 
 declare global {
   interface Window {
@@ -34,15 +36,28 @@ interface ApprovedClass {
 
 const COURSES_PER_PAGE = 6;
 
-export default function CoursesPage() {
+function CoursesContent() {
   const [currentPage, setCurrentPage] = useState(1);
-  const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Initialize Firebase if not already loaded
-    if (!window.firebaseDb) {
-      const loadFirebase = () => {
+  // Use reliable fetch hook with retry logic
+  const { data: approvedClasses = [], loading } = useReliableFetch<ApprovedClass[]>({
+    fetchFn: async () => {
+      // Wait for Firebase to be ready
+      if (!isClient || typeof window === 'undefined') {
+        throw new Error('Client-side only');
+      }
+
+      // Wait for Firebase to initialize
+      let attempts = 0;
+      while (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        if (attempts++ > 50) {
+          throw new Error('Firebase initialization timeout');
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // If Firebase is not initialized, try to initialize it
+      if (!window.firebaseDb) {
         const script = document.createElement('script');
         script.type = 'module';
         script.textContent = `
@@ -65,102 +80,90 @@ export default function CoursesPage() {
           window.query = query;
           window.where = where;
           window.getDocs = getDocs;
+          window.dispatchEvent(new CustomEvent('firebaseReady'));
         `;
         document.head.appendChild(script);
-      };
-      loadFirebase();
-    }
-  }, []);
-
-  useEffect(() => {
-    const fetchApprovedClasses = async () => {
-      // Check if Firebase is already ready
-      if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
-        await loadClasses();
-        return;
-      }
-
-      // Listen for firebaseReady event
-      const handleFirebaseReady = () => {
-        loadClasses();
-      };
-
-      window.addEventListener('firebaseReady', handleFirebaseReady);
-
-      // Fallback: try after a delay if event doesn't fire
-      const timeout = setTimeout(() => {
-        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
-          loadClasses();
-        } else {
-          console.warn('Firebase not ready after timeout, using fallback data');
-          setLoading(false);
-        }
-      }, 5000);
-
-      return () => {
-        window.removeEventListener('firebaseReady', handleFirebaseReady);
-        clearTimeout(timeout);
-      };
-    };
-
-    const loadClasses = async () => {
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        return;
-      }
-
-      setLoading(true);
-      try {
-        console.log('Fetching approved classes from Firestore...');
-        const classesRef = window.collection(window.firebaseDb, 'classes');
-        const q = window.query(classesRef, window.where('status', '==', 'approved'));
-        const querySnapshot = await window.getDocs(q);
         
-        const classes: ApprovedClass[] = [];
-        querySnapshot.forEach((doc: any) => {
-          classes.push({ classId: doc.id, ...doc.data() });
+        // Wait for Firebase to be ready
+        await new Promise<void>((resolve) => {
+          const handleReady = () => {
+            window.removeEventListener('firebaseReady', handleReady);
+            resolve();
+          };
+          window.addEventListener('firebaseReady', handleReady);
+          
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            window.removeEventListener('firebaseReady', handleReady);
+            resolve();
+          }, 5000);
         });
-        
-        console.log(`Found ${classes.length} approved classes`);
-        
-        // Sort by creation date (newest first)
-        classes.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-        
-        setApprovedClasses(classes);
-      } catch (error) {
-        console.error('Error fetching approved classes:', error);
-        setApprovedClasses([]);
-      } finally {
-        setLoading(false);
       }
-    };
 
-    fetchApprovedClasses();
-  }, []);
+      // Fetch classes
+      console.log('Fetching approved classes from Firestore...');
+      const classesRef = window.collection(window.firebaseDb, 'classes');
+      const q = window.query(classesRef, window.where('status', '==', 'approved'));
+      const querySnapshot = await window.getDocs(q);
+      
+      const classes: ApprovedClass[] = [];
+      querySnapshot.forEach((doc: any) => {
+        classes.push({ classId: doc.id, ...doc.data() });
+      });
+      
+      console.log(`Found ${classes.length} approved classes`);
+      
+      // Sort by creation date (newest first)
+      classes.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis?.() || 0;
+        const bTime = b.createdAt?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
+      
+      return classes;
+    },
+    retries: 2,
+    retryDelay: 1000
+  });
 
   // Convert approved classes to course format (only real classes, no dummy data)
-  const allCourses = approvedClasses.map((classItem) => ({
-    id: classItem.classId,
-    slug: classItem.classId,
-    title: classItem.title,
-    subtitle: classItem.subtitle || '',
-    category: classItem.category,
-    categorySlug: '',
-    subCategory: classItem.subCategory,
-    instructor: classItem.creatorName || 'Creator',
-    instructorId: '',
-    instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
-    image: (classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg',
-    price: classItem.price,
-    originalPrice: classItem.price * 1.2,
-    sections: classItem.numberSessions,
-    duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
-    students: 0,
-    level: 'Beginner' as const,
-  }));
+  const allCourses = (approvedClasses || []).map((classItem) => {
+    const image =
+      classItem.videoLink && classItem.videoLink.trim() !== ''
+        ? classItem.videoLink
+        : 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg';
+
+    console.log('🎨 Course image mapping (courses page)', {
+      classId: classItem.classId,
+      videoLink: classItem.videoLink,
+      finalImage: image,
+    });
+
+    return {
+      id: classItem.classId,
+      slug: classItem.classId,
+      title: classItem.title,
+      subtitle: classItem.subtitle || '',
+      category: classItem.category,
+      categorySlug: '',
+      subCategory: classItem.subCategory,
+      instructor: classItem.creatorName || 'Creator',
+      instructorId: '',
+      instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        classItem.creatorName || 'Creator'
+      )}&background=D92A63&color=fff&size=128`,
+      image,
+      price: classItem.price,
+      originalPrice: classItem.price * 1.2,
+      sections: classItem.numberSessions,
+      duration:
+        classItem.scheduleType === 'one-time'
+          ? 1
+          : Math.ceil(classItem.numberSessions / 7),
+      students: 0,
+      level: 'Beginner' as const,
+    };
+  });
 
   const totalPages = Math.ceil(allCourses.length / COURSES_PER_PAGE);
   const startIndex = (currentPage - 1) * COURSES_PER_PAGE;
@@ -283,5 +286,38 @@ export default function CoursesPage() {
       {/* Footer CTA Section */}
       <FooterCTA />
     </>
+  );
+}
+
+// Loading skeleton component
+function CoursesLoadingSkeleton() {
+  return (
+    <>
+      <section className="hero-inner pt-32 pb-20 md:pt-40 md:pb-24 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A2E] via-[#2D1B3D] to-[#E91E63]"></div>
+        <div className="container relative z-10">
+          <div className="text-center position-relative">
+            <div className="h-12 bg-gray-700 rounded w-64 mx-auto mb-4 animate-pulse"></div>
+            <div className="h-6 bg-gray-600 rounded w-96 mx-auto animate-pulse"></div>
+          </div>
+        </div>
+      </section>
+      <section className="section-spacing-bottom bg-gradient-to-b from-transparent via-[#1A1A2E] to-[#1A1A2E]">
+        <div className="container">
+          <div className="text-center py-12">
+            <div className="h-6 bg-gray-600 rounded w-48 mx-auto animate-pulse"></div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+// Main page component with Suspense
+export default function CoursesPage() {
+  return (
+    <Suspense fallback={<CoursesLoadingSkeleton />}>
+      <CoursesContent />
+    </Suspense>
   );
 }

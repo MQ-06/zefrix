@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import InstructorCard from '@/components/InstructorCard';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import { useReliableFetch } from '@/app/hooks/useReliableFetch';
+import { isClient } from '@/app/utils/environment';
 
 declare global {
   interface Window {
@@ -24,45 +26,66 @@ interface Creator {
   totalClasses?: number;
 }
 
-export default function InstructorPage() {
-  const [creators, setCreators] = useState<Creator[]>([]);
-  const [loading, setLoading] = useState(true);
+function InstructorContent() {
+  // Use reliable fetch hook with retry logic
+  const { data: creators = [], loading } = useReliableFetch<Creator[]>({
+    fetchFn: async () => {
+      // Wait for Firebase to be ready
+      if (!isClient || typeof window === 'undefined') {
+        throw new Error('Client-side only');
+      }
 
-  useEffect(() => {
-    // Load Firebase if not already loaded
-    if (typeof window !== 'undefined' && !window.firebaseDb) {
-      const script = document.createElement('script');
-      script.type = 'module';
-      script.textContent = `
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        
-        const firebaseConfig = {
-          apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-          authDomain: "zefrix-custom.firebaseapp.com",
-          projectId: "zefrix-custom",
-          storageBucket: "zefrix-custom.firebasestorage.app",
-          messagingSenderId: "50732408558",
-          appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-          measurementId: "G-27HS1SWB5X"
-        };
-        
-        const app = initializeApp(firebaseConfig);
-        window.firebaseDb = getFirestore(app);
-        window.collection = collection;
-        window.query = query;
-        window.where = where;
-        window.getDocs = getDocs;
-        
-        window.dispatchEvent(new Event('firebaseReady'));
-      `;
-      document.head.appendChild(script);
-    }
+      // Wait for Firebase to initialize
+      let attempts = 0;
+      while (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        if (attempts++ > 50) {
+          throw new Error('Firebase initialization timeout');
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
 
-    const fetchCreators = async () => {
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        console.log('Firebase not ready yet');
-        return;
+      // If Firebase is not initialized, try to initialize it
+      if (!window.firebaseDb) {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.textContent = `
+          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          
+          const firebaseConfig = {
+            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+            authDomain: "zefrix-custom.firebaseapp.com",
+            projectId: "zefrix-custom",
+            storageBucket: "zefrix-custom.firebasestorage.app",
+            messagingSenderId: "50732408558",
+            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+            measurementId: "G-27HS1SWB5X"
+          };
+          
+          const app = initializeApp(firebaseConfig);
+          window.firebaseDb = getFirestore(app);
+          window.collection = collection;
+          window.query = query;
+          window.where = where;
+          window.getDocs = getDocs;
+          window.dispatchEvent(new CustomEvent('firebaseReady'));
+        `;
+        document.head.appendChild(script);
+        
+        // Wait for Firebase to be ready
+        await new Promise<void>((resolve) => {
+          const handleReady = () => {
+            window.removeEventListener('firebaseReady', handleReady);
+            resolve();
+          };
+          window.addEventListener('firebaseReady', handleReady);
+          
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            window.removeEventListener('firebaseReady', handleReady);
+            resolve();
+          }, 5000);
+        });
       }
 
       try {
@@ -105,7 +128,7 @@ export default function InstructorPage() {
         });
 
         console.log(`Setting ${creatorsData.length} creators`);
-        setCreators(creatorsData);
+        return creatorsData;
       } catch (error: any) {
         console.error('Error fetching creators:', error);
         console.error('Error code:', error.code);
@@ -114,18 +137,12 @@ export default function InstructorPage() {
         if (error.code === 'permission-denied') {
           console.error('Permission denied - check Firestore rules');
         }
-      } finally {
-        setLoading(false);
+        throw error;
       }
-    };
-
-    if (window.firebaseDb) {
-      fetchCreators();
-    } else {
-      window.addEventListener('firebaseReady', fetchCreators);
-      return () => window.removeEventListener('firebaseReady', fetchCreators);
-    }
-  }, []);
+    },
+    retries: 2,
+    retryDelay: 1000
+  });
 
   return (
     <>
@@ -174,14 +191,14 @@ export default function InstructorPage() {
             <div className="text-center py-16">
               <div className="text-white text-xl">Loading creators...</div>
             </div>
-          ) : creators.length === 0 ? (
+          ) : (creators || []).length === 0 ? (
             <div className="text-center py-16">
               <div className="text-white text-xl mb-4">No creators found</div>
               <p className="text-gray-400">Check back soon for amazing instructors!</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
-              {creators.map((creator, index) => (
+              {(creators || []).map((creator, index) => (
                 <InstructorCard
                   key={creator.id}
                   instructor={{
@@ -224,5 +241,38 @@ export default function InstructorPage() {
         </div>
       </div>
     </>
+  );
+}
+
+// Loading skeleton component
+function InstructorLoadingSkeleton() {
+  return (
+    <>
+      <section className="hero-inner pt-24 pb-16 md:pt-32 md:pb-20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A2E] via-[#2D1B3D] to-[#E91E63]"></div>
+        <div className="container relative z-10">
+          <div className="text-center position-relative">
+            <div className="h-12 bg-gray-700 rounded w-64 mx-auto mb-4 animate-pulse"></div>
+            <div className="h-6 bg-gray-600 rounded w-96 mx-auto animate-pulse"></div>
+          </div>
+        </div>
+      </section>
+      <section className="instructor-section section-spacing-bottom bg-gradient-to-b from-transparent via-[#1A1A2E] to-[#1A1A2E]">
+        <div className="container">
+          <div className="text-center py-16">
+            <div className="text-white text-xl">Loading creators...</div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+// Main page component with Suspense
+export default function InstructorPage() {
+  return (
+    <Suspense fallback={<InstructorLoadingSkeleton />}>
+      <InstructorContent />
+    </Suspense>
   );
 }

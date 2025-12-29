@@ -220,6 +220,12 @@ export default function AdminDashboard() {
         return bTime - aTime;
       });
 
+      console.log('📥 Pending classes fetched (admin)', classes.map(c => ({
+        classId: c.classId,
+        status: c.status,
+        videoLink: c.videoLink,
+      })));
+
       setPendingClasses(classes);
     } catch (error) {
       console.error('Error fetching pending classes:', error);
@@ -295,6 +301,12 @@ export default function AdminDashboard() {
         const bTime = b.createdAt?.toMillis?.() || 0;
         return bTime - aTime;
       });
+
+      console.log('✅ Approved classes fetched (admin)', classes.map(c => ({
+        classId: c.classId,
+        status: c.status,
+        videoLink: c.videoLink,
+      })));
 
       setApprovedClasses(classes);
     } catch (error) {

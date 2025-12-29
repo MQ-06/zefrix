@@ -38,8 +38,14 @@ export default function CourseCard({ course }: CourseCardProps) {
     return 'bg-gray-200';
   };
 
-  const handleImageError = () => {
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     if (!imageError) {
+      const img = e.target as HTMLImageElement;
+      console.error('❌ [CourseCard] Image failed to load:', {
+        classId: course.id,
+        attemptedUrl: img.src,
+        title: course.title,
+      });
       setImageError(true);
       setImageSrc(DEFAULT_IMAGE);
     }
@@ -64,6 +70,13 @@ export default function CourseCard({ course }: CourseCardProps) {
             alt={course.title}
             className="w-full h-full object-cover opacity-90 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
             onError={handleImageError}
+            onLoad={() => {
+              console.log('✅ [CourseCard] Image loaded successfully:', {
+                classId: course.id,
+                url: imageSrc,
+                title: course.title,
+              });
+            }}
           />
           
           {/* Instructor Badge - Top Right */}

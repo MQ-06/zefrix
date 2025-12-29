@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "validate:build": "next build && echo '✅ Build successful'",
+    "validate:start": "next start & sleep 5 && curl -f http://localhost:3000/api/health && echo '✅ Health check passed' && pkill -f 'next start' || (pkill -f 'next start' && exit 1)",
+    "validate:all": "npm run validate:build && npm run validate:start"
   },
   "dependencies": {
     "critters": "^0.0.23",

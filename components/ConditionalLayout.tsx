@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { NavigationGuard } from '@/app/providers/NavigationGuard';
 
 export default function ConditionalLayout({
   children,
@@ -29,6 +30,7 @@ export default function ConditionalLayout({
 
   return (
     <>
+      <NavigationGuard />
       <Header />
       <main className="min-h-screen">{children}</main>
       <Footer />

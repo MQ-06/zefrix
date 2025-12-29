@@ -89,7 +89,7 @@ export default function ProductPage({ params }: PageProps) {
               title: data.title || 'Untitled Class',
               subtitle: data.subtitle || '',
               price: data.price || 0,
-              image: data.videoLink || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
+              image: (data.videoLink && data.videoLink.trim() !== '') ? data.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
               instructor: data.creatorName || 'Instructor',
               instructorId: data.creatorId || '',
               instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.creatorName || 'I')}&background=D92A63&color=fff`,
@@ -100,6 +100,16 @@ export default function ProductPage({ params }: PageProps) {
               duration: data.duration || 1,
               students: 0,
               originalPrice: data.price || 0,
+              // Schedule information
+              scheduleType: data.scheduleType || 'one-time',
+              startISO: data.startISO || '',
+              startDate: data.startDate || data.date || '',
+              endDate: data.endDate || '',
+              startTime: data.recurringStartTime || data.startTime || '',
+              endTime: data.recurringEndTime || data.endTime || '',
+              sessionLengthMinutes: data.sessionLengthMinutes || 60,
+              maxSeats: data.maxSeats || null,
+              days: data.days || [],
             });
           } else {
             // Class exists but not approved
@@ -487,21 +497,114 @@ export default function ProductPage({ params }: PageProps) {
                     <span className="text-white font-semibold">{course.students} Students</span>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <Clock className="w-5 h-5" />
-                      <span>Duration</span>
+                  {course.startISO && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Clock className="w-5 h-5" />
+                        <span>Starting Date</span>
+                      </div>
+                      <span className="text-white font-semibold">
+                        {(() => {
+                          try {
+                            const startDate = course.startISO ? new Date(course.startISO) : null;
+                            if (startDate && !isNaN(startDate.getTime())) {
+                              return startDate.toLocaleDateString('en-IN', { 
+                                day: 'numeric', 
+                                month: 'short', 
+                                year: 'numeric' 
+                              });
+                            }
+                            return course.startDate || 'TBA';
+                          } catch {
+                            return course.startDate || 'TBA';
+                          }
+                        })()}
+                      </span>
                     </div>
-                    <span className="text-white font-semibold">{course.duration} Days</span>
-                  </div>
+                  )}
+
+                  {course.scheduleType && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Clock className="w-5 h-5" />
+                        <span>Schedule Type</span>
+                      </div>
+                      <span className="text-white font-semibold">
+                        {course.scheduleType === 'one-time' ? 'One-time Session' : 'Recurring Classes'}
+                      </span>
+                    </div>
+                  )}
+
+                  {course.startTime && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Clock className="w-5 h-5" />
+                        <span>Class Time</span>
+                      </div>
+                      <span className="text-white font-semibold">
+                        {(() => {
+                          const formatTime = (time: string) => {
+                            if (!time) return '';
+                            if (time.includes('AM') || time.includes('PM')) return time;
+                            try {
+                              const [hours, minutes] = time.split(':');
+                              const hour = parseInt(hours);
+                              const ampm = hour >= 12 ? 'PM' : 'AM';
+                              const hour12 = hour % 12 || 12;
+                              return `${hour12}:${minutes || '00'} ${ampm}`;
+                            } catch {
+                              return time;
+                            }
+                          };
+                          const start = formatTime(course.startTime);
+                          const end = course.endTime ? formatTime(course.endTime) : '';
+                          return end ? `${start} - ${end}` : start;
+                        })()}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-gray-400">
-                      <BookOpen className="w-5 h-5" />
-                      <span>Lessons</span>
+                      <Clock className="w-5 h-5" />
+                      <span>Sessions</span>
                     </div>
-                    <span className="text-white font-semibold">{course.sections} Sections</span>
+                    <span className="text-white font-semibold">{course.sections} {course.sections === 1 ? 'Session' : 'Sessions'}</span>
                   </div>
+
+                  {course.sessionLengthMinutes && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Clock className="w-5 h-5" />
+                        <span>Session Duration</span>
+                      </div>
+                      <span className="text-white font-semibold">
+                        {course.sessionLengthMinutes < 60 
+                          ? `${course.sessionLengthMinutes} minutes`
+                          : `${Math.floor(course.sessionLengthMinutes / 60)}h ${course.sessionLengthMinutes % 60 > 0 ? `${course.sessionLengthMinutes % 60}m` : ''}`}
+                      </span>
+                    </div>
+                  )}
+
+                  {course.maxSeats && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Users className="w-5 h-5" />
+                        <span>Max Students</span>
+                      </div>
+                      <span className="text-white font-semibold">{course.maxSeats} Students</span>
+                    </div>
+                  )}
+
+                  {course.days && course.days.length > 0 && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <Clock className="w-5 h-5" />
+                        <span>Days</span>
+                      </div>
+                      <span className="text-white font-semibold">{course.days.join(', ')}</span>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-gray-400">
@@ -509,14 +612,6 @@ export default function ProductPage({ params }: PageProps) {
                       <span>Language</span>
                     </div>
                     <span className="text-white font-semibold">English</span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <Award className="w-5 h-5" />
-                      <span>Certifications</span>
-                    </div>
-                    <span className="text-white font-semibold">Yes</span>
                   </div>
                 </div>
 

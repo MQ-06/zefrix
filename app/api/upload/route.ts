@@ -71,13 +71,38 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
+    // Debug logging (will be visible in server logs)
+    console.log('📁 [UPLOAD API] File upload details:', {
+      uploadDir,
+      filePath,
+      fileName: uniqueFileName,
+      fileSize: file.size,
+      bufferSize: buffer.length,
+      folder,
+      subfolder,
+      cwd: process.cwd(),
+    });
+    
     await writeFile(filePath, buffer);
+    
+    // Verify file exists after write
+    const fileExistsAfterWrite = existsSync(filePath);
+    console.log('✅ [UPLOAD API] File write result:', { fileExistsAfterWrite, filePath });
 
     // Generate public URL
-    // Adjust this based on your domain
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://zefrix.com';
+    // Prefer NEXT_PUBLIC_BASE_URL, otherwise fall back to current request origin (works in dev and prod)
+    const requestUrl = new URL(request.url);
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || requestUrl.origin;
     const relativePath = `uploads/${folder}${subfolder ? `/${subfolder}` : ''}/${uniqueFileName}`;
     const publicUrl = `${baseUrl}/${relativePath}`;
+    
+    console.log('🌐 [UPLOAD API] Generated URL:', {
+      baseUrl,
+      relativePath,
+      publicUrl,
+      envBaseUrl: process.env.NEXT_PUBLIC_BASE_URL,
+      requestOrigin: requestUrl.origin,
+    });
 
     return NextResponse.json({
       success: true,

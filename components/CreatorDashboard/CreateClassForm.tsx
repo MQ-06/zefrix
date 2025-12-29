@@ -360,6 +360,12 @@ export default function CreateClassForm() {
           const path = getClassThumbnailPath(classId, thumbnailFile.name);
           finalVideoLink = await uploadImage(thumbnailFile, path, true);
           setThumbnailURL(finalVideoLink);
+          console.log('🖼 Thumbnail uploaded', {
+            classId,
+            path,
+            finalVideoLink,
+            thumbnailURLAfterUpload: finalVideoLink,
+          });
         } catch (error: any) {
           console.error('Thumbnail upload error:', error);
           // Continue with form submission even if thumbnail upload fails
@@ -466,6 +472,13 @@ export default function CreateClassForm() {
           days: selectedDays,
         }),
       };
+
+      console.log('📝 Saving class to Firestore', {
+        classId,
+        originalVideoLink: videoLink,
+        finalVideoLink,
+        firestoreVideoLink: firestoreData.videoLink,
+      });
 
       // Write to Firestore
       await window.setDoc(window.doc(window.firebaseDb, 'classes', classId), firestoreData);
