@@ -43,50 +43,59 @@ function CoursesContent() {
     // Initialize Firebase query functions if missing
     if (typeof window === 'undefined') return;
     
-    const addQueryFunctions = async () => {
-      try {
-        // Check if we need to add query functions
-        if (window.collection && window.query && window.where && window.getDocs) {
-          console.log('✅ Firebase query functions already available');
-          window.dispatchEvent(new CustomEvent('firebaseReady'));
-          return;
-        }
+    // Check if Firebase is already fully initialized
+    if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+      console.log('✅ Firebase already initialized with all functions');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('firebaseReady'));
+      }, 100);
+      return;
+    }
 
-        // Wait for firebaseDb to be available (from AuthContext)
-        let attempts = 0;
-        while (!window.firebaseDb && attempts < 50) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          attempts++;
-        }
+    // Check if script is already being loaded
+    const existingScript = document.querySelector('script[data-firebase-courses-init]');
+    if (existingScript) {
+      // Script already exists, wait for firebaseReady event
+      return;
+    }
 
-        if (!window.firebaseDb) {
-          console.error('❌ firebaseDb not available after waiting');
-          return;
-        }
-
-        // Dynamically import and add query functions
-        console.log('🔄 Adding Firebase query functions...');
-        const { getFirestore, collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
-        
-        // Set query functions
-        window.collection = collection;
-        window.query = query;
-        window.where = where;
-        window.getDocs = getDocs;
-        
-        // Verify they're set
-        if (window.collection && window.query && window.where && window.getDocs) {
-          console.log('✅ Firebase query functions added successfully');
-          window.dispatchEvent(new CustomEvent('firebaseReady'));
+    // Create script to add query functions
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.setAttribute('data-firebase-courses-init', 'true');
+    script.textContent = `
+      import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      
+      // Wait for firebaseDb to be available (from AuthContext)
+      const checkAndSetFunctions = () => {
+        if (window.firebaseDb) {
+          // Set query functions
+          window.collection = collection;
+          window.query = query;
+          window.where = where;
+          window.getDocs = getDocs;
+          
+          // Verify they're set
+          if (window.collection && window.query && window.where && window.getDocs) {
+            console.log('✅ Firebase query functions added successfully');
+            window.dispatchEvent(new CustomEvent('firebaseReady'));
+          } else {
+            console.error('❌ Failed to set query functions');
+            // Retry after a short delay
+            setTimeout(checkAndSetFunctions, 200);
+          }
         } else {
-          console.error('❌ Failed to set query functions');
+          // Retry after a short delay
+          setTimeout(checkAndSetFunctions, 200);
         }
-      } catch (error) {
-        console.error('❌ Error adding query functions:', error);
-      }
+      };
+      
+      checkAndSetFunctions();
+    `;
+    script.onerror = () => {
+      console.error('❌ Failed to load Firebase script');
     };
-
-    addQueryFunctions();
+    document.head.appendChild(script);
   }, []);
 
   useEffect(() => {
@@ -158,19 +167,6 @@ function CoursesContent() {
         eventListenerAdded = false;
       }
       console.log('✅ Firebase is ready, fetching courses...');
-      } catch (error: any) {
-        // Catch any errors in the fetchCourses function itself
-        console.error('❌ Error in fetchCourses:', error);
-        if (isMounted) {
-          try {
-            setLoading(false);
-            setApprovedClasses([]);
-          } catch (setStateError) {
-            // Silently handle setState errors
-          }
-        }
-        return;
-      }
 
       if (!isMounted) return;
 
