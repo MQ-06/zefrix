@@ -73,6 +73,13 @@ export default function InstructorPage() {
       document.head.appendChild(script);
     }
 
+    // Define event handler outside conditional so it's accessible in cleanup
+    const handleFirebaseReady = () => {
+      if (isMounted) {
+        checkFirebaseAndFetch();
+      }
+    };
+
     const checkFirebaseAndFetch = () => {
       if (typeof window === 'undefined') return;
       
@@ -147,6 +154,7 @@ export default function InstructorPage() {
 
         console.log(`Setting ${creatorsData.length} creators`);
         setCreators(creatorsData);
+        setLoading(false);
       } catch (error: any) {
         console.error('Error fetching creators:', error);
         console.error('Error code:', error.code);
@@ -155,7 +163,6 @@ export default function InstructorPage() {
         if (error.code === 'permission-denied') {
           console.error('Permission denied - check Firestore rules');
         }
-      } finally {
         if (isMounted) {
           setLoading(false);
         }
@@ -170,12 +177,6 @@ export default function InstructorPage() {
       fetchCreators();
     } else {
       // Wait for firebaseReady event
-      const handleFirebaseReady = () => {
-        if (isMounted) {
-          checkFirebaseAndFetch();
-        }
-      };
-      
       window.addEventListener('firebaseReady', handleFirebaseReady);
       eventListenerAdded = true;
       
@@ -187,9 +188,10 @@ export default function InstructorPage() {
       isMounted = false;
       if (retryTimeout) {
         clearTimeout(retryTimeout);
+        retryTimeout = null;
       }
-      if (eventListenerAdded) {
-        window.removeEventListener('firebaseReady', checkFirebaseAndFetch);
+      if (eventListenerAdded && typeof window !== 'undefined') {
+        window.removeEventListener('firebaseReady', handleFirebaseReady);
       }
     };
   }, [mounted]);
