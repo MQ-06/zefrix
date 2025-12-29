@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useNotification } from '@/contexts/NotificationContext';
+import SessionForm from './SessionForm';
 import styles from './ViewClass.module.css';
+import { DEFAULT_COURSE_IMAGE } from '@/lib/constants';
 
 declare global {
     interface Window {
@@ -42,16 +44,6 @@ interface ClassData {
     [key: string]: any;
 }
 
-interface BatchData {
-    id: string;
-    batchDate: any;
-    batchTime: string;
-    duration: number;
-    maxStudents: number;
-    enrolledStudents: number;
-    status: string;
-    meetingLink?: string;
-}
 
 interface EnrollmentData {
     id: string;
@@ -60,26 +52,35 @@ interface EnrollmentData {
     studentEmail: string;
     enrolledAt: any;
     batchId?: string;
+    sessionAttendance?: {
+        [sessionId: string]: {
+            attended: boolean;
+            joinedAt?: any;
+            markedAt?: any;
+            sessionNumber?: number;
+        };
+    };
 }
 
 interface ViewClassProps {
     classId: string;
     onBack: () => void;
     onEdit?: () => void;
+    onStartLiveClass?: (classId: string, sessionId: string, sessionData: any) => void;
 }
 
-export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
-    const { showError } = useNotification();
+export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }: ViewClassProps) {
+    const { showError, showSuccess } = useNotification();
     const [classData, setClassData] = useState<ClassData | null>(null);
-    const [batches, setBatches] = useState<BatchData[]>([]);
     const [enrollments, setEnrollments] = useState<EnrollmentData[]>([]);
+    const [sessions, setSessions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'batches' | 'students'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'students'>('overview');
 
     useEffect(() => {
         fetchClassData();
-        fetchBatches();
         fetchEnrollments();
+        fetchSessions();
     }, [classId]);
 
     const fetchClassData = async () => {
@@ -108,33 +109,6 @@ export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
         }
     };
 
-    const fetchBatches = async () => {
-        if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-            return;
-        }
-
-        try {
-            const batchesRef = window.collection(window.firebaseDb, 'batches');
-            const q = window.query(batchesRef, window.where('classId', '==', classId));
-            const querySnapshot = await window.getDocs(q);
-
-            const batchesList: BatchData[] = [];
-            querySnapshot.forEach((doc: any) => {
-                batchesList.push({ id: doc.id, ...doc.data() });
-            });
-
-            // Sort by batch date
-            batchesList.sort((a, b) => {
-                const aTime = a.batchDate?.toMillis?.() || 0;
-                const bTime = b.batchDate?.toMillis?.() || 0;
-                return bTime - aTime;
-            });
-
-            setBatches(batchesList);
-        } catch (error) {
-            console.error('Error fetching batches:', error);
-        }
-    };
 
     const fetchEnrollments = async () => {
         if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
@@ -148,7 +122,12 @@ export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
 
             const enrollmentsList: EnrollmentData[] = [];
             querySnapshot.forEach((doc: any) => {
-                enrollmentsList.push({ id: doc.id, ...doc.data() });
+                const data = doc.data();
+                enrollmentsList.push({ id: doc.id, ...data });
+                // Debug: Log attendance data
+                if (data.sessionAttendance) {
+                    console.log(`Enrollment ${doc.id} (${data.studentName}) - sessionAttendance keys:`, Object.keys(data.sessionAttendance));
+                }
             });
 
             // Sort by enrollment date (newest first)
@@ -158,9 +137,39 @@ export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
                 return bTime - aTime;
             });
 
+            console.log(`✅ Fetched ${enrollmentsList.length} enrollments for class ${classId}`);
             setEnrollments(enrollmentsList);
         } catch (error) {
             console.error('Error fetching enrollments:', error);
+        }
+    };
+
+    const fetchSessions = async () => {
+        if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+            return;
+        }
+
+        try {
+            const sessionsRef = window.collection(window.firebaseDb, 'sessions');
+            const q = window.query(sessionsRef, window.where('classId', '==', classId));
+            const querySnapshot = await window.getDocs(q);
+
+            const sessionsList: any[] = [];
+            querySnapshot.forEach((doc: any) => {
+                const sessionData = { id: doc.id, ...doc.data() };
+                sessionsList.push(sessionData);
+                console.log(`Session ${doc.id} - status: ${sessionData.status}, attendance:`, sessionData.attendance);
+            });
+
+            // Sort by session number
+            sessionsList.sort((a, b) => {
+                return (a.sessionNumber || 0) - (b.sessionNumber || 0);
+            });
+
+            console.log(`✅ Fetched ${sessionsList.length} sessions for class ${classId}`);
+            setSessions(sessionsList);
+        } catch (error) {
+            console.error('Error fetching sessions:', error);
         }
     };
 
@@ -217,6 +226,34 @@ export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
         return status.charAt(0).toUpperCase() + status.slice(1);
     };
 
+    const handleUploadRecording = async (sessionId: string, file: File) => {
+        if (!window.firebaseDb || !window.doc || !window.updateDoc) {
+            showError('Firebase not ready');
+            return;
+        }
+
+        try {
+            const { uploadVideo, getClassRecordingPath, validateFile } = await import('@/lib/utils/serverStorage');
+            const validation = validateFile(file, 'video');
+            if (!validation.valid) {
+                showError(validation.error || 'Invalid file');
+                return;
+            }
+            const path = getClassRecordingPath(classId, sessionId, file.name);
+            const downloadURL = await uploadVideo(file, path);
+            const sessionRef = window.doc(window.firebaseDb, 'sessions', sessionId);
+            await window.updateDoc(sessionRef, {
+                recordingLink: downloadURL,
+                recordingUploadedAt: new Date()
+            });
+            fetchSessions();
+            showSuccess('Recording uploaded successfully!');
+        } catch (error: any) {
+            console.error('Recording upload error:', error);
+            showError(error.message || 'Failed to upload recording');
+        }
+    };
+
     if (loading) {
         return (
             <div className={styles.container}>
@@ -268,12 +305,14 @@ export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
                 >
                     Overview
                 </button>
-                <button
-                    className={`${styles.tab} ${activeTab === 'batches' ? styles.activeTab : ''}`}
-                    onClick={() => setActiveTab('batches')}
-                >
-                    Batches ({batches.length})
-                </button>
+                {classData.status === 'approved' && (
+                    <button
+                        className={`${styles.tab} ${activeTab === 'sessions' ? styles.activeTab : ''}`}
+                        onClick={() => setActiveTab('sessions')}
+                    >
+                        Session Details
+                    </button>
+                )}
                 <button
                     className={`${styles.tab} ${activeTab === 'students' ? styles.activeTab : ''}`}
                     onClick={() => setActiveTab('students')}
@@ -386,11 +425,11 @@ export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
                                 <h3 className={styles.cardTitle}>Class Video/Image</h3>
                                 <div className={styles.videoPreview}>
                                     <img
-                                        src={classData.videoLink}
+                                        src={classData.videoLink || DEFAULT_COURSE_IMAGE}
                                         alt={classData.title}
                                         className={styles.videoImage}
                                         onError={(e) => {
-                                            (e.target as HTMLImageElement).src = 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b861_course-12.jpg';
+                                            (e.target as HTMLImageElement).src = DEFAULT_COURSE_IMAGE;
                                         }}
                                     />
                                 </div>
@@ -424,45 +463,220 @@ export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
                     </div>
                 )}
 
-                {/* Batches Tab */}
-                {activeTab === 'batches' && (
-                    <div className={styles.batchesContent}>
-                        {batches.length === 0 ? (
-                            <div className={styles.emptyState}>
-                                <p>No batches scheduled for this class yet.</p>
-                                <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.5rem' }}>
-                                    Go to Manage Classes → Manage Batches to create batches.
-                                </p>
+                {/* Sessions Tab */}
+                {activeTab === 'sessions' && classData.status === 'approved' && (
+                    <div className={styles.tabContent}>
+                        {sessions.length === 0 ? (
+                            <div style={{ marginBottom: '2rem' }}>
+                                <h3 style={{ marginBottom: '1rem', fontSize: '1.125rem', fontWeight: '600' }}>
+                                    Fill Session Details First
+                                </h3>
+                                <SessionForm
+                                    classId={classId}
+                                    className={classData.title}
+                                    numberOfSessions={classData.numberSessions}
+                                    scheduleType={classData.scheduleType}
+                                    startDate={classData.scheduleType === 'one-time' ? classData.date : classData.startDate}
+                                    endDate={classData.endDate}
+                                    recurringStartTime={classData.scheduleType === 'one-time' ? classData.startTime : classData.recurringStartTime}
+                                    recurringEndTime={classData.recurringEndTime}
+                                    days={classData.days}
+                                    onSuccess={() => {
+                                        fetchClassData();
+                                        fetchSessions();
+                                    }}
+                                />
                             </div>
                         ) : (
-                            <div className={styles.batchList}>
-                                {batches.map((batch) => (
-                                    <div key={batch.id} className={styles.batchCard}>
-                                        <div className={styles.batchHeader}>
-                                            <div className={styles.batchInfo}>
-                                                <div className={styles.batchDate}>
-                                                    📅 {formatDate(batch.batchDate)} at {batch.batchTime}
-                                                </div>
-                                                <div className={styles.batchMeta}>
-                                                    ⏱️ {batch.duration} min | 👥 {batch.enrolledStudents}/{batch.maxStudents} students
-                                                </div>
-                                            </div>
-                                            <div
-                                                className={styles.batchStatus}
-                                                style={{ color: getStatusColor(batch.status) }}
+                            <div>
+                                <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>
+                                    Scheduled Sessions ({sessions.length})
+                                </h3>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+                                    {sessions.map((session) => {
+                                        const sessionDate = session.sessionDate?.toDate ? session.sessionDate.toDate() : new Date(session.sessionDate);
+                                        const isLive = session.status === 'live';
+                                        const isCompleted = session.status === 'completed';
+                                        const isUpcoming = session.status !== 'completed' && session.status !== 'live' && sessionDate > new Date();
+                                        
+                                        return (
+                                            <div 
+                                                key={session.id} 
+                                                style={{
+                                                    background: isLive ? 'rgba(217, 42, 99, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                                    borderRadius: '12px',
+                                                    padding: '1.5rem',
+                                                    border: isLive ? '2px solid #D92A63' : '1px solid rgba(255, 255, 255, 0.1)'
+                                                }}
                                             >
-                                                {getStatusLabel(batch.status)}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <h4 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                                                            Session {session.sessionNumber}
+                                                        </h4>
+                                                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                                                            <span><strong>Date:</strong> {formatDate(sessionDate)}</span>
+                                                            <span><strong>Time:</strong> {session.sessionTime}</span>
+                                                            {session.meetingLink && (
+                                                                <span><strong>Link:</strong> <a href={session.meetingLink} target="_blank" rel="noopener noreferrer" style={{ color: '#D92A63' }}>Meeting Link</a></span>
+                                                            )}
+                                                        </div>
+                                                        {/* Attendance Display */}
+                                                        {isCompleted && (
+                                                            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(76, 175, 80, 0.1)', borderRadius: '6px', border: '1px solid rgba(76, 175, 80, 0.3)' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9375rem', fontWeight: '600', color: '#4CAF50', marginBottom: '0.25rem' }}>
+                                                                    <span><strong>Attendance:</strong></span>
+                                                                    <span>{(() => {
+                                                                        // Calculate actual attendance from enrollments
+                                                                        let actualPresent = 0;
+                                                                        let actualTotal = 0;
+                                                                        enrollments.forEach(e => {
+                                                                            const sessionAttendance = e.sessionAttendance || {};
+                                                                            if (sessionAttendance[session.id]) {
+                                                                                actualTotal++;
+                                                                                if (sessionAttendance[session.id].attended) {
+                                                                                    actualPresent++;
+                                                                                }
+                                                                            }
+                                                                        });
+                                                                        // Use actual data if available, otherwise fallback to session.attendance
+                                                                        const attendance = session.attendance || {};
+                                                                        const displayPresent = actualTotal > 0 ? actualPresent : (attendance.present || 0);
+                                                                        const displayTotal = actualTotal > 0 ? actualTotal : (attendance.totalEnrolled || enrollments.length);
+                                                                        const displayRate = displayTotal > 0 ? ((displayPresent / displayTotal) * 100).toFixed(0) : '0';
+                                                                        return `${displayPresent}/${displayTotal} (${displayRate}%)`;
+                                                                    })()}</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        {isLive && (
+                                                            <span style={{
+                                                                background: '#D92A63',
+                                                                color: '#fff',
+                                                                padding: '0.5rem 1rem',
+                                                                borderRadius: '20px',
+                                                                fontSize: '0.875rem',
+                                                                fontWeight: '600',
+                                                                display: 'inline-block',
+                                                                marginBottom: '0.5rem'
+                                                            }}>
+                                                                LIVE
+                                                            </span>
+                                                        )}
+                                                        {isCompleted && (
+                                                            <span style={{
+                                                                background: '#4CAF50',
+                                                                color: '#fff',
+                                                                padding: '0.5rem 1rem',
+                                                                borderRadius: '20px',
+                                                                fontSize: '0.875rem',
+                                                                fontWeight: '600',
+                                                                display: 'inline-block',
+                                                                marginBottom: '0.5rem'
+                                                            }}>
+                                                                Completed
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {session.meetingLink && (isUpcoming || isLive) && onStartLiveClass && (
+                                                    <button
+                                                        onClick={() => onStartLiveClass(classId, session.id, session)}
+                                                        style={{
+                                                            background: isLive ? '#4CAF50' : 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+                                                            color: 'white',
+                                                            border: 'none',
+                                                            padding: '0.75rem 1.5rem',
+                                                            borderRadius: '8px',
+                                                            fontSize: '0.9375rem',
+                                                            fontWeight: '600',
+                                                            cursor: 'pointer',
+                                                            width: '100%'
+                                                        }}
+                                                    >
+                                                        {isLive ? 'Continue Live Class' : 'Start Class'}
+                                                    </button>
+                                                )}
+                                                {isCompleted && (
+                                                    <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(33, 150, 243, 0.1)', borderRadius: '8px' }}>
+                                                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.9)' }}>
+                                                            Upload Recording:
+                                                        </label>
+                                                        <input
+                                                            type="file"
+                                                            accept="video/*"
+                                                            onChange={(e) => {
+                                                                const file = e.target.files?.[0];
+                                                                if (file) {
+                                                                    handleUploadRecording(session.id, file);
+                                                                }
+                                                            }}
+                                                            style={{ 
+                                                                width: '100%',
+                                                                padding: '0.5rem',
+                                                                background: 'rgba(255, 255, 255, 0.1)',
+                                                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                                borderRadius: '6px',
+                                                                color: '#fff',
+                                                                fontSize: '0.875rem'
+                                                            }}
+                                                        />
+                                                        {session.recordingLink && (
+                                                            <div style={{ marginTop: '0.5rem' }}>
+                                                                <a 
+                                                                    href={session.recordingLink} 
+                                                                    target="_blank" 
+                                                                    rel="noopener noreferrer"
+                                                                    style={{ 
+                                                                        color: '#2196F3',
+                                                                        textDecoration: 'none',
+                                                                        fontSize: '0.875rem'
+                                                                    }}
+                                                                >
+                                                                    View Recording
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {!session.meetingLink && !isCompleted && (
+                                                    <div style={{ 
+                                                        padding: '1rem', 
+                                                        background: 'rgba(255, 152, 0, 0.1)', 
+                                                        borderRadius: '8px',
+                                                        color: 'rgba(255, 255, 255, 0.7)',
+                                                        fontSize: '0.875rem'
+                                                    }}>
+                                                        Please update session details form below to add meeting link.
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                        {batch.meetingLink && (
-                                            <div className={styles.batchLink}>
-                                                🔗 <a href={batch.meetingLink} target="_blank" rel="noopener noreferrer">
-                                                    Join Meeting
-                                                </a>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
+                                        );
+                                    })}
+                                </div>
+                                
+                                <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                                    <h3 style={{ marginBottom: '1rem', fontSize: '1.125rem', fontWeight: '600' }}>
+                                        Update Session Details
+                                    </h3>
+                                    <SessionForm
+                                        classId={classId}
+                                        className={classData.title}
+                                        numberOfSessions={classData.numberSessions}
+                                        scheduleType={classData.scheduleType}
+                                        startDate={classData.scheduleType === 'one-time' ? classData.date : classData.startDate}
+                                        endDate={classData.endDate}
+                                        recurringStartTime={classData.scheduleType === 'one-time' ? classData.startTime : classData.recurringStartTime}
+                                        recurringEndTime={classData.recurringEndTime}
+                                        days={classData.days}
+                                        onSuccess={() => {
+                                            fetchClassData();
+                                            fetchSessions();
+                                        }}
+                                    />
+                                </div>
                             </div>
                         )}
                     </div>
@@ -481,14 +695,34 @@ export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
                                     <div className={styles.tableCol}>Student Name</div>
                                     <div className={styles.tableCol}>Email</div>
                                     <div className={styles.tableCol}>Enrolled On</div>
+                                    <div className={styles.tableCol}>Attendance</div>
                                 </div>
-                                {enrollments.map((enrollment) => (
-                                    <div key={enrollment.id} className={styles.tableRow}>
-                                        <div className={styles.tableCol}>{enrollment.studentName}</div>
-                                        <div className={styles.tableCol}>{enrollment.studentEmail}</div>
-                                        <div className={styles.tableCol}>{formatDateTime(enrollment.enrolledAt)}</div>
-                                    </div>
-                                ))}
+                                {enrollments.map((enrollment) => {
+                                    const sessionAttendance = enrollment.sessionAttendance || {};
+                                    const totalSessions = Object.keys(sessionAttendance).length;
+                                    const attendedSessions = Object.values(sessionAttendance).filter((s: any) => s.attended).length;
+                                    const attendanceRate = totalSessions > 0 ? (attendedSessions / totalSessions) * 100 : 0;
+                                    
+                                    return (
+                                        <div key={enrollment.id} className={styles.tableRow}>
+                                            <div className={styles.tableCol}>{enrollment.studentName}</div>
+                                            <div className={styles.tableCol}>{enrollment.studentEmail}</div>
+                                            <div className={styles.tableCol}>{formatDateTime(enrollment.enrolledAt)}</div>
+                                            <div className={styles.tableCol}>
+                                                {totalSessions > 0 ? (
+                                                    <span style={{
+                                                        color: attendanceRate >= 75 ? '#4CAF50' : attendanceRate >= 50 ? '#FF9800' : '#F44336',
+                                                        fontWeight: '600'
+                                                    }}>
+                                                        {attendedSessions}/{totalSessions} sessions ({attendanceRate.toFixed(0)}%)
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: 'rgba(255, 255, 255, 0.5)' }}>No sessions yet</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -501,16 +735,6 @@ export default function ViewClass({ classId, onBack, onEdit }: ViewClassProps) {
                     <button onClick={onEdit} className={styles.actionButton}>
                         ✏️ Edit Class
                     </button>
-                )}
-                {classData.videoLink && (
-                    <a
-                        href={classData.videoLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={styles.actionButton}
-                    >
-                        🎥 View Media
-                    </a>
                 )}
                 <button onClick={onBack} className={styles.secondaryButton}>
                     Close

@@ -8,13 +8,14 @@ import CreatorCourseCard from '@/components/CreatorDashboard/CreatorCourseCard';
 import CreateClassForm from '@/components/CreatorDashboard/CreateClassForm';
 import EditClassForm from '@/components/CreatorDashboard/EditClassForm';
 import ManageClasses from '@/components/CreatorDashboard/ManageClasses';
-import ManageBatches from '@/components/CreatorDashboard/ManageBatches';
 import ViewClass from '@/components/CreatorDashboard/ViewClass';
 import ClassDetails from '@/components/CreatorDashboard/ClassDetails';
 import LiveClass from '@/components/CreatorDashboard/LiveClass';
 import CreatorProfile from '@/components/CreatorDashboard/Profile';
 import EnrollmentList from '@/components/CreatorDashboard/EnrollmentList';
 import Analytics from '@/components/CreatorDashboard/Analytics';
+import NotificationList from '@/components/Notifications/NotificationList';
+import NotificationBadge from '@/components/Notifications/NotificationBadge';
 
 declare global {
   interface Window {
@@ -24,6 +25,9 @@ declare global {
     logout: any;
     doc: any;
     getDoc: any;
+    setDoc: any;
+    updateDoc: any;
+    deleteDoc: any;
     addDoc: any;
     Timestamp: any;
     updateProfile: any;
@@ -31,6 +35,15 @@ declare global {
     uploadBytes: any;
     getDownloadURL: any;
     deleteObject: any;
+    collection: any;
+    query: any;
+    where: any;
+    getDocs: any;
+    orderBy: any;
+    limit: any;
+    onSnapshot: any;
+    writeBatch: any;
+    serverTimestamp: any;
   }
 }
 
@@ -136,12 +149,13 @@ export default function CreatorDashboard() {
   const [user, setUser] = useState<any>(null);
   const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
   const [loadingClasses, setLoadingClasses] = useState(false);
+  const [classesPage, setClassesPage] = useState(1);
+  const classesPerPage = 12;
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [viewingClassId, setViewingClassId] = useState<string | null>(null);
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
   const [viewingEnrollmentsClassId, setViewingEnrollmentsClassId] = useState<string | null>(null);
   const [viewingEnrollmentsClassName, setViewingEnrollmentsClassName] = useState<string | null>(null);
+  const [liveClassData, setLiveClassData] = useState<{classId: string; sessionId: string; sessionData: any} | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -170,7 +184,7 @@ export default function CreatorDashboard() {
         firebaseAuthConfig.innerHTML = `
           import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, addDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, addDoc, Timestamp, orderBy, limit, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
           import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
           const firebaseConfig = {
@@ -200,6 +214,10 @@ export default function CreatorDashboard() {
           window.addDoc = addDoc;
           window.Timestamp = Timestamp;
           window.updateProfile = updateProfile;
+          window.orderBy = orderBy;
+          window.limit = limit;
+          window.onSnapshot = onSnapshot;
+          window.writeBatch = writeBatch;
           window.ref = ref;
           window.uploadBytes = uploadBytes;
           window.getDownloadURL = getDownloadURL;
@@ -306,85 +324,75 @@ export default function CreatorDashboard() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeSection]);
 
-  // Fetch approved classes for dashboard
+  // Fetch approved classes for dashboard with real-time updates
   useEffect(() => {
-    const fetchApprovedClasses = async () => {
-      // Wait for Firebase with retry logic
-      let retries = 0;
-      while (retries < 10) {
-        const currentUser = user || (window.firebaseAuth?.currentUser);
+    if (activeSection !== 'dashboard') {
+      return; // Only set up listener when on dashboard
+    }
 
-        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs && currentUser) {
-          // Firebase is ready!
-          console.log('✅ Firebase ready, fetching classes for creator:', currentUser.uid);
-          break;
-        }
+    let unsubscribe: (() => void) | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
 
-        console.log(`⏳ Waiting for Firebase... (attempt ${retries + 1}/10)`, {
-          firebaseDb: !!window.firebaseDb,
-          collection: !!window.collection,
-          query: !!window.query,
-          where: !!window.where,
-          getDocs: !!window.getDocs,
-          user: !!currentUser
-        });
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-        retries++;
-      }
-
-      // Final check after retries
+    const setupListener = () => {
       const currentUser = user || (window.firebaseAuth?.currentUser);
 
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !currentUser) {
-        console.error('❌ Firebase not ready after retries:', {
-          firebaseDb: !!window.firebaseDb,
-          collection: !!window.collection,
-          query: !!window.query,
-          where: !!window.where,
-          getDocs: !!window.getDocs,
-          user: !!currentUser
-        });
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot || !currentUser) {
+        // Retry after a short delay
+        retryTimeout = setTimeout(setupListener, 500);
         return;
       }
 
       setLoadingClasses(true);
       try {
-        console.log('📦 Fetching approved classes for creator:', currentUser.uid);
+        console.log('📦 Setting up real-time listener for approved classes:', currentUser.uid);
         const classesRef = window.collection(window.firebaseDb, 'classes');
         const q = window.query(
           classesRef,
           window.where('creatorId', '==', currentUser.uid),
           window.where('status', '==', 'approved')
         );
-        const querySnapshot = await window.getDocs(q);
+        
+        unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+          const classes: ApprovedClass[] = [];
+          snapshot.forEach((doc: any) => {
+            classes.push({ classId: doc.id, ...doc.data() });
+          });
 
-        const classes: ApprovedClass[] = [];
-        querySnapshot.forEach((doc: any) => {
-          classes.push({ classId: doc.id, ...doc.data() });
+          console.log(`✅ Real-time update: Found ${classes.length} approved classes for creator`);
+
+          // Sort by creation date (newest first)
+          classes.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+
+          setApprovedClasses(classes);
+          setLoadingClasses(false);
+        }, (error: any) => {
+          console.error('❌ Error in real-time listener:', error);
+          setLoadingClasses(false);
         });
-
-        console.log(`✅ Found ${classes.length} approved classes for creator`);
-
-        // Sort by creation date (newest first)
-        classes.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-
-        setApprovedClasses(classes);
       } catch (error) {
-        console.error('❌ Error fetching approved classes:', error);
-      } finally {
+        console.error('❌ Error setting up real-time listener:', error);
         setLoadingClasses(false);
       }
     };
 
-    if (activeSection === 'dashboard') {
-      fetchApprovedClasses();
-    }
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [activeSection, user]);
+
+  // Reset pagination when switching to dashboard
+  useEffect(() => {
+    if (activeSection === 'dashboard') {
+      setClassesPage(1);
+    }
+  }, [activeSection]);
 
   return (
     <>
@@ -591,6 +599,29 @@ export default function CreatorDashboard() {
           background: #fff;
           border-radius: 3px;
           transition: all 0.3s;
+        }
+
+        .hamburger-line.top.open {
+          transform: rotate(45deg) translate(8px, 8px);
+        }
+
+        .hamburger-line.mid.open {
+          opacity: 0;
+        }
+
+        .hamburger-line.bot.open {
+          transform: rotate(-45deg) translate(7px, -7px);
+        }
+
+        .creator-nav-overlay {
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 999;
         }
 
         /* Main Content */
@@ -900,9 +931,9 @@ export default function CreatorDashboard() {
 
         .creator-radio-group {
           display: flex;
-          gap: 2.5rem;
+          gap: 3.5rem !important;
           margin-bottom: 2rem;
-          padding: 1rem;
+          padding: 1.25rem 1.5rem;
           background: rgba(255, 255, 255, 0.03);
           border-radius: 8px;
         }
@@ -910,8 +941,9 @@ export default function CreatorDashboard() {
         .creator-radio-wrap {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.75rem;
           cursor: pointer;
+          padding: 0.5rem 0;
         }
 
         .creator-radio-input {
@@ -938,16 +970,23 @@ export default function CreatorDashboard() {
         }
 
         .creator-pill-wrap {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.875rem;
-          margin-top: 0.5rem;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 1.5rem !important;
+          margin-top: 1rem;
+          padding: 1.5rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .creator-pill-item {
           display: flex;
           align-items: center;
+          justify-content: center;
           cursor: pointer;
+          min-height: 44px;
+          margin: 0;
         }
 
         .creator-pill-checkbox {
@@ -955,21 +994,37 @@ export default function CreatorDashboard() {
         }
 
         .creator-pill-label {
-          padding: 0.625rem 1.25rem;
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 24px;
-          color: rgba(255, 255, 255, 0.7);
+          display: block;
+          width: 100%;
+          padding: 0.75rem 1rem;
+          background: rgba(255, 255, 255, 0.08);
+          border: 2px solid rgba(255, 255, 255, 0.15);
+          border-radius: 10px;
+          color: rgba(255, 255, 255, 0.8);
           font-size: 0.875rem;
           font-weight: 500;
-          transition: all 0.3s;
+          transition: all 0.2s ease;
           cursor: pointer;
+          text-align: center;
+        }
+
+        .creator-pill-item:hover .creator-pill-label {
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(255, 255, 255, 0.25);
+          transform: translateY(-1px);
         }
 
         .creator-pill-checkbox:checked + .creator-pill-label {
-          background: rgba(217, 42, 99, 0.15);
+          background: rgba(217, 42, 99, 0.2);
           border-color: #D92A63;
           color: #fff;
+          font-weight: 600;
+          box-shadow: 0 2px 8px rgba(217, 42, 99, 0.3);
+        }
+
+        .creator-pill-checkbox:checked + .creator-pill-label:hover {
+          background: rgba(217, 42, 99, 0.25);
+          border-color: #FF654B;
         }
 
         .creator-form-actions {
@@ -981,7 +1036,7 @@ export default function CreatorDashboard() {
         .creator-submit-btn {
           background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
           color: white;
-          border: none;
+          border: 2px solid rgba(255, 255, 255, 0.3);
           padding: 16px 40px;
           border-radius: 10px;
           font-size: 1.0625rem;
@@ -1014,10 +1069,17 @@ export default function CreatorDashboard() {
         .creator-submit-btn:hover {
           transform: translateY(-2px);
           box-shadow: 0 8px 20px rgba(217, 42, 99, 0.3);
+          border-color: rgba(255, 255, 255, 0.5);
         }
 
         .creator-submit-btn:active {
           transform: translateY(0);
+        }
+
+        .creator-submit-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          border-color: rgba(255, 255, 255, 0.2);
         }
 
         /* Manage Classes Styles - Matching Webflow HTML */
@@ -1045,12 +1107,20 @@ export default function CreatorDashboard() {
 
         .creator-payments-list {
           width: 100%;
+          overflow-x: auto;
         }
 
         .creator-payments-list-wrapper {
           display: flex;
           flex-direction: column;
           gap: 0.75rem;
+          width: 100%;
+        }
+
+        @media (max-width: 991px) {
+          .creator-payments-list {
+            overflow-x: visible;
+          }
         }
 
         .creator-payments-list-item {
@@ -1086,6 +1156,12 @@ export default function CreatorDashboard() {
 
         .payment-info.grid {
           grid-template-columns: auto 1fr 1fr auto auto auto auto auto;
+        }
+
+        /* Payment info responsive wrapper */
+        .creator-payments-list-item .div-block-14.payment-info.grid > * {
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .thumbnail {
@@ -1498,6 +1574,27 @@ export default function CreatorDashboard() {
           .creator-action-btn {
             width: 100%;
           }
+
+          .div-block-14.payment-info.grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+
+          .payment-info.grid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .creator-payments-list-item .div-block-14.payment-info.grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+
+          .creator-pay-info-name,
+          .text-block-31 {
+            white-space: normal;
+            word-wrap: break-word;
+          }
         }
 
         /* Responsive */
@@ -1537,6 +1634,14 @@ export default function CreatorDashboard() {
             display: block;
           }
 
+          .hamburger {
+            display: flex;
+          }
+
+          .main-content {
+            padding-top: 80px;
+          }
+
           .creator-course-grid {
             grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
           }
@@ -1552,6 +1657,338 @@ export default function CreatorDashboard() {
             align-items: flex-start;
             gap: 1rem;
           }
+
+          .main-content {
+            padding: 1rem;
+            padding-top: 80px;
+          }
+
+          .creator-content-wrapper {
+            padding: 1rem;
+          }
+
+          .creator-form-container {
+            padding: 1.5rem;
+          }
+
+          .creator-welcome-section h2 {
+            font-size: 1.25rem;
+          }
+
+          .creator-section-title {
+            font-size: 1.25rem;
+          }
+
+          .creator-course-image-wrap {
+            height: 180px;
+          }
+
+          .creator-course-info {
+            padding: 1rem;
+          }
+
+          .creator-course-title {
+            font-size: 1rem;
+          }
+
+          .creator-course-meta {
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .div-block-14.payment-info.grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            align-items: flex-start;
+          }
+
+          .payment-info.grid {
+            grid-template-columns: 1fr !important;
+            gap: 1rem;
+          }
+
+          .creator-payments-list-item {
+            padding: 1rem;
+          }
+
+          .creator-payments-list-item .div-block-14.payment-info.grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+
+          .creator-pay-info-name {
+            font-size: 0.8125rem;
+            white-space: normal;
+            word-wrap: break-word;
+          }
+
+          .text-block-31 {
+            font-size: 0.75rem;
+            white-space: normal;
+            word-wrap: break-word;
+          }
+
+          .button-dark.button-new-style {
+            padding: 8px 16px;
+            font-size: 0.75rem;
+            width: 100%;
+            text-align: center;
+          }
+
+          .thumbnail {
+            width: 40px;
+            height: 40px;
+          }
+
+          .creator-details-card {
+            padding: 1rem;
+          }
+
+          .creator-students-card {
+            padding: 1rem;
+          }
+
+          .creator-live-students {
+            padding: 1rem;
+          }
+
+          .creator-live-video {
+            padding: 1rem;
+          }
+
+          .creator-profile {
+            padding: 1.5rem;
+          }
+
+          .creator-form-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .creator-radio-group {
+            flex-direction: column;
+            gap: 1rem !important;
+            padding: 1rem;
+          }
+
+          .creator-pill-wrap {
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 0.75rem !important;
+            padding: 1rem;
+          }
+
+          .creator-submit-btn {
+            width: 100%;
+            max-width: 100%;
+            padding: 14px 24px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .sidebar {
+            width: 100%;
+            max-width: 320px;
+          }
+
+          .sidebar-logo img {
+            width: 120px;
+          }
+
+          .hamburger {
+            top: 0.75rem;
+            left: 0.75rem;
+            padding: 0.375rem;
+          }
+
+          .hamburger-line {
+            width: 22px;
+            height: 2.5px;
+          }
+
+          .creator-welcome-section h2 {
+            font-size: 1.125rem;
+          }
+
+          .creator-section-title {
+            font-size: 1.125rem;
+          }
+
+          .main-content {
+            padding: 0.75rem;
+          }
+
+          .creator-content-wrapper {
+            padding: 0.75rem;
+          }
+
+          .creator-form-container {
+            padding: 1rem;
+          }
+
+          .creator-course-image-wrap {
+            height: 160px;
+          }
+
+          .creator-course-teacher-wrap {
+            top: 0.5rem;
+            left: 0.5rem;
+            padding: 0.375rem 0.75rem;
+          }
+
+          .creator-course-instructor-img {
+            width: 24px;
+            height: 24px;
+          }
+
+          .creator-course-info {
+            padding: 0.875rem;
+          }
+
+          .creator-course-title {
+            font-size: 0.9375rem;
+            margin-bottom: 0.5rem;
+          }
+
+          .creator-course-meta-item {
+            font-size: 0.75rem;
+          }
+
+          .creator-course-price {
+            font-size: 1rem;
+          }
+
+          .creator-pill-wrap {
+            grid-template-columns: 1fr;
+            gap: 0.5rem !important;
+          }
+
+          .creator-pill-label {
+            padding: 0.625rem 0.875rem;
+            font-size: 0.8125rem;
+          }
+
+          .creator-form-heading {
+            font-size: 1.125rem;
+          }
+
+          .creator-field-label {
+            font-size: 0.8125rem;
+          }
+
+          .creator-form-input,
+          .creator-textarea,
+          .creator-select {
+            padding: 10px 14px;
+            font-size: 0.875rem;
+          }
+
+          .thumbnail {
+            width: 35px;
+            height: 35px;
+          }
+
+          .div-block-14.payment-info.grid {
+            grid-template-columns: 1fr !important;
+            gap: 0.75rem;
+          }
+
+          .payment-info.grid {
+            grid-template-columns: 1fr !important;
+            gap: 0.75rem;
+          }
+
+          .creator-payments-list-item .div-block-14.payment-info.grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .creator-pay-info-name {
+            font-size: 0.75rem;
+            white-space: normal;
+            word-wrap: break-word;
+          }
+
+          .text-block-31 {
+            font-size: 0.6875rem;
+            white-space: normal;
+            word-wrap: break-word;
+          }
+
+          .button-dark.button-new-style {
+            padding: 6px 14px;
+            font-size: 0.6875rem;
+            width: 100%;
+            text-align: center;
+          }
+
+          .creator-payments-list-item {
+            padding: 0.875rem;
+          }
+
+          .creator-details-card {
+            padding: 0.875rem;
+          }
+
+          .creator-details-title {
+            font-size: 1rem;
+          }
+
+          .creator-details-description {
+            font-size: 0.8125rem;
+          }
+
+          .creator-chart-value {
+            font-size: 1.25rem;
+          }
+
+          .creator-chart-label {
+            font-size: 0.6875rem;
+          }
+
+          .creator-students-title {
+            font-size: 0.9375rem;
+          }
+
+          .creator-table-col {
+            font-size: 0.6875rem;
+          }
+
+          .creator-table-row .creator-table-col {
+            font-size: 0.6875rem;
+          }
+
+          .creator-info-label,
+          .creator-info-value {
+            font-size: 0.6875rem;
+          }
+
+          .creator-live-students {
+            padding: 0.875rem;
+          }
+
+          .creator-live-video {
+            padding: 0.875rem;
+          }
+
+          .creator-student-item {
+            font-size: 0.8125rem;
+            padding: 0.5rem 0;
+          }
+
+          .creator-profile {
+            padding: 1rem;
+          }
+
+          .creator-submit-btn {
+            padding: 12px 20px;
+            font-size: 1rem;
+          }
+
+          .creator-message {
+            padding: 0.875rem 1rem;
+            font-size: 0.875rem;
+          }
         }
       `}</style>
 
@@ -1560,6 +1997,7 @@ export default function CreatorDashboard() {
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           onLogout={handleLogout}
+          userId={user?.uid}
         />
 
         <div className="main-content">
@@ -1575,30 +2013,89 @@ export default function CreatorDashboard() {
             {/* Dashboard Section */}
             {activeSection === 'dashboard' && (
               <div id="dashboard" className="creator-section">
-                <h2 className="creator-section-title">My Approved Classes</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <h2 className="creator-section-title" style={{ margin: 0 }}>My Approved Classes</h2>
+                  {approvedClasses.length > 0 && (
+                    <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                      {approvedClasses.length} {approvedClasses.length === 1 ? 'class' : 'classes'}
+                    </div>
+                  )}
+                </div>
                 {loadingClasses ? (
                   <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
                     Loading classes...
                   </div>
                 ) : approvedClasses.length > 0 ? (
-                  <div className="creator-course-grid">
-                    {approvedClasses.map((classItem) => {
-                      const course = {
-                        id: classItem.classId,
-                        slug: classItem.classId,
-                        title: classItem.title,
-                        instructor: classItem.creatorName || 'Creator',
-                        instructorImage: '',
-                        image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b861_course-12.jpg',
-                        price: classItem.price,
-                        originalPrice: classItem.price,
-                        sections: classItem.numberSessions,
-                        duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
-                        students: 0,
-                      };
-                      return <CreatorCourseCard key={classItem.classId} course={course} />;
-                    })}
-                  </div>
+                  <>
+                    <div className="creator-course-grid">
+                      {approvedClasses
+                        .slice((classesPage - 1) * classesPerPage, classesPage * classesPerPage)
+                        .map((classItem) => {
+                          return (
+                            <CreatorCourseCard 
+                              key={classItem.classId} 
+                              classData={classItem}
+                              onViewClass={(classId) => {
+                                setViewingClassId(classId);
+                                setActiveSection('manage-classes');
+                              }}
+                            />
+                          );
+                        })}
+                    </div>
+                    {approvedClasses.length > classesPerPage && (
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'center', 
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        marginTop: '2rem',
+                        padding: '1rem'
+                      }}>
+                        <button
+                          onClick={() => setClassesPage(prev => Math.max(1, prev - 1))}
+                          disabled={classesPage === 1}
+                          style={{
+                            padding: '0.5rem 1rem',
+                            background: classesPage === 1 ? 'rgba(255, 255, 255, 0.1)' : 'rgba(217, 42, 99, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            cursor: classesPage === 1 ? 'not-allowed' : 'pointer',
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                            opacity: classesPage === 1 ? 0.5 : 1
+                          }}
+                        >
+                          Previous
+                        </button>
+                        <span style={{ 
+                          color: 'rgba(255, 255, 255, 0.9)', 
+                          fontSize: '0.875rem',
+                          padding: '0 1rem'
+                        }}>
+                          Page {classesPage} of {Math.ceil(approvedClasses.length / classesPerPage)}
+                        </span>
+                        <button
+                          onClick={() => setClassesPage(prev => Math.min(Math.ceil(approvedClasses.length / classesPerPage), prev + 1))}
+                          disabled={classesPage >= Math.ceil(approvedClasses.length / classesPerPage)}
+                          style={{
+                            padding: '0.5rem 1rem',
+                            background: classesPage >= Math.ceil(approvedClasses.length / classesPerPage) ? 'rgba(255, 255, 255, 0.1)' : 'rgba(217, 42, 99, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            cursor: classesPage >= Math.ceil(approvedClasses.length / classesPerPage) ? 'not-allowed' : 'pointer',
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                            opacity: classesPage >= Math.ceil(approvedClasses.length / classesPerPage) ? 0.5 : 1
+                          }}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
                     No approved classes yet. Create a class and wait for admin approval.
@@ -1610,22 +2107,18 @@ export default function CreatorDashboard() {
             {/* Notifications Section */}
             {activeSection === 'notifications' && (
               <div id="notifications" className="creator-section">
-                <h2 className="creator-section-title">Notifications</h2>
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  borderRadius: '16px',
-                  padding: '2rem',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem', color: '#fff' }}>Notifications Center</h3>
-                  <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '1rem' }}>
-                    Class reminders and updates are sent via email and WhatsApp through n8n automation.
-                  </p>
-                  <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
-                    You'll receive notifications about class approvals, student enrollments, and important updates.
-                  </p>
-                </div>
+                {user?.uid ? (
+                  <NotificationList userId={user.uid} userRole="creator" />
+                ) : (
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '16px',
+                    padding: '2rem',
+                    textAlign: 'center'
+                  }}>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.7)' }}>Loading notifications...</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1666,6 +2159,11 @@ export default function CreatorDashboard() {
                       setEditingClassId(viewingClassId);
                       setViewingClassId(null);
                     }}
+                    onStartLiveClass={(classId, sessionId, sessionData) => {
+                      setLiveClassData({ classId, sessionId, sessionData });
+                      setActiveSection('live-class');
+                      setViewingClassId(null);
+                    }}
                   />
                 ) : editingClassId ? (
                   <EditClassForm
@@ -1676,23 +2174,10 @@ export default function CreatorDashboard() {
                       // Optionally refresh the class list
                     }}
                   />
-                ) : selectedClassId ? (
-                  <ManageBatches
-                    classId={selectedClassId}
-                    className={selectedClassName || undefined}
-                    onBack={() => {
-                      setSelectedClassId(null);
-                      setSelectedClassName(null);
-                    }}
-                  />
                 ) : (
                   <ManageClasses
                     onEditClass={(classId) => setEditingClassId(classId)}
                     onViewClass={(classId) => setViewingClassId(classId)}
-                    onManageBatches={(classId, className) => {
-                      setSelectedClassId(classId);
-                      setSelectedClassName(className);
-                    }}
                     onViewEnrollments={(classId, className) => {
                       setViewingEnrollmentsClassId(classId);
                       setViewingEnrollmentsClassName(className);
@@ -1708,13 +2193,6 @@ export default function CreatorDashboard() {
               </div>
             )}
 
-            {/* Manage Batches Section */}
-            {activeSection === 'manage-batches' && (
-              <div id="manage-batches" className="creator-section">
-                <ManageBatches />
-              </div>
-            )}
-
             {/* Class Details Section */}
             {activeSection === 'class-details' && viewingClassId && (
               <div id="class-details" className="creator-section">
@@ -1723,10 +2201,40 @@ export default function CreatorDashboard() {
             )}
 
             {/* Live Class Section */}
-            {activeSection === 'live-class' && (
+            {activeSection === 'live-class' && liveClassData && (
               <div id="live-class" className="creator-section">
-                <h2 className="creator-section-title">Live Class</h2>
-                <LiveClass />
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <button
+                    onClick={() => {
+                      setLiveClassData(null);
+                      setActiveSection('manage-classes');
+                      setViewingClassId(liveClassData.classId);
+                    }}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      color: '#fff',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      marginBottom: '1rem'
+                    }}
+                  >
+                    ← Back to Class
+                  </button>
+                </div>
+                <LiveClass
+                  classId={liveClassData.classId}
+                  sessionId={liveClassData.sessionId}
+                  sessionNumber={liveClassData.sessionData.sessionNumber}
+                  meetingLink={liveClassData.sessionData.meetingLink || liveClassData.sessionData.meetLink || ''}
+                  className={liveClassData.sessionData.className || 'Class'}
+                  onEndClass={() => {
+                    setLiveClassData(null);
+                    setActiveSection('manage-classes');
+                    setViewingClassId(liveClassData.classId);
+                  }}
+                />
               </div>
             )}
 

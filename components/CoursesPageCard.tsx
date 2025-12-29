@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { BookOpen, Clock, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
+import { DEFAULT_COURSE_IMAGE, getAvatarUrl } from '@/lib/constants';
 
 interface Course {
   id: string;
@@ -24,16 +25,23 @@ interface CoursesPageCardProps {
   course: Course;
 }
 
-const DEFAULT_IMAGE = 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg';
-
 export default function CoursesPageCard({ course }: CoursesPageCardProps) {
   const [imageError, setImageError] = useState(false);
-  const [imageSrc, setImageSrc] = useState(course.image || DEFAULT_IMAGE);
+  const [instructorImageError, setInstructorImageError] = useState(false);
+  const [imageSrc, setImageSrc] = useState(course.image || DEFAULT_COURSE_IMAGE);
+  const [instructorImageSrc, setInstructorImageSrc] = useState(course.instructorImage || getAvatarUrl(course.instructor, 128));
 
   const handleImageError = () => {
     if (!imageError) {
       setImageError(true);
-      setImageSrc(DEFAULT_IMAGE);
+      setImageSrc(DEFAULT_COURSE_IMAGE);
+    }
+  };
+
+  const handleInstructorImageError = () => {
+    if (!instructorImageError) {
+      setInstructorImageError(true);
+      setInstructorImageSrc(getAvatarUrl(course.instructor, 128));
     }
   };
 
@@ -47,10 +55,10 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
     >
       <Link
         href={`/product/${course.slug}`}
-        className="group block bg-dark-light rounded-2xl overflow-hidden transition-all duration-300"
+        className="group block bg-dark-light rounded-2xl overflow-hidden transition-all duration-300 h-full flex flex-col"
       >
         {/* Course Image */}
-        <div className="relative h-56 overflow-hidden">
+        <div className="relative h-56 overflow-hidden flex-shrink-0">
           <img
             src={imageSrc}
             alt={course.title}
@@ -61,9 +69,10 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
           {/* Instructor Badge */}
           <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-white/95 backdrop-blur-sm px-3 py-2 rounded-full shadow-lg">
             <img
-              src={course.instructorImage}
+              src={instructorImageSrc}
               alt={course.instructor}
-              className="w-8 h-8 rounded-full border-2 border-white"
+              className="w-8 h-8 rounded-full border-2 border-white object-cover"
+              onError={handleInstructorImageError}
             />
             <span className="text-sm font-semibold text-gray-800">
               {course.instructor}
@@ -72,8 +81,8 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
         </div>
 
         {/* Course Info */}
-        <div className="p-6">
-          <h2 className="text-white font-bold text-xl mb-5 line-clamp-2 group-hover:text-primary transition-colors duration-300 min-h-[3rem]">
+        <div className="p-6 flex flex-col flex-grow">
+          <h2 className="text-white font-bold text-xl mb-5 line-clamp-2 group-hover:text-primary transition-colors duration-300 min-h-[3.5rem]">
             {course.title}
           </h2>
 
@@ -82,7 +91,7 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
               <BookOpen className="w-5 h-5 text-gray-400" />
               <span className="text-base">
                 <span className="font-bold text-white text-lg">{course.sections}</span>{' '}
-                <span className="text-gray-400">Sections</span>
+                <span className="text-gray-400">{course.sections === 1 ? 'Session' : 'Sessions'}</span>
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -101,7 +110,7 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-5 border-t border-gray-700">
+          <div className="flex items-center justify-between pt-5 border-t border-gray-700 mt-auto">
             <div>
               <h3 className="text-yellow-400 font-bold text-2xl mb-1">
                 ₹{course.price.toFixed(2)}

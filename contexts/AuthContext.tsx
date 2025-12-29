@@ -20,6 +20,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -36,6 +37,7 @@ declare global {
     GoogleAuthProvider: any;
     signInWithPopup: any;
     onAuthStateChanged: any;
+    sendPasswordResetEmail: any;
     doc: any;
     setDoc: any;
     getDoc: any;
@@ -45,7 +47,7 @@ declare global {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const ADMIN_EMAIL = 'kartik@zefrix.com';
+  const ADMIN_EMAILS = ['kartik@zefrix.com', 'mariamqadeem181@gmail.com'];
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -79,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initScript.type = 'module';
     initScript.textContent = `
       import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-      import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+      import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
       import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
       
       const firebaseConfig = {
@@ -106,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.GoogleAuthProvider = GoogleAuthProvider;
         window.signInWithPopup = signInWithPopup;
         window.onAuthStateChanged = onAuthStateChanged;
+        window.sendPasswordResetEmail = sendPasswordResetEmail;
         window.doc = doc;
         window.setDoc = setDoc;
         window.getDoc = getDoc;
@@ -177,11 +180,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Fetch user data from Firestore
             if (window.firebaseDb && window.doc && window.getDoc) {
               const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid));
-              const isAdminEmail = normalizeEmail(firebaseUser.email) === ADMIN_EMAIL;
+              const isAdminEmail = ADMIN_EMAILS.some(adminEmail => normalizeEmail(firebaseUser.email) === normalizeEmail(adminEmail));
               if (userDoc.exists()) {
                 const userData = userDoc.data();
                 console.log('📄 User data from Firestore:', userData);
                 let role = userData.role || 'student';
+                
+                // Sync photoURL from Firebase Auth to Firestore if it exists and is different
+                const authPhotoURL = firebaseUser.photoURL || '';
+                const firestorePhotoURL = userData.photoURL || '';
+                if (authPhotoURL && authPhotoURL !== firestorePhotoURL && window.updateDoc) {
+                  try {
+                    await window.updateDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid), { 
+                      photoURL: authPhotoURL,
+                      profileImage: authPhotoURL // Also update profileImage to keep them in sync
+                    });
+                    console.log('📸 Synced photoURL from Firebase Auth to Firestore');
+                  } catch (err) {
+                    console.error('Failed to sync photoURL to Firestore:', err);
+                  }
+                }
+                
                 if (isAdminEmail) {
                   role = 'admin';
                   if (userData.role !== 'admin' && window.updateDoc) {
@@ -193,11 +212,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                   }
                 }
+                
+                // Use synced photoURL (from Auth if available, otherwise from Firestore)
+                const finalPhotoURL = authPhotoURL || firestorePhotoURL || userData.profileImage || '';
+                
                 setUser({
                   uid: firebaseUser.uid,
                   email: firebaseUser.email,
                   name: userData.name || firebaseUser.displayName,
-                  photoURL: userData.photoURL || firebaseUser.photoURL,
+                  photoURL: finalPhotoURL,
                   role,
                   isProfileComplete: userData.isProfileComplete || false,
                   isCreatorApproved: userData.isCreatorApproved || false,
@@ -356,7 +379,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cred = await window.createUserWithEmailAndPassword(window.firebaseAuth, email.trim(), password);
       await window.updateProfile(cred.user, { displayName: name });
       
-      const role = email.toLowerCase() === 'kartik@zefrix.com' ? 'admin' : 'student';
+      const isAdminEmail = ADMIN_EMAILS.some(adminEmail => normalizeEmail(email) === normalizeEmail(adminEmail));
+      const role = isAdminEmail ? 'admin' : 'student';
       
       // Wait for Firestore to be ready
       let attempts = 0;
@@ -408,7 +432,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       let role = 'student';
       if (!snap.exists()) {
-        role = user.email?.toLowerCase() === 'kartik@zefrix.com' ? 'admin' : 'student';
+        const isAdminEmailForGoogle = ADMIN_EMAILS.some(adminEmail => normalizeEmail(user.email) === normalizeEmail(adminEmail));
+        role = isAdminEmailForGoogle ? 'admin' : 'student';
         await window.setDoc(userRef, {
           uid: user.uid,
           email: user.email,
@@ -449,6 +474,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const resetPassword = async (email: string) => {
+    await waitForFirebase();
+
+    if (!window.sendPasswordResetEmail) {
+      throw new Error('Firebase Auth methods not available. Please refresh the page.');
+    }
+
+    try {
+      await window.sendPasswordResetEmail(window.firebaseAuth, email.trim());
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -458,6 +497,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signInWithGoogle,
         signOut,
+        resetPassword,
         isAuthenticated: !!user,
       }}
     >

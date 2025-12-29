@@ -5,9 +5,14 @@ import Link from 'next/link';
 import CoursesPageCard from '@/components/CoursesPageCard';
 import FooterCTA from '@/components/FooterCTA';
 import { motion } from 'framer-motion';
+<<<<<<< HEAD
 import { ChevronRight } from 'lucide-react';
 import { useReliableFetch } from '@/app/hooks/useReliableFetch';
 import { isClient } from '@/app/utils/environment';
+=======
+import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { DEFAULT_COURSE_IMAGE } from '@/lib/constants';
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
 
 declare global {
   interface Window {
@@ -39,6 +44,7 @@ const COURSES_PER_PAGE = 6;
 function CoursesContent() {
   const [currentPage, setCurrentPage] = useState(1);
 
+<<<<<<< HEAD
   // Use reliable fetch hook with retry logic
   const { data: approvedClasses = [], loading } = useReliableFetch<ApprovedClass[]>({
     fetchFn: async () => {
@@ -58,8 +64,19 @@ function CoursesContent() {
 
       // If Firebase is not initialized, try to initialize it
       if (!window.firebaseDb) {
+=======
+  useEffect(() => {
+    // Initialize Firebase if not already loaded
+    if (!window.firebaseDb) {
+      // Check if script is already being loaded to prevent duplicates
+      const existingScript = document.querySelector('script[data-firebase-init]');
+      if (existingScript) return;
+
+      const loadFirebase = () => {
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
         const script = document.createElement('script');
         script.type = 'module';
+        script.setAttribute('data-firebase-init', 'true');
         script.textContent = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -83,6 +100,7 @@ function CoursesContent() {
           window.dispatchEvent(new CustomEvent('firebaseReady'));
         `;
         document.head.appendChild(script);
+<<<<<<< HEAD
         
         // Wait for Firebase to be ready
         await new Promise<void>((resolve) => {
@@ -98,8 +116,122 @@ function CoursesContent() {
             resolve();
           }, 5000);
         });
+=======
+      };
+      loadFirebase();
+    }
+  }, []);
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    let isMounted = true;
+    const MAX_RETRIES = 10;
+    let retryCount = 0;
+
+    const fetchCourses = async () => {
+      // Wait for Firebase to be ready
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          timeoutId = setTimeout(fetchCourses, 200);
+          return;
+        } else {
+          console.error('❌ Firebase failed to load after maximum retries');
+          if (isMounted) {
+            setLoading(false);
+            setApprovedClasses([]);
+          }
+          return;
+        }
       }
 
+      if (!isMounted) return;
+
+      setLoading(true);
+      try {
+        console.log('📦 Fetching approved classes...');
+        const startTime = performance.now();
+        
+        const classesRef = window.collection(window.firebaseDb, 'classes');
+        const q = window.query(classesRef, window.where('status', '==', 'approved'));
+        
+        // Use getDocs for one-time fetch (much faster than onSnapshot)
+        const snapshot = await window.getDocs(q);
+        
+        const classes: ApprovedClass[] = [];
+        snapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
+        
+        const endTime = performance.now();
+        console.log(`✅ Loaded ${classes.length} approved classes in ${(endTime - startTime).toFixed(2)}ms`);
+        
+        // Sort by creation date (newest first)
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        // Fetch enrollment counts for all classes
+        if (classes.length > 0 && window.collection && window.query && window.where && window.getDocs) {
+          try {
+            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+            
+            // Fetch enrollment counts for all classes in parallel
+            const enrollmentPromises = classes.map(async (classItem) => {
+              try {
+                const enrollmentsQuery = window.query(
+                  enrollmentsRef,
+                  window.where('classId', '==', classItem.classId)
+                );
+                const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+                return {
+                  classId: classItem.classId,
+                  enrollmentCount: enrollmentsSnapshot.size
+                };
+              } catch (error) {
+                console.error(`Error fetching enrollment count for class ${classItem.classId}:`, error);
+                return {
+                  classId: classItem.classId,
+                  enrollmentCount: 0
+                };
+              }
+            });
+
+            const enrollmentCounts = await Promise.all(enrollmentPromises);
+            
+            // Add enrollment counts to classes
+            const enrollmentMap = new Map(
+              enrollmentCounts.map(ec => [ec.classId, ec.enrollmentCount])
+            );
+            
+            classes.forEach(classItem => {
+              (classItem as any).enrollmentCount = enrollmentMap.get(classItem.classId) || 0;
+            });
+          } catch (error) {
+            console.error('Error fetching enrollment counts:', error);
+            // Continue without enrollment counts if fetch fails
+            classes.forEach(classItem => {
+              (classItem as any).enrollmentCount = 0;
+            });
+          }
+        }
+        
+        if (isMounted) {
+          setApprovedClasses(classes);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('❌ Error fetching classes:', error);
+        if (isMounted) {
+          setApprovedClasses([]);
+          setLoading(false);
+        }
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
+      }
+
+<<<<<<< HEAD
       // Fetch classes
       console.log('Fetching approved classes from Firestore...');
       const classesRef = window.collection(window.firebaseDb, 'classes');
@@ -164,6 +296,36 @@ function CoursesContent() {
       level: 'Beginner' as const,
     };
   });
+=======
+    fetchCourses();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
+
+  // Convert approved classes to course format (only real classes, no dummy data)
+  const allCourses = approvedClasses.map((classItem) => ({
+    id: classItem.classId,
+    slug: classItem.classId,
+    title: classItem.title,
+    subtitle: classItem.subtitle || '',
+    category: classItem.category,
+    categorySlug: '',
+    subCategory: classItem.subCategory,
+    instructor: classItem.creatorName || 'Creator',
+    instructorId: '',
+    instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
+    image: (classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : DEFAULT_COURSE_IMAGE,
+    price: classItem.price,
+    originalPrice: classItem.price * 1.2,
+    sections: classItem.numberSessions, // This is actually sessions, but kept as 'sections' for component compatibility
+    duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
+    students: (classItem as any).enrollmentCount || 0, // Use actual enrollment count
+    level: 'Beginner' as const,
+  }));
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
 
   const totalPages = Math.ceil(allCourses.length / COURSES_PER_PAGE);
   const startIndex = (currentPage - 1) * COURSES_PER_PAGE;
@@ -173,6 +335,13 @@ function CoursesContent() {
   const handleNextPage = () => {
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
@@ -200,7 +369,7 @@ function CoursesContent() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-gray-300 text-sm md:text-base max-w-2xl mx-auto"
             >
-              Also it great have set behold land third he great years midst.
+              Discover live, interactive classes taught by expert creators. Learn new skills, connect with mentors, and grow in real-time.
             </motion.p>
             
             {/* Decorative Elements */}
@@ -222,8 +391,24 @@ function CoursesContent() {
       <section className="section-spacing-bottom bg-gradient-to-b from-transparent via-[#1A1A2E] to-[#1A1A2E]">
         <div className="container">
           {loading ? (
-            <div className="text-center py-12">
-              <p className="text-gray-400 text-lg">Loading courses...</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="animate-pulse">
+                  <div className="bg-gray-800 rounded-lg overflow-hidden">
+                    <div className="h-48 bg-gray-700"></div>
+                    <div className="p-6 space-y-4">
+                      <div className="h-6 bg-gray-700 rounded w-3/4"></div>
+                      <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+                      <div className="h-4 bg-gray-700 rounded w-full"></div>
+                      <div className="h-4 bg-gray-700 rounded w-2/3"></div>
+                      <div className="flex items-center justify-between pt-4">
+                        <div className="h-8 bg-gray-700 rounded w-24"></div>
+                        <div className="h-10 bg-gray-700 rounded w-32"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : currentCourses.length > 0 ? (
             <>
@@ -235,6 +420,7 @@ function CoursesContent() {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ duration: 0.6, delay: index * 0.1 }}
+                    className="h-full"
                   >
                     <CoursesPageCard course={course} />
                   </motion.div>
@@ -261,6 +447,20 @@ function CoursesContent() {
           {/* Pagination */}
           {allCourses.length > 0 && totalPages > 1 && (
             <div className="flex items-center justify-center gap-4 mt-12">
+              {currentPage > 1 && (
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <button
+                    onClick={handlePrevPage}
+                    className="flex items-center gap-2 bg-gradient-to-r from-primary to-secondary px-6 py-3 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity duration-200 shadow-lg"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                    <span>Previous</span>
+                  </button>
+                </motion.div>
+              )}
               <div className="text-white text-lg font-medium">
                 {currentPage} / {totalPages}
               </div>

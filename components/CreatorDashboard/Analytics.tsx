@@ -21,12 +21,18 @@ interface AnalyticsData {
   approvedClasses: number;
   pendingClasses: number;
   totalEnrollments: number;
+  totalAttended: number;
   totalRevenue: number;
+  averageRating: number;
+  totalRatings: number;
   enrollmentsByClass: Array<{
     classId: string;
     className: string;
     enrollmentCount: number;
+    attendedCount: number;
     revenue: number;
+    averageRating: number;
+    ratingCount: number;
   }>;
 }
 
@@ -37,7 +43,10 @@ export default function Analytics() {
     approvedClasses: 0,
     pendingClasses: 0,
     totalEnrollments: 0,
+    totalAttended: 0,
     totalRevenue: 0,
+    averageRating: 0,
+    totalRatings: 0,
     enrollmentsByClass: [],
   });
   const [loading, setLoading] = useState(true);
@@ -107,8 +116,22 @@ export default function Analytics() {
       const approvedClasses = classes.filter(c => c.status === 'approved');
       const pendingClasses = classes.filter(c => c.status === 'pending');
       
-      // Calculate enrollments and revenue by class
-      const enrollmentsByClassMap: Record<string, { className: string; count: number; revenue: number }> = {};
+      // Fetch ratings for all classes
+      const ratingsRef = window.collection(window.firebaseDb, 'ratings');
+      const allRatings: any[] = [];
+      const ratingsSnapshot = await window.getDocs(ratingsRef);
+      ratingsSnapshot.forEach((doc: any) => {
+        allRatings.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Calculate enrollments, attendance, revenue, and ratings by class
+      const enrollmentsByClassMap: Record<string, { 
+        className: string; 
+        count: number; 
+        attended: number;
+        revenue: number;
+        ratings: number[];
+      }> = {};
       
       allEnrollments.forEach((enrollment) => {
         const classId = enrollment.classId;
@@ -117,31 +140,68 @@ export default function Analytics() {
           enrollmentsByClassMap[classId] = {
             className: enrollment.className || classData?.title || 'Unknown Class',
             count: 0,
+            attended: 0,
             revenue: 0,
+            ratings: [],
           };
         }
         enrollmentsByClassMap[classId].count++;
-        enrollmentsByClassMap[classId].revenue += enrollment.classPrice || 0;
+        if (enrollment.attended) {
+          enrollmentsByClassMap[classId].attended++;
+        }
+        const classData = classes.find(c => c.classId === classId);
+        enrollmentsByClassMap[classId].revenue += enrollment.classPrice || classData?.price || 0;
+        
+        // Add rating if exists
+        if (enrollment.rating) {
+          enrollmentsByClassMap[classId].ratings.push(enrollment.rating);
+        }
       });
 
-      const enrollmentsByClass = Object.entries(enrollmentsByClassMap).map(([classId, data]) => ({
-        classId,
-        className: data.className,
-        enrollmentCount: data.count,
-        revenue: data.revenue,
-      }));
+      // Add ratings from ratings collection
+      allRatings.forEach((rating) => {
+        const classId = rating.classId;
+        if (enrollmentsByClassMap[classId]) {
+          enrollmentsByClassMap[classId].ratings.push(rating.rating);
+        }
+      });
+
+      const enrollmentsByClass = Object.entries(enrollmentsByClassMap).map(([classId, data]) => {
+        const avgRating = data.ratings.length > 0
+          ? data.ratings.reduce((sum, r) => sum + r, 0) / data.ratings.length
+          : 0;
+        return {
+          classId,
+          className: data.className,
+          enrollmentCount: data.count,
+          attendedCount: data.attended,
+          revenue: data.revenue,
+          averageRating: avgRating,
+          ratingCount: data.ratings.length,
+        };
+      });
 
       // Sort by enrollment count (descending)
       enrollmentsByClass.sort((a, b) => b.enrollmentCount - a.enrollmentCount);
 
       const totalRevenue = enrollmentsByClass.reduce((sum, item) => sum + item.revenue, 0);
+      const totalAttended = allEnrollments.filter(e => e.attended).length;
+      const allRatingsList = allRatings.map(r => r.rating).concat(
+        allEnrollments.filter(e => e.rating).map(e => e.rating)
+      );
+      const averageRating = allRatingsList.length > 0
+        ? allRatingsList.reduce((sum, r) => sum + r, 0) / allRatingsList.length
+        : 0;
 
       setAnalytics({
         totalClasses: classes.length,
         approvedClasses: approvedClasses.length,
         pendingClasses: pendingClasses.length,
         totalEnrollments: allEnrollments.length,
+        totalAttended,
         totalRevenue,
+        averageRating,
+        totalRatings: allRatingsList.length,
         enrollmentsByClass,
       });
     } catch (error) {
@@ -226,6 +286,42 @@ export default function Analytics() {
             ₹{analytics.totalRevenue.toFixed(2)}
           </div>
         </div>
+
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.05)',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          border: '1px solid rgba(255, 255, 255, 0.1)'
+        }}>
+          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+            Attendance Rate
+          </div>
+          <div style={{ color: '#4CAF50', fontSize: '2rem', fontWeight: '700' }}>
+            {analytics.totalEnrollments > 0 
+              ? `${((analytics.totalAttended / analytics.totalEnrollments) * 100).toFixed(1)}%`
+              : '0%'}
+          </div>
+          <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+            {analytics.totalAttended} / {analytics.totalEnrollments} attended
+          </div>
+        </div>
+
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.05)',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          border: '1px solid rgba(255, 255, 255, 0.1)'
+        }}>
+          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+            Average Rating
+          </div>
+          <div style={{ color: '#FFD700', fontSize: '2rem', fontWeight: '700' }}>
+            {analytics.averageRating > 0 ? `⭐ ${analytics.averageRating.toFixed(1)}` : 'N/A'}
+          </div>
+          <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+            {analytics.totalRatings} ratings
+          </div>
+        </div>
       </div>
 
       {/* Enrollments by Class */}
@@ -258,6 +354,8 @@ export default function Analytics() {
                 }}>
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Class Name</th>
                   <th style={{ padding: '1rem', textAlign: 'right', color: '#fff', fontWeight: '600' }}>Enrollments</th>
+                  <th style={{ padding: '1rem', textAlign: 'right', color: '#fff', fontWeight: '600' }}>Attended</th>
+                  <th style={{ padding: '1rem', textAlign: 'right', color: '#fff', fontWeight: '600' }}>Rating</th>
                   <th style={{ padding: '1rem', textAlign: 'right', color: '#fff', fontWeight: '600' }}>Revenue</th>
                 </tr>
               </thead>
@@ -281,6 +379,12 @@ export default function Analytics() {
                     </td>
                     <td style={{ padding: '1rem', textAlign: 'right', color: 'rgba(255, 255, 255, 0.9)' }}>
                       {item.enrollmentCount}
+                    </td>
+                    <td style={{ padding: '1rem', textAlign: 'right', color: 'rgba(255, 255, 255, 0.8)' }}>
+                      {item.attendedCount} ({item.enrollmentCount > 0 ? ((item.attendedCount / item.enrollmentCount) * 100).toFixed(0) : 0}%)
+                    </td>
+                    <td style={{ padding: '1rem', textAlign: 'right', color: '#FFD700', fontWeight: '600' }}>
+                      {item.averageRating > 0 ? `⭐ ${item.averageRating.toFixed(1)} (${item.ratingCount})` : 'No ratings'}
                     </td>
                     <td style={{ padding: '1rem', textAlign: 'right', color: '#FFD700', fontWeight: '600' }}>
                       ₹{item.revenue.toFixed(2)}

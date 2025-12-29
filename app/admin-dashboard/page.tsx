@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useNotification } from '@/contexts/NotificationContext';
 import { BookOpen, CheckCircle, Clock, Users, Calendar, Eye, Mail, X, User, CreditCard, FileText, TrendingUp } from 'lucide-react';
+import NotificationList from '@/components/Notifications/NotificationList';
+import NotificationBadge from '@/components/Notifications/NotificationBadge';
 
 declare global {
   interface Window {
@@ -14,6 +16,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
     doc: any;
     updateDoc: any;
     getDoc: any;
@@ -59,7 +62,7 @@ interface Stats {
   pendingClasses: number;
 }
 
-type AdminPage = 'dashboard' | 'creators' | 'approve-classes' | 'contact-messages' | 'payouts' | 'enrollments';
+type AdminPage = 'dashboard' | 'creators' | 'approve-classes' | 'contact-messages' | 'payouts' | 'enrollments' | 'notifications';
 
 export default function AdminDashboard() {
   const { showSuccess, showError, showInfo } = useNotification();
@@ -99,10 +102,16 @@ export default function AdminDashboard() {
   // Payouts
   const [payouts, setPayouts] = useState<any[]>([]);
   const [loadingPayouts, setLoadingPayouts] = useState(false);
+  const [processingPayout, setProcessingPayout] = useState<string | null>(null);
+  const [selectedPayout, setSelectedPayout] = useState<any | null>(null);
 
   // Modal state
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedClassDetails, setSelectedClassDetails] = useState<any>(null);
+  const [classSessions, setClassSessions] = useState<any[]>([]);
+  const [classBankDetails, setClassBankDetails] = useState<any>(null);
+  const [loadingClassDetails, setLoadingClassDetails] = useState(false);
 
   const router = useRouter();
 
@@ -118,7 +127,7 @@ export default function AdminDashboard() {
         firebaseAuthConfig.innerHTML = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc, collection, query, where, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, collection, query, where, getDocs, updateDoc, orderBy, limit, onSnapshot, deleteDoc, writeBatch, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -140,6 +149,13 @@ export default function AdminDashboard() {
           window.doc = doc;
           window.updateDoc = updateDoc;
           window.getDoc = getDoc;
+          window.orderBy = orderBy;
+          window.limit = limit;
+          window.onSnapshot = onSnapshot;
+          window.deleteDoc = deleteDoc;
+          window.writeBatch = writeBatch;
+          window.addDoc = addDoc;
+          window.serverTimestamp = serverTimestamp;
 
           window.logout = async () => {
             try {
@@ -189,31 +205,52 @@ export default function AdminDashboard() {
 
     const handleUserLoaded = (e: any) => {
       setUser(e.detail.user);
+      // Trigger initial data fetch when user is loaded
+      if (window.firebaseDb && activePage === 'dashboard') {
+        setTimeout(() => {
+          calculateStats();
+        }, 100);
+      }
     };
     window.addEventListener('userLoaded', handleUserLoaded);
 
     return () => {
       window.removeEventListener('userLoaded', handleUserLoaded);
     };
-  }, []);
+  }, [activePage]);
 
-  // Fetch pending classes
-  const fetchPendingClasses = async () => {
-    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-      return;
+  // Set up real-time listener for pending classes
+  const setupPendingClassesListener = () => {
+    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+      return () => {};
     }
 
     setLoadingClasses(true);
     try {
       const classesRef = window.collection(window.firebaseDb, 'classes');
       const q = window.query(classesRef, window.where('status', '==', 'pending'));
-      const querySnapshot = await window.getDocs(q);
+      
+      const unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+        const classes: PendingClass[] = [];
+        snapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
 
-      const classes: PendingClass[] = [];
-      querySnapshot.forEach((doc: any) => {
-        classes.push({ classId: doc.id, ...doc.data() });
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setPendingClasses(classes);
+        setLoadingClasses(false);
+      }, (error: any) => {
+        console.error('Error in pending classes listener:', error);
+        showError('Failed to load pending classes. Please refresh the page.');
+        setLoadingClasses(false);
       });
 
+<<<<<<< HEAD
       classes.sort((a, b) => {
         const aTime = a.createdAt?.toMillis?.() || 0;
         const bTime = b.createdAt?.toMillis?.() || 0;
@@ -227,11 +264,67 @@ export default function AdminDashboard() {
       })));
 
       setPendingClasses(classes);
+=======
+      return unsubscribe;
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
     } catch (error) {
-      console.error('Error fetching pending classes:', error);
-      showError('Failed to load pending classes. Please refresh the page.');
-    } finally {
+      console.error('Error setting up pending classes listener:', error);
       setLoadingClasses(false);
+      return () => {};
+    }
+  };
+
+  // Handle view class details
+  const handleViewClassDetails = async (classId: string) => {
+    if (!window.firebaseDb || !window.collection || !window.doc || !window.getDoc || !window.query || !window.where || !window.getDocs) {
+      showError('Firebase not initialized');
+      return;
+    }
+
+    setLoadingClassDetails(true);
+    try {
+      // Get class data
+      const classRef = window.doc(window.firebaseDb, 'classes', classId);
+      const classSnap = await window.getDoc(classRef);
+      if (classSnap.exists()) {
+        setSelectedClassDetails({ classId, ...classSnap.data() });
+      }
+
+      // Get sessions
+      const sessionsRef = window.collection(window.firebaseDb, 'sessions');
+      const sessionsQuery = window.query(sessionsRef, window.where('classId', '==', classId));
+      const sessionsSnapshot = await window.getDocs(sessionsQuery);
+      const sessions: any[] = [];
+      sessionsSnapshot.forEach((doc: any) => {
+        sessions.push({ id: doc.id, ...doc.data() });
+      });
+      sessions.sort((a, b) => {
+        const aDate = a.sessionDate?.toDate ? a.sessionDate.toDate() : new Date(a.sessionDate);
+        const bDate = b.sessionDate?.toDate ? b.sessionDate.toDate() : new Date(b.sessionDate);
+        return aDate.getTime() - bDate.getTime();
+      });
+      setClassSessions(sessions);
+
+      // Get bank details from class creator
+      if (classSnap.exists()) {
+        const classData = classSnap.data();
+        const creatorRef = window.doc(window.firebaseDb, 'users', classData.creatorId);
+        const creatorSnap = await window.getDoc(creatorRef);
+        if (creatorSnap.exists()) {
+          const creatorData = creatorSnap.data();
+          setClassBankDetails({
+            accountHolderName: creatorData.bankAccountHolderName || creatorData.accountHolderName,
+            accountNumber: creatorData.bankAccountNumber || creatorData.accountNumber,
+            ifscCode: creatorData.bankIFSC || creatorData.ifscCode,
+            bankName: creatorData.bankName
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching class details:', error);
+      showError('Failed to load class details');
+    } finally {
+      setLoadingClassDetails(false);
     }
   };
 
@@ -258,12 +351,37 @@ export default function AdminDashboard() {
         adminBy: user.email || user.uid,
       });
 
-      // Send to webhook via Next.js API route
-      try {
-        fetch(`/api/webhook/admin-action?class_id=${encodeURIComponent(classId)}&action=${encodeURIComponent(action)}`, {
-          method: 'GET',
-        }).catch(() => { });
-      } catch (webhookError) {
+      // Get class data for email
+      const classSnap = await window.getDoc(classRef);
+      if (classSnap.exists()) {
+        const classData = classSnap.data();
+        
+        // Note: Sessions are NOT auto-generated on approval
+        // Creators must manually create sessions with Google Meet links using SessionForm
+        // The schedule data in the class serves as a template for session creation
+        
+        // Send approval/rejection email to creator
+        try {
+          await fetch('/api/email/class-approval', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              creatorName: classData.creatorName || 'Creator',
+              creatorEmail: classData.creatorEmail || '',
+              creatorId: classData.creatorId, // Pass creatorId for notifications
+              className: classData.title || 'Class',
+              classId: classId,
+              status: action,
+              rejectionReason: action === 'rejected' ? 'Please review the class guidelines and resubmit.' : undefined,
+            }),
+          }).catch(() => {
+            // Email failure shouldn't block the action
+          });
+        } catch (emailError) {
+          console.error('Error sending approval email:', emailError);
+        }
       }
 
       setPendingClasses(prev => prev.filter(cls => cls.classId !== classId));
@@ -280,22 +398,37 @@ export default function AdminDashboard() {
   };
 
   // Fetch approved classes
-  const fetchApprovedClasses = async () => {
-    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-      return;
+  // Set up real-time listener for approved classes
+  const setupApprovedClassesListener = () => {
+    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+      return () => {};
     }
 
     setLoadingApproved(true);
     try {
       const classesRef = window.collection(window.firebaseDb, 'classes');
       const q = window.query(classesRef, window.where('status', '==', 'approved'));
-      const querySnapshot = await window.getDocs(q);
+      
+      const unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+        const classes: PendingClass[] = [];
+        snapshot.forEach((doc: any) => {
+          classes.push({ classId: doc.id, ...doc.data() });
+        });
 
-      const classes: PendingClass[] = [];
-      querySnapshot.forEach((doc: any) => {
-        classes.push({ classId: doc.id, ...doc.data() });
+        classes.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setApprovedClasses(classes);
+        setLoadingApproved(false);
+      }, (error: any) => {
+        console.error('Error in approved classes listener:', error);
+        setLoadingApproved(false);
       });
 
+<<<<<<< HEAD
       classes.sort((a, b) => {
         const aTime = a.createdAt?.toMillis?.() || 0;
         const bTime = b.createdAt?.toMillis?.() || 0;
@@ -309,14 +442,17 @@ export default function AdminDashboard() {
       })));
 
       setApprovedClasses(classes);
+=======
+      return unsubscribe;
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
     } catch (error) {
-      console.error('Error fetching approved classes:', error);
-    } finally {
+      console.error('Error setting up approved classes listener:', error);
       setLoadingApproved(false);
+      return () => {};
     }
   };
 
-  // Fetch real creators from Firestore with enhanced stats
+  // Fetch real creators from Firestore with enhanced stats (optimized with parallel queries)
   const fetchRealCreators = async () => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
       return;
@@ -324,12 +460,20 @@ export default function AdminDashboard() {
 
     setLoadingCreators(true);
     try {
+      // Run all queries in parallel for maximum performance
       const usersRef = window.collection(window.firebaseDb, 'users');
-      const q = window.query(usersRef, window.where('role', '==', 'creator'));
-      const querySnapshot = await window.getDocs(q);
+      const classesRef = window.collection(window.firebaseDb, 'classes');
+      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
 
+      const [creatorsSnapshot, allClassesSnapshot, enrollmentsSnapshot] = await Promise.all([
+        window.getDocs(window.query(usersRef, window.where('role', '==', 'creator'))),
+        window.getDocs(window.query(classesRef)),
+        window.getDocs(window.query(enrollmentsRef))
+      ]);
+
+      // Initialize creators array
       const creatorsData: Creator[] = [];
-      querySnapshot.forEach((doc: any) => {
+      creatorsSnapshot.forEach((doc: any) => {
         const data = doc.data();
         creatorsData.push({
           uid: doc.id,
@@ -346,15 +490,15 @@ export default function AdminDashboard() {
         });
       });
 
-      // Fetch all classes
-      const classesRef = window.collection(window.firebaseDb, 'classes');
-      const allClassesQuery = await window.getDocs(classesRef);
-
+      // Build creator stats and class-to-creator mapping in single pass
       const creatorStats: { [key: string]: { total: number; approved: number; pending: number } } = {};
-      allClassesQuery.forEach((doc: any) => {
+      const classToCreator: { [key: string]: string } = {};
+
+      allClassesSnapshot.forEach((doc: any) => {
         const classData = doc.data();
         const creatorId = classData.creatorId;
         if (creatorId) {
+          classToCreator[doc.id] = creatorId;
           if (!creatorStats[creatorId]) {
             creatorStats[creatorId] = { total: 0, approved: 0, pending: 0 };
           }
@@ -367,19 +511,7 @@ export default function AdminDashboard() {
         }
       });
 
-      // Fetch enrollments to calculate earnings and enrollment counts
-      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-      const enrollmentsSnapshot = await window.getDocs(enrollmentsRef);
-
-      // Build class to creator mapping
-      const classToCreator: { [key: string]: string } = {};
-      allClassesQuery.forEach((doc: any) => {
-        const classData = doc.data();
-        if (classData.creatorId) {
-          classToCreator[doc.id] = classData.creatorId;
-        }
-      });
-
+      // Calculate earnings and enrollments in single pass
       const creatorEarnings: { [key: string]: { enrollments: number; earnings: number } } = {};
       enrollmentsSnapshot.forEach((doc: any) => {
         const enrollment = doc.data();
@@ -420,7 +552,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Calculate real statistics
+  // Calculate real statistics (optimized with parallel queries)
   const calculateStats = async () => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
       return;
@@ -428,9 +560,20 @@ export default function AdminDashboard() {
 
     setLoadingStats(true);
     try {
+      // Run all queries in parallel for better performance
       const usersRef = window.collection(window.firebaseDb, 'users');
-      const usersSnapshot = await window.getDocs(usersRef);
+      const classesRef = window.collection(window.firebaseDb, 'classes');
+      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
 
+      // Parallel queries
+      const [usersSnapshot, approvedSnapshot, pendingSnapshot, enrollmentsSnapshot] = await Promise.all([
+        window.getDocs(window.query(usersRef)),
+        window.getDocs(window.query(classesRef, window.where('status', '==', 'approved'))),
+        window.getDocs(window.query(classesRef, window.where('status', '==', 'pending'))),
+        window.getDocs(window.query(enrollmentsRef))
+      ]);
+
+      // Process results
       let totalCreators = 0;
       let totalStudents = 0;
 
@@ -443,34 +586,34 @@ export default function AdminDashboard() {
         }
       });
 
-      const classesRef = window.collection(window.firebaseDb, 'classes');
-      const approvedQuery = window.query(classesRef, window.where('status', '==', 'approved'));
-      const approvedSnapshot = await window.getDocs(approvedQuery);
-
-      const pendingQuery = window.query(classesRef, window.where('status', '==', 'pending'));
-      const pendingSnapshot = await window.getDocs(pendingQuery);
-
       let activeClasses = 0;
       let totalRevenue = 0;
 
       approvedSnapshot.forEach((doc: any) => {
-        const classData = doc.data();
         activeClasses++;
+        const classData = doc.data();
+        // Calculate revenue based on actual enrollments, not maxSeats
         if (classData.price) {
-          totalRevenue += classData.price * (classData.maxSeats || 1);
+          // This is just an estimate - for accurate revenue, count enrollments per class
+          totalRevenue += classData.price;
         }
       });
 
-      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-      const enrollmentsSnapshot = await window.getDocs(enrollmentsRef);
-      const totalEnrollments = enrollmentsSnapshot.size;
+      // Calculate actual revenue from enrollments
+      let actualRevenue = 0;
+      enrollmentsSnapshot.forEach((doc: any) => {
+        const enrollment = doc.data();
+        if (enrollment.classPrice) {
+          actualRevenue += enrollment.classPrice;
+        }
+      });
 
       setStats({
-        totalEnrollments,
+        totalEnrollments: enrollmentsSnapshot.size,
         totalCreators,
         activeClasses,
         totalStudents,
-        totalRevenue,
+        totalRevenue: actualRevenue || totalRevenue, // Use actual revenue if available
         pendingClasses: pendingSnapshot.size
       });
     } catch (error) {
@@ -510,16 +653,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // Fetch enrollments
+  // Fetch enrollments (optimized - removed unnecessary retry delays)
   const fetchEnrollments = async () => {
-    let retries = 0;
-    while ((!window.firebaseDb || !window.collection || !window.getDocs) && retries < 10) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      retries++;
-    }
-
     if (!window.firebaseDb || !window.collection || !window.getDocs) {
-      setLoadingEnrollments(false);
       return;
     }
 
@@ -547,29 +683,24 @@ export default function AdminDashboard() {
     }
   };
 
-  // Calculate payouts
+  // Calculate payouts (optimized with parallel queries, removed retry delays)
   const fetchPayouts = async () => {
-    let retries = 0;
-    while ((!window.firebaseDb || !window.collection || !window.getDocs || !window.query || !window.where) && retries < 10) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      retries++;
-    }
-
-    if (!window.firebaseDb || !window.collection || !window.getDocs) {
+    if (!window.firebaseDb || !window.collection || !window.getDocs || !window.query || !window.where) {
       return;
     }
 
     setLoadingPayouts(true);
     try {
+      // Run all queries in parallel for maximum performance
       const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-      const enrollmentsSnapshot = await window.getDocs(enrollmentsRef);
-
       const usersRef = window.collection(window.firebaseDb, 'users');
-      const creatorsQuery = window.query(usersRef, window.where('role', '==', 'creator'));
-      const creatorsSnapshot = await window.getDocs(creatorsQuery);
-
       const classesRef = window.collection(window.firebaseDb, 'classes');
-      const classesSnapshot = await window.getDocs(classesRef);
+
+      const [enrollmentsSnapshot, creatorsSnapshot, classesSnapshot] = await Promise.all([
+        window.getDocs(window.query(enrollmentsRef)),
+        window.getDocs(window.query(usersRef, window.where('role', '==', 'creator'))),
+        window.getDocs(window.query(classesRef))
+      ]);
 
       const classToCreator: { [key: string]: any } = {};
       classesSnapshot.forEach((doc: any) => {
@@ -580,7 +711,7 @@ export default function AdminDashboard() {
         };
       });
 
-      const creatorEarnings: { [key: string]: { name: string; email: string; totalEarnings: number; classCount: number; enrollmentCount: number } } = {};
+      const creatorEarnings: { [key: string]: { name: string; email: string; totalEarnings: number; classCount: number; enrollmentCount: number; bankDetails?: any } } = {};
 
       enrollmentsSnapshot.forEach((doc: any) => {
         const enrollment = doc.data();
@@ -595,7 +726,8 @@ export default function AdminDashboard() {
               email: '',
               totalEarnings: 0,
               classCount: 0,
-              enrollmentCount: 0
+              enrollmentCount: 0,
+              bankDetails: null
             };
           }
           creatorEarnings[creatorId].totalEarnings += enrollment.classPrice || 0;
@@ -607,6 +739,14 @@ export default function AdminDashboard() {
         const creatorData = doc.data();
         if (creatorEarnings[doc.id]) {
           creatorEarnings[doc.id].email = creatorData.email || '';
+          // Fetch bank details
+          creatorEarnings[doc.id].bankDetails = {
+            accountHolderName: creatorData.bankAccountHolderName || creatorData.accountHolderName || '',
+            accountNumber: creatorData.bankAccountNumber || creatorData.accountNumber || '',
+            ifscCode: creatorData.bankIFSC || creatorData.ifscCode || '',
+            bankName: creatorData.bankName || '',
+            upiId: creatorData.upiId || ''
+          };
         }
       });
 
@@ -617,10 +757,26 @@ export default function AdminDashboard() {
         }
       });
 
+      // Fetch existing payout records to check paid status
+      const payoutsRef = window.collection(window.firebaseDb, 'payouts');
+      const payoutsQuery = window.query(
+        payoutsRef,
+        window.where('status', '==', 'paid')
+      );
+      const paidPayoutsSnapshot = await window.getDocs(payoutsQuery);
+      
+      const paidPayoutsMap: { [key: string]: boolean } = {};
+      paidPayoutsSnapshot.forEach((doc: any) => {
+        const payoutData = doc.data();
+        if (payoutData.creatorId) {
+          paidPayoutsMap[payoutData.creatorId] = true;
+        }
+      });
+
       const payoutsArray = Object.keys(creatorEarnings).map(creatorId => ({
         creatorId,
         ...creatorEarnings[creatorId],
-        status: 'pending'
+        status: paidPayoutsMap[creatorId] ? 'paid' : 'pending'
       }));
 
       payoutsArray.sort((a, b) => b.totalEarnings - a.totalEarnings);
@@ -632,26 +788,106 @@ export default function AdminDashboard() {
     }
   };
 
-  // Load data based on active page
-  useEffect(() => {
-    if (!window.firebaseDb) return;
-
-    if (activePage === 'dashboard') {
-      calculateStats();
-    } else if (activePage === 'creators') {
-      fetchRealCreators();
-    } else if (activePage === 'approve-classes') {
-      fetchPendingClasses();
-      fetchApprovedClasses();
-      calculateStats();
-    } else if (activePage === 'contact-messages') {
-      fetchContactMessages();
-    } else if (activePage === 'enrollments') {
-      fetchEnrollments();
-    } else if (activePage === 'payouts') {
-      fetchPayouts();
+  // Mark payout as paid
+  const handleMarkPayoutAsPaid = async (payout: any) => {
+    if (!window.firebaseDb || !window.collection || !window.addDoc || !window.serverTimestamp) {
+      showError('Firebase not initialized');
+      return;
     }
-  }, [activePage]);
+
+    if (!user) {
+      showError('You must be logged in to perform this action');
+      return;
+    }
+
+    setProcessingPayout(payout.creatorId);
+
+    try {
+      // Create payout record in Firestore
+      const payoutsRef = window.collection(window.firebaseDb, 'payouts');
+      await window.addDoc(payoutsRef, {
+        creatorId: payout.creatorId,
+        creatorName: payout.name,
+        creatorEmail: payout.email,
+        amount: payout.totalEarnings,
+        classCount: payout.classCount,
+        enrollmentCount: payout.enrollmentCount,
+        bankDetails: payout.bankDetails || {},
+        status: 'paid',
+        paidBy: user.email || user.uid,
+        paidAt: window.serverTimestamp(),
+        createdAt: window.serverTimestamp()
+      });
+
+      // Update local state
+      setPayouts(prev => prev.map(p => 
+        p.creatorId === payout.creatorId 
+          ? { ...p, status: 'paid' }
+          : p
+      ));
+
+      showSuccess(`Payout marked as paid for ${payout.name}`);
+    } catch (error: any) {
+      console.error('Error marking payout as paid:', error);
+      showError(`Failed to mark payout as paid: ${error.message}`);
+    } finally {
+      setProcessingPayout(null);
+    }
+  };
+
+  // Wait for Firebase and user to be ready, then load initial data
+  useEffect(() => {
+    let retryCount = 0;
+    const MAX_RETRIES = 30; // 6 seconds max wait (30 * 200ms)
+    let timeoutId: NodeJS.Timeout | null = null;
+    let isMounted = true;
+    let pendingUnsubscribe: (() => void) | null = null;
+    let approvedUnsubscribe: (() => void) | null = null;
+
+    const checkAndLoadData = () => {
+      if (!isMounted) return;
+
+      if (!window.firebaseDb || !user) {
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          timeoutId = setTimeout(checkAndLoadData, 200);
+          return;
+        }
+        console.warn('Firebase or user not ready after maximum retries');
+        return;
+      }
+
+      // Firebase and user are ready, load data for current page
+      if (activePage === 'dashboard') {
+        calculateStats();
+      } else if (activePage === 'creators') {
+        fetchRealCreators();
+      } else if (activePage === 'approve-classes') {
+        // Clean up previous listeners if any
+        if (pendingUnsubscribe) pendingUnsubscribe();
+        if (approvedUnsubscribe) approvedUnsubscribe();
+        pendingUnsubscribe = setupPendingClassesListener();
+        approvedUnsubscribe = setupApprovedClassesListener();
+        calculateStats();
+      } else if (activePage === 'contact-messages') {
+        fetchContactMessages();
+      } else if (activePage === 'enrollments') {
+        fetchEnrollments();
+      } else if (activePage === 'payouts') {
+        fetchPayouts();
+      }
+    };
+
+    checkAndLoadData();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+      if (pendingUnsubscribe) pendingUnsubscribe();
+      if (approvedUnsubscribe) approvedUnsubscribe();
+    };
+  }, [activePage, user]);
+
 
   const handleLogout = () => {
     if (confirm('Log out of Zefrix?')) {
@@ -906,7 +1142,6 @@ export default function AdminDashboard() {
           <h2>All Creators</h2>
           <p>Manage creator accounts and profiles</p>
         </div>
-        <button className="button-dark">Add Creator</button>
       </div>
 
       <div className="search-wrapper">
@@ -1228,6 +1463,15 @@ export default function AdminDashboard() {
                       <div className="creator-email-mini">{classItem.creatorEmail || ''}</div>
                     </div>
                   </div>
+
+                  <button
+                    onClick={() => handleViewClassDetails(classItem.classId)}
+                    className="class-action-btn"
+                    style={{ marginTop: '1rem', width: '100%', background: 'rgba(255, 255, 255, 0.1)' }}
+                  >
+                    <Eye size={16} />
+                    <span>View Details</span>
+                  </button>
                 </div>
               </div>
             );
@@ -1236,6 +1480,132 @@ export default function AdminDashboard() {
       ) : (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
           No approved classes yet.
+        </div>
+      )}
+
+      {/* Class Details Modal */}
+      {selectedClassDetails && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '2rem'
+        }}>
+          <div style={{
+            background: '#1A1A2E',
+            borderRadius: '16px',
+            padding: '2rem',
+            maxWidth: '800px',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            width: '100%',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ color: '#fff', fontSize: '1.5rem' }}>{selectedClassDetails.title}</h2>
+              <button
+                onClick={() => {
+                  setSelectedClassDetails(null);
+                  setClassSessions([]);
+                  setClassBankDetails(null);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '1.5rem'
+                }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {loadingClassDetails ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>Loading...</div>
+            ) : (
+              <>
+                {/* Sessions */}
+                <div style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.25rem' }}>Sessions ({classSessions.length})</h3>
+                  {classSessions.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {classSessions.map((session, idx) => (
+                        <div key={idx} style={{
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          padding: '1rem',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}>
+                          <div style={{ color: '#fff', marginBottom: '0.5rem', fontWeight: '600' }}>
+                            Session {idx + 1}
+                          </div>
+                          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                            Date: {session.sessionDate?.toDate ? new Date(session.sessionDate.toDate()).toLocaleString() : 'N/A'}
+                          </div>
+                          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                            Time: {session.sessionTime || session.startTime || 'N/A'}
+                          </div>
+                          {session.meetingLink && (
+                            <div style={{ marginTop: '0.5rem' }}>
+                              <a href={session.meetingLink} target="_blank" rel="noopener noreferrer" style={{
+                                color: '#D92A63',
+                                textDecoration: 'none',
+                                fontSize: '0.875rem'
+                              }}>
+                                Meeting Link →
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color: 'rgba(255, 255, 255, 0.5)', padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px' }}>
+                      No sessions configured yet
+                    </div>
+                  )}
+                </div>
+
+                {/* Bank Details */}
+                <div>
+                  <h3 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.25rem' }}>Bank Details</h3>
+                  {classBankDetails ? (
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      padding: '1rem',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        <strong style={{ color: '#fff' }}>Account Holder:</strong> {classBankDetails.accountHolderName || 'N/A'}
+                      </div>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        <strong style={{ color: '#fff' }}>Account Number:</strong> {classBankDetails.accountNumber || 'N/A'}
+                      </div>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        <strong style={{ color: '#fff' }}>IFSC:</strong> {classBankDetails.ifscCode || 'N/A'}
+                      </div>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        <strong style={{ color: '#fff' }}>Bank Name:</strong> {classBankDetails.bankName || 'N/A'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ color: 'rgba(255, 255, 255, 0.5)', padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px' }}>
+                      Bank details not provided yet
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -1341,11 +1711,11 @@ export default function AdminDashboard() {
           <h2>Creator Payouts</h2>
           <p>Manage manual payouts to creators</p>
         </div>
-        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.875rem', textAlign: 'right' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#FFD700' }}>
-            ₹{payouts.reduce((sum, p) => sum + p.totalEarnings, 0).toFixed(2)}
+        <div className="payouts-total-summary">
+          <div className="payouts-total-amount">
+            ₹{payouts.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.totalEarnings, 0).toFixed(2)}
           </div>
-          <div>Total Pending</div>
+          <div className="payouts-total-label">Total Pending</div>
         </div>
       </div>
 
@@ -1354,61 +1724,190 @@ export default function AdminDashboard() {
           Calculating payouts...
         </div>
       ) : payouts.length > 0 ? (
-        <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '16px', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.1)' }}>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Creator</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Classes</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Enrollments</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Total Earnings</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Status</th>
-                <th style={{ padding: '1rem', textAlign: 'left', color: '#FFD700' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payouts.map((payout) => (
-                <tr key={payout.creatorId} style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                  <td style={{ padding: '1rem' }}>
-                    <div>
-                      <div style={{ fontWeight: '600' }}>{payout.name}</div>
-                      <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)' }}>
-                        {payout.email}
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '1rem' }}>{payout.classCount}</td>
-                  <td style={{ padding: '1rem' }}>{payout.enrollmentCount}</td>
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#FFD700' }}>
-                      ₹{payout.totalEarnings.toFixed(2)}
-                    </div>
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <span style={{
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '12px',
-                      fontSize: '0.875rem',
-                      background: payout.status === 'paid' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 152, 0, 0.2)',
-                      color: payout.status === 'paid' ? '#4CAF50' : '#FF9800'
-                    }}>
-                      {payout.status === 'paid' ? 'Paid' : 'Pending'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <button
-                      className="button-dark"
-                      onClick={() => showInfo(`Manual payout for ${payout.name}\n\nAmount: ₹${payout.totalEarnings.toFixed(2)}\n\nPlease process payment via bank transfer and mark as paid in your records.`)}
-                      style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                    >
-                      Process Payout
-                    </button>
-                  </td>
+        <>
+          <div className="payouts-table-wrapper">
+            <table className="payouts-table">
+              <thead>
+                <tr>
+                  <th>Creator</th>
+                  <th>Classes</th>
+                  <th>Enrollments</th>
+                  <th>Total Earnings</th>
+                  <th>Bank Details</th>
+                  <th>Status</th>
+                  <th>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {payouts.map((payout) => (
+                  <tr key={payout.creatorId}>
+                    <td>
+                      <div>
+                        <div style={{ fontWeight: '600' }}>{payout.name}</div>
+                        <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)' }}>
+                          {payout.email}
+                        </div>
+                      </div>
+                    </td>
+                    <td>{payout.classCount}</td>
+                    <td>{payout.enrollmentCount}</td>
+                    <td>
+                      <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#FFD700' }}>
+                        ₹{payout.totalEarnings.toFixed(2)}
+                      </div>
+                    </td>
+                    <td>
+                      {payout.bankDetails && (payout.bankDetails.accountNumber || payout.bankDetails.ifscCode || payout.bankDetails.bankName) ? (
+                        <div style={{ fontSize: '0.875rem' }}>
+                          <div style={{ color: '#fff', marginBottom: '0.25rem' }}>
+                            <strong>{payout.bankDetails.accountHolderName || 'N/A'}</strong>
+                          </div>
+                          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                            {payout.bankDetails.accountNumber ? `A/C: ${payout.bankDetails.accountNumber}` : ''}
+                          </div>
+                          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                            {payout.bankDetails.ifscCode ? `IFSC: ${payout.bankDetails.ifscCode}` : ''}
+                          </div>
+                          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                            {payout.bankDetails.bankName || ''}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'rgba(255,152,0,0.8)', fontSize: '0.875rem' }}>
+                          Not provided
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '12px',
+                        fontSize: '0.875rem',
+                        background: payout.status === 'paid' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 152, 0, 0.2)',
+                        color: payout.status === 'paid' ? '#4CAF50' : '#FF9800'
+                      }}>
+                        {payout.status === 'paid' ? 'Paid' : 'Pending'}
+                      </span>
+                    </td>
+                    <td>
+                      {payout.status === 'paid' ? (
+                        <span style={{ 
+                          padding: '0.5rem 1rem', 
+                          fontSize: '0.875rem',
+                          color: '#4CAF50',
+                          fontWeight: '600'
+                        }}>
+                          Paid
+                        </span>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                          <button
+                            className="button-dark"
+                            onClick={() => {
+                              setSelectedPayout(payout);
+                            }}
+                            style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                            disabled={processingPayout === payout.creatorId}
+                          >
+                            View Details
+                          </button>
+                          <button
+                            className="button-dark"
+                            onClick={() => {
+                              if (confirm(`Mark payout of ₹${payout.totalEarnings.toFixed(2)} as paid for ${payout.name}?`)) {
+                                handleMarkPayoutAsPaid(payout);
+                              }
+                            }}
+                            style={{ 
+                              padding: '0.5rem 1rem', 
+                              fontSize: '0.875rem',
+                              background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)'
+                            }}
+                            disabled={processingPayout === payout.creatorId}
+                          >
+                            {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Mobile Card View */}
+          <div className="payouts-cards-wrapper">
+            {payouts.map((payout) => (
+              <div key={payout.creatorId} className="payout-card">
+                <div className="payout-card-header">
+                  <div>
+                    <div className="payout-card-name">{payout.name}</div>
+                    <div className="payout-card-email">{payout.email}</div>
+                  </div>
+                  <span className={`payout-card-status ${payout.status === 'paid' ? 'paid' : 'pending'}`}>
+                    {payout.status === 'paid' ? 'Paid' : 'Pending'}
+                  </span>
+                </div>
+                
+                <div className="payout-card-amount">
+                  ₹{payout.totalEarnings.toFixed(2)}
+                </div>
+                
+                <div className="payout-card-info">
+                  <div className="payout-card-info-item">
+                    <span className="payout-card-label">Classes:</span>
+                    <span className="payout-card-value">{payout.classCount}</span>
+                  </div>
+                  <div className="payout-card-info-item">
+                    <span className="payout-card-label">Enrollments:</span>
+                    <span className="payout-card-value">{payout.enrollmentCount}</span>
+                  </div>
+                </div>
+                
+                <div className="payout-card-bank">
+                  <div className="payout-card-label">Bank Details:</div>
+                  {payout.bankDetails && (payout.bankDetails.accountNumber || payout.bankDetails.ifscCode || payout.bankDetails.bankName) ? (
+                    <div className="payout-card-bank-details">
+                      <div><strong>{payout.bankDetails.accountHolderName || 'N/A'}</strong></div>
+                      {payout.bankDetails.accountNumber && <div>A/C: {payout.bankDetails.accountNumber}</div>}
+                      {payout.bankDetails.ifscCode && <div>IFSC: {payout.bankDetails.ifscCode}</div>}
+                      {payout.bankDetails.bankName && <div>{payout.bankDetails.bankName}</div>}
+                      {payout.bankDetails.upiId && <div>UPI: {payout.bankDetails.upiId}</div>}
+                    </div>
+                  ) : (
+                    <span className="payout-card-warning">Not provided</span>
+                  )}
+                </div>
+                
+                {payout.status !== 'paid' && (
+                  <div className="payout-card-actions">
+                    <button
+                      className="button-dark payout-card-btn"
+                      onClick={() => {
+                        setSelectedPayout(payout);
+                      }}
+                      disabled={processingPayout === payout.creatorId}
+                    >
+                      View Details
+                    </button>
+                    <button
+                      className="button-dark payout-card-btn payout-card-btn-primary"
+                      onClick={() => {
+                        if (confirm(`Mark payout of ₹${payout.totalEarnings.toFixed(2)} as paid for ${payout.name}?`)) {
+                          handleMarkPayoutAsPaid(payout);
+                        }
+                      }}
+                      disabled={processingPayout === payout.creatorId}
+                    >
+                      {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
           No payouts to process. Enrollments will appear here once students purchase classes.
@@ -1548,6 +2047,8 @@ export default function AdminDashboard() {
     switch (activePage) {
       case 'dashboard':
         return renderDashboard();
+      case 'notifications':
+        return user?.uid ? <NotificationList userId={user.uid} userRole="admin" /> : <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading notifications...</div>;
       case 'creators':
         return renderCreators();
       case 'approve-classes':
@@ -1699,10 +2200,12 @@ export default function AdminDashboard() {
           top: 0;
           z-index: 1000;
           border-right: 1px solid rgba(255, 255, 255, 0.1);
+          overflow: hidden;
         }
 
         .sidebar-logo {
           margin-bottom: 3rem;
+          flex-shrink: 0;
         }
 
         .sidebar-logo img {
@@ -1712,6 +2215,27 @@ export default function AdminDashboard() {
 
         .sidebar-nav {
           flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          min-height: 0;
+        }
+
+        .sidebar-nav::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb {
+          background: rgba(217, 42, 99, 0.5);
+          border-radius: 10px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb:hover {
+          background: rgba(217, 42, 99, 0.7);
         }
 
         .sidebar-nav-item {
@@ -1744,6 +2268,17 @@ export default function AdminDashboard() {
         .sidebar-footer {
           margin-top: auto;
           padding-top: 2rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          flex-shrink: 0;
+        }
+
+        .sidebar-footer .sidebar-nav-item {
+          background: rgba(217, 42, 99, 0.1);
+          border-left: 3px solid #D92A63;
+        }
+
+        .sidebar-footer .sidebar-nav-item:hover {
+          background: rgba(217, 42, 99, 0.2);
         }
 
         /* Main Content */
@@ -3017,6 +3552,12 @@ export default function AdminDashboard() {
           gap: 5px;
           cursor: pointer;
           padding: 0.5rem;
+          position: fixed;
+          top: 1rem;
+          left: 1rem;
+          z-index: 1001;
+          background: rgba(0, 0, 0, 0.5);
+          border-radius: 8px;
         }
 
         .hamburger-line {
@@ -3025,6 +3566,29 @@ export default function AdminDashboard() {
           background: #fff;
           border-radius: 3px;
           transition: all 0.3s;
+        }
+
+        .hamburger-line.top.open {
+          transform: rotate(45deg) translate(8px, 8px);
+        }
+
+        .hamburger-line.mid.open {
+          opacity: 0;
+        }
+
+        .hamburger-line.bot.open {
+          transform: rotate(-45deg) translate(7px, -7px);
+        }
+
+        .admin-nav-overlay {
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 999;
         }
 
         @media (max-width: 991px) {
@@ -3039,27 +3603,353 @@ export default function AdminDashboard() {
 
           .main-content {
             margin-left: 0;
+            padding-top: 80px;
           }
 
           .hamburger {
             display: flex;
           }
 
+          .admin-nav-overlay {
+            display: block;
+          }
+
+          .dashboard-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1.5rem;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.5rem;
+          }
+
+          .section-title {
+            font-size: 1.5rem;
+          }
+
           .stats-grid {
             grid-template-columns: 1fr;
+            gap: 1rem;
           }
 
           .charts-section {
             grid-template-columns: 1fr;
+            gap: 1rem;
           }
 
           .pie-chart-container {
             flex-direction: column;
             align-items: center;
           }
+
+          .modal-overlay {
+            padding: 1rem;
+          }
+
+          .modal-content {
+            max-width: 95%;
+          }
+
+          .modal-stats-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Payouts Table Styles */
+        .payouts-table-wrapper {
+          background: rgba(255,255,255,0.05);
+          border-radius: 16px;
+          overflow: hidden;
+          display: block;
+        }
+
+        .payouts-table {
+          width: 100%;
+          border-collapse: collapse;
+          display: table;
+        }
+
+        .payouts-table thead {
+          display: table-header-group;
+        }
+
+        .payouts-table tbody {
+          display: table-row-group;
+        }
+
+        .payouts-table tr {
+          display: table-row;
+        }
+
+        .payouts-table th,
+        .payouts-table td {
+          display: table-cell;
+          padding: 1rem;
+          text-align: left;
+        }
+
+        .payouts-table th {
+          background: rgba(255,255,255,0.1);
+          color: #FFD700;
+          font-weight: 600;
+        }
+
+        .payouts-table tbody tr {
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payouts-table tbody tr:hover {
+          background: rgba(255,255,255,0.03);
+        }
+
+        /* Payouts Mobile Cards */
+        .payouts-cards-wrapper {
+          display: none;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .payout-card {
+          background: rgba(255,255,255,0.05);
+          border-radius: 16px;
+          padding: 1.25rem;
+          border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payout-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 1rem;
+        }
+
+        .payout-card-name {
+          font-weight: 600;
+          color: #fff;
+          font-size: 1rem;
+          margin-bottom: 0.25rem;
+        }
+
+        .payout-card-email {
+          font-size: 0.875rem;
+          color: rgba(255,255,255,0.6);
+        }
+
+        .payout-card-status {
+          padding: 0.25rem 0.75rem;
+          border-radius: 12px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+
+        .payout-card-status.paid {
+          background: rgba(76, 175, 80, 0.2);
+          color: #4CAF50;
+        }
+
+        .payout-card-status.pending {
+          background: rgba(255, 152, 0, 0.2);
+          color: #FF9800;
+        }
+
+        .payout-card-amount {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #FFD700;
+          margin-bottom: 1rem;
+        }
+
+        .payout-card-info {
+          display: flex;
+          gap: 1.5rem;
+          margin-bottom: 1rem;
+          padding-bottom: 1rem;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payout-card-info-item {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .payout-card-label {
+          font-size: 0.75rem;
+          color: rgba(255,255,255,0.7);
+        }
+
+        .payout-card-value {
+          font-size: 0.9375rem;
+          color: #fff;
+          font-weight: 600;
+        }
+
+        .payout-card-bank {
+          margin-bottom: 1rem;
+          padding-bottom: 1rem;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payout-card-bank .payout-card-label {
+          margin-bottom: 0.5rem;
+          font-size: 0.875rem;
+        }
+
+        .payout-card-bank-details {
+          font-size: 0.875rem;
+          color: rgba(255,255,255,0.9);
+        }
+
+        .payout-card-bank-details div {
+          margin-bottom: 0.25rem;
+        }
+
+        .payout-card-bank-details strong {
+          color: #fff;
+        }
+
+        .payout-card-warning {
+          color: rgba(255,152,0,0.8);
+          font-size: 0.875rem;
+        }
+
+        .payout-card-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .payout-card-btn {
+          width: 100%;
+          padding: 0.75rem 1rem;
+          font-size: 0.875rem;
+        }
+
+        .payout-card-btn-primary {
+          background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%) !important;
+        }
+
+        .payouts-total-summary {
+          color: rgba(255,255,255,0.7);
+          font-size: 0.875rem;
+          text-align: right;
+        }
+
+        .payouts-total-amount {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #FFD700;
+        }
+
+        .payouts-total-label {
+          font-size: 0.875rem;
         }
 
         @media (max-width: 767px) {
+          .payouts-total-summary {
+            text-align: left;
+            width: 100%;
+          }
+
+          .payouts-total-amount {
+            font-size: 1.25rem;
+          }
+          .payouts-table-wrapper {
+            display: none;
+          }
+
+          .payouts-cards-wrapper {
+            display: flex;
+          }
+
+          .dashboard-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+          }
+
+          .dashboard-header .welcome-section h2 {
+            font-size: 1.25rem;
+          }
+
+          .main-content {
+            padding: 1rem;
+            padding-top: 80px;
+          }
+
+          .dashboard-header {
+            margin-bottom: 2rem;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.25rem;
+          }
+
+          .welcome-section p {
+            font-size: 0.875rem;
+          }
+
+          .section-title {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+          }
+
+          .button-dark,
+          .button-2 {
+            padding: 0.625rem 1.25rem;
+            font-size: 0.875rem;
+          }
+
+          .stats-grid {
+            gap: 0.75rem;
+          }
+
+          .stat-card-with-chart {
+            padding: 1rem;
+          }
+
+          .stat-number {
+            font-size: 1.5rem;
+          }
+
+          .stat-number.revenue-number {
+            font-size: 1.25rem;
+          }
+
+          .charts-section {
+            gap: 0.75rem;
+          }
+
+          .chart-card {
+            padding: 1rem;
+          }
+
+          .chart-title {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+          }
+
+          .pie-chart {
+            width: 150px;
+            height: 150px;
+          }
+
+          .pie-center {
+            width: 80px;
+            height: 80px;
+          }
+
+          .pie-center-number {
+            font-size: 1.25rem;
+          }
+
+          .bar-label {
+            width: 80px;
+            font-size: 0.8125rem;
+          }
+
           .creator-table-wrapper {
             overflow-x: auto;
           }
@@ -3068,12 +3958,842 @@ export default function AdminDashboard() {
             min-width: 800px;
           }
 
+          .creator-table th,
+          .creator-table-row td {
+            padding: 0.75rem 0.5rem;
+            font-size: 0.8125rem;
+          }
+
+          .creator-avatar-small {
+            width: 32px;
+            height: 32px;
+          }
+
+          .creator-name-row {
+            font-size: 0.875rem;
+          }
+
+          .creator-email-row {
+            font-size: 0.75rem;
+          }
+
+          .creator-view-btn {
+            padding: 0.375rem 0.625rem;
+            font-size: 0.75rem;
+          }
+
           .grid-instructor {
             grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+          }
+
+          .instructor-item {
+            padding: 1rem;
+          }
+
+          .instructor-image-wrap {
+            width: 100px;
+            height: 100px;
+          }
+
+          .heading-h6 {
+            font-size: 1.125rem;
           }
 
           .pending-grid {
             grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+
+          .class-card-image-wrapper {
+            height: 160px;
+          }
+
+          .class-card-body {
+            padding: 0.875rem;
+            gap: 0.75rem;
+          }
+
+          .class-card-title {
+            font-size: 0.9375rem;
+          }
+
+          .class-card-subtitle {
+            font-size: 0.8125rem;
+          }
+
+          .class-card-info-row {
+            gap: 0.75rem;
+          }
+
+          .class-info-item {
+            font-size: 0.75rem;
+          }
+
+          .class-card-details {
+            padding: 0.625rem;
+          }
+
+          .class-detail-text {
+            font-size: 0.75rem;
+          }
+
+          .class-price {
+            font-size: 1rem;
+          }
+
+          .class-card-creator {
+            padding: 0.625rem;
+          }
+
+          .creator-avatar-mini {
+            width: 32px;
+            height: 32px;
+            font-size: 0.8125rem;
+          }
+
+          .creator-name-mini {
+            font-size: 0.8125rem;
+          }
+
+          .creator-email-mini {
+            font-size: 0.6875rem;
+          }
+
+          .class-card-actions {
+            gap: 0.5rem;
+          }
+
+          .class-action-btn {
+            padding: 0.625rem;
+            font-size: 0.8125rem;
+          }
+
+          .enrollments-summary {
+            gap: 0.75rem;
+          }
+
+          .summary-item {
+            padding: 0.75rem 1rem;
+          }
+
+          .summary-value {
+            font-size: 1.25rem;
+          }
+
+          .enrollments-table-wrapper {
+            margin-top: 1.5rem;
+          }
+
+          .enrollments-table th,
+          .enrollment-row td {
+            padding: 0.75rem 0.5rem;
+            font-size: 0.8125rem;
+          }
+
+          .student-avatar-small {
+            width: 32px;
+            height: 32px;
+            font-size: 0.8125rem;
+          }
+
+          .student-name {
+            font-size: 0.8125rem;
+          }
+
+          .student-email {
+            font-size: 0.75rem;
+          }
+
+          .enrollment-class-cell,
+          .enrollment-price-cell {
+            font-size: 0.8125rem;
+          }
+
+          .modal-overlay {
+            padding: 0.5rem;
+          }
+
+          .modal-content {
+            max-width: 100%;
+            max-height: 95vh;
+          }
+
+          .modal-header {
+            padding: 1rem;
+          }
+
+          .modal-title {
+            font-size: 1.25rem;
+          }
+
+          .modal-avatar-large {
+            width: 50px;
+            height: 50px;
+          }
+
+          .modal-initial-large {
+            font-size: 1.25rem;
+          }
+
+          .modal-body {
+            padding: 1rem;
+          }
+
+          .modal-section-title {
+            font-size: 1rem;
+          }
+
+          .modal-stats-grid {
+            gap: 0.75rem;
+          }
+
+          .modal-stat-card {
+            padding: 0.75rem;
+          }
+
+          .modal-stat-number {
+            font-size: 1.25rem;
+          }
+
+          .modal-metric-item {
+            padding: 0.75rem;
+          }
+
+          .modal-metric-label {
+            font-size: 0.8125rem;
+          }
+
+          .modal-metric-value {
+            font-size: 0.875rem;
+          }
+
+          .modal-metric-value.earnings {
+            font-size: 1rem;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .sidebar {
+            width: 100%;
+            max-width: 320px;
+          }
+
+          .sidebar-logo img {
+            width: 120px;
+          }
+
+          .hamburger {
+            top: 0.75rem;
+            left: 0.75rem;
+            padding: 0.375rem;
+          }
+
+          .hamburger-line {
+            width: 22px;
+            height: 2.5px;
+          }
+
+          .main-content {
+            padding: 0.75rem;
+            padding-top: 70px;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.125rem;
+          }
+
+          .welcome-section p {
+            font-size: 0.8125rem;
+          }
+
+          .section-title {
+            font-size: 1.125rem;
+            margin-bottom: 1rem;
+          }
+
+          .button-dark,
+          .button-2 {
+            padding: 0.5rem 1rem;
+            font-size: 0.8125rem;
+            width: 100%;
+          }
+
+          .stats-grid {
+            gap: 0.5rem;
+          }
+
+          .stat-card-with-chart {
+            padding: 0.875rem;
+          }
+
+          .stat-card-header h2 {
+            font-size: 0.8125rem;
+          }
+
+          .stat-number {
+            font-size: 1.25rem;
+          }
+
+          .stat-number.revenue-number {
+            font-size: 1.125rem;
+          }
+
+          .chart-card {
+            padding: 0.875rem;
+          }
+
+          .chart-title {
+            font-size: 0.9375rem;
+            margin-bottom: 0.75rem;
+          }
+
+          .pie-chart {
+            width: 120px;
+            height: 120px;
+          }
+
+          .pie-center {
+            width: 60px;
+            height: 60px;
+          }
+
+          .pie-center-text {
+            font-size: 0.6875rem;
+          }
+
+          .pie-center-number {
+            font-size: 1rem;
+          }
+
+          .legend-item {
+            font-size: 0.8125rem;
+          }
+
+          .bar-label {
+            width: 70px;
+            font-size: 0.75rem;
+          }
+
+          .bar-wrapper {
+            height: 32px;
+          }
+
+          .creator-table th,
+          .creator-table-row td {
+            padding: 0.5rem 0.375rem;
+            font-size: 0.75rem;
+          }
+
+          .creator-avatar-small {
+            width: 28px;
+            height: 28px;
+          }
+
+          .creator-initial-small {
+            font-size: 0.875rem;
+          }
+
+          .creator-name-row {
+            font-size: 0.8125rem;
+          }
+
+          .creator-email-row {
+            font-size: 0.6875rem;
+          }
+
+          .stat-number {
+            font-size: 0.8125rem;
+          }
+
+          .stat-breakdown {
+            font-size: 0.6875rem;
+          }
+
+          .creator-view-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.6875rem;
+          }
+
+          .grid-instructor {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+
+          .instructor-item {
+            padding: 0.875rem;
+          }
+
+          .instructor-image-wrap {
+            width: 80px;
+            height: 80px;
+          }
+
+          .heading-h6 {
+            font-size: 1rem;
+          }
+
+          .text-block-10 {
+            font-size: 0.8125rem;
+          }
+
+          .pending-grid {
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+          }
+
+          .class-card-image-wrapper {
+            height: 140px;
+          }
+
+          .class-card-status-badge {
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.3rem 0.625rem;
+            font-size: 0.6875rem;
+          }
+
+          .class-card-body {
+            padding: 0.75rem;
+            gap: 0.625rem;
+          }
+
+          .class-card-title {
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+          }
+
+          .class-card-subtitle {
+            font-size: 0.75rem;
+          }
+
+          .class-card-info-row {
+            gap: 0.5rem;
+          }
+
+          .class-info-item {
+            font-size: 0.6875rem;
+          }
+
+          .class-card-details {
+            padding: 0.5rem;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+          }
+
+          .class-detail-item {
+            width: 100%;
+          }
+
+          .class-detail-text {
+            font-size: 0.6875rem;
+          }
+
+          .class-price {
+            font-size: 0.9375rem;
+          }
+
+          .class-card-creator {
+            padding: 0.5rem;
+          }
+
+          .creator-avatar-mini {
+            width: 28px;
+            height: 28px;
+            font-size: 0.75rem;
+          }
+
+          .creator-name-mini {
+            font-size: 0.75rem;
+          }
+
+          .creator-email-mini {
+            font-size: 0.625rem;
+          }
+
+          .class-card-actions {
+            gap: 0.5rem;
+          }
+
+          .class-action-btn {
+            padding: 0.5rem;
+            font-size: 0.75rem;
+          }
+
+          .enrollments-summary {
+            gap: 0.5rem;
+          }
+
+          .summary-item {
+            padding: 0.625rem 0.875rem;
+          }
+
+          .summary-icon {
+            width: 20px;
+            height: 20px;
+          }
+
+          .summary-value {
+            font-size: 1.125rem;
+          }
+
+          .summary-label {
+            font-size: 0.6875rem;
+          }
+
+          .enrollments-table th,
+          .enrollment-row td {
+            padding: 0.5rem 0.375rem;
+            font-size: 0.75rem;
+          }
+
+          .student-avatar-small {
+            width: 28px;
+            height: 28px;
+            font-size: 0.75rem;
+          }
+
+          .student-name {
+            font-size: 0.75rem;
+          }
+
+          .student-email {
+            font-size: 0.6875rem;
+          }
+
+          .enrollment-class-cell,
+          .enrollment-price-cell {
+            font-size: 0.75rem;
+          }
+
+          .modal-header {
+            padding: 0.875rem;
+          }
+
+          .modal-title {
+            font-size: 1.125rem;
+          }
+
+          .modal-subtitle {
+            font-size: 0.8125rem;
+          }
+
+          .modal-avatar-large {
+            width: 40px;
+            height: 40px;
+          }
+
+          .modal-initial-large {
+            font-size: 1rem;
+          }
+
+          .modal-close-btn {
+            width: 32px;
+            height: 32px;
+          }
+
+          .modal-body {
+            padding: 0.875rem;
+          }
+
+          .modal-section {
+            margin-bottom: 1.5rem;
+          }
+
+          .modal-section-title {
+            font-size: 0.9375rem;
+            margin-bottom: 0.75rem;
+          }
+
+          .modal-info-label {
+            font-size: 0.6875rem;
+          }
+
+          .modal-info-value {
+            font-size: 0.8125rem;
+          }
+
+          .modal-stats-grid {
+            gap: 0.5rem;
+          }
+
+          .modal-stat-card {
+            padding: 0.625rem;
+          }
+
+          .modal-stat-number {
+            font-size: 1.125rem;
+          }
+
+          .modal-stat-label {
+            font-size: 0.6875rem;
+          }
+
+          .modal-metric-item {
+            padding: 0.625rem;
+          }
+
+          .modal-metric-label {
+            font-size: 0.75rem;
+          }
+
+          .modal-metric-value {
+            font-size: 0.8125rem;
+          }
+
+          .modal-metric-value.earnings {
+            font-size: 0.9375rem;
+          }
+        }
+
+        /* Payout Modal Styles */
+        .payout-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.75);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10000;
+          padding: 1rem;
+        }
+
+        .payout-modal-content {
+          background: linear-gradient(135deg, #1a0f2e 0%, #2d1b4e 100%);
+          border-radius: 20px;
+          width: 100%;
+          max-width: 600px;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          animation: payoutModalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes payoutModalSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .payout-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1.5rem;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .payout-modal-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #fff;
+          margin: 0;
+        }
+
+        .payout-modal-close {
+          background: rgba(255, 255, 255, 0.1);
+          border: none;
+          color: #fff;
+          font-size: 1.75rem;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s;
+          line-height: 1;
+        }
+
+        .payout-modal-close:hover {
+          background: rgba(255, 255, 255, 0.2);
+          transform: rotate(90deg);
+        }
+
+        .payout-modal-body {
+          padding: 1.5rem;
+        }
+
+        .payout-info-section {
+          margin-bottom: 1.5rem;
+        }
+
+        .payout-info-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.75rem 0;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .payout-info-item:last-child {
+          border-bottom: none;
+        }
+
+        .payout-amount-item {
+          background: rgba(217, 42, 99, 0.1);
+          padding: 1rem;
+          border-radius: 12px;
+          margin-top: 0.5rem;
+          border: 1px solid rgba(217, 42, 99, 0.3);
+        }
+
+        .payout-info-label {
+          font-size: 0.875rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 500;
+        }
+
+        .payout-info-value {
+          font-size: 0.9375rem;
+          color: #fff;
+          font-weight: 600;
+          text-align: right;
+        }
+
+        .payout-amount {
+          font-size: 1.5rem;
+          color: #FFD700;
+          font-weight: 700;
+        }
+
+        .payout-bank-section {
+          margin-bottom: 1.5rem;
+          padding: 1.25rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .payout-section-title {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #fff;
+          margin: 0 0 1rem 0;
+          padding-bottom: 0.75rem;
+          border-bottom: 2px solid rgba(217, 42, 99, 0.3);
+        }
+
+        .payout-bank-details {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .payout-warning {
+          display: flex;
+          align-items: flex-start;
+          padding: 1rem;
+          background: rgba(255, 152, 0, 0.1);
+          border-radius: 8px;
+          border: 1px solid rgba(255, 152, 0, 0.3);
+        }
+
+        .payout-instruction {
+          padding: 1rem;
+          background: rgba(217, 42, 99, 0.1);
+          border-radius: 12px;
+          border-left: 4px solid #D92A63;
+          margin-bottom: 1.5rem;
+        }
+
+        .payout-instruction p {
+          color: rgba(255, 255, 255, 0.9);
+          font-size: 0.875rem;
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        .payout-modal-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: flex-end;
+        }
+
+        .payout-modal-btn {
+          padding: 0.75rem 1.5rem;
+          border-radius: 8px;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s;
+          border: none;
+        }
+
+        .payout-btn-secondary {
+          background: rgba(255, 255, 255, 0.1);
+          color: #fff;
+        }
+
+        .payout-btn-secondary:hover {
+          background: rgba(255, 255, 255, 0.2);
+          transform: translateY(-1px);
+        }
+
+        .payout-btn-primary {
+          background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+          color: #fff;
+          box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+
+        .payout-btn-primary:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+        }
+
+        .payout-btn-primary:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        @media (max-width: 767px) {
+          .payout-modal-content {
+            max-width: 100%;
+            margin: 1rem;
+            border-radius: 16px;
+          }
+
+          .payout-modal-header {
+            padding: 1.25rem;
+          }
+
+          .payout-modal-title {
+            font-size: 1.125rem;
+          }
+
+          .payout-modal-body {
+            padding: 1.25rem;
+          }
+
+          .payout-modal-actions {
+            flex-direction: column;
+          }
+
+          .payout-modal-btn {
+            width: 100%;
+          }
+
+          .payout-info-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+          }
+
+          .payout-info-value {
+            text-align: left;
           }
         }
       `}</style>
@@ -3088,6 +4808,11 @@ export default function AdminDashboard() {
             <a onClick={() => handleNavClick('dashboard')} className={`sidebar-nav-item ${activePage === 'dashboard' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Dashboard</div>
+            </a>
+            <a onClick={() => handleNavClick('notifications')} className={`sidebar-nav-item ${activePage === 'notifications' ? 'active' : ''}`} style={{ position: 'relative' }}>
+              <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+              <div>Notifications</div>
+              {user?.uid && <NotificationBadge userId={user.uid} />}
             </a>
             <a onClick={() => handleNavClick('creators')} className={`sidebar-nav-item ${activePage === 'creators' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
@@ -3122,14 +4847,134 @@ export default function AdminDashboard() {
         <div className="main-content">
           {/* Mobile Hamburger */}
           <div className="hamburger" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-            <div className="hamburger-line"></div>
-            <div className="hamburger-line"></div>
-            <div className="hamburger-line"></div>
+            <div className={`hamburger-line ${isMenuOpen ? 'top open' : ''}`}></div>
+            <div className={`hamburger-line ${isMenuOpen ? 'mid open' : ''}`}></div>
+            <div className={`hamburger-line ${isMenuOpen ? 'bot open' : ''}`}></div>
           </div>
+
+          {/* Overlay to close menu on mobile */}
+          {isMenuOpen && (
+            <div 
+              className="admin-nav-overlay" 
+              onClick={() => setIsMenuOpen(false)}
+            ></div>
+          )}
 
           {renderCurrentPage()}
         </div>
       </div>
+
+      {/* Payout Details Modal */}
+      {selectedPayout && (
+        <div className="payout-modal-overlay" onClick={() => setSelectedPayout(null)}>
+          <div className="payout-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="payout-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: 'rgba(217, 42, 99, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  color: '#D92A63'
+                }}>
+                  ℹ
+                </div>
+                <h2 className="payout-modal-title">Manual Payout Details Creator:</h2>
+              </div>
+              <button 
+                className="payout-modal-close"
+                onClick={() => setSelectedPayout(null)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="payout-modal-body">
+              <div className="payout-info-section">
+                <div className="payout-info-item">
+                  <span className="payout-info-label">Creator:</span>
+                  <span className="payout-info-value">{selectedPayout.name}</span>
+                </div>
+                <div className="payout-info-item">
+                  <span className="payout-info-label">Email:</span>
+                  <span className="payout-info-value">{selectedPayout.email}</span>
+                </div>
+                <div className="payout-info-item payout-amount-item">
+                  <span className="payout-info-label">Amount:</span>
+                  <span className="payout-info-value payout-amount">₹{selectedPayout.totalEarnings.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="payout-bank-section">
+                <h3 className="payout-section-title">Bank Details</h3>
+                {selectedPayout.bankDetails && (selectedPayout.bankDetails.accountNumber || selectedPayout.bankDetails.ifscCode || selectedPayout.bankDetails.bankName) ? (
+                  <div className="payout-bank-details">
+                    <div className="payout-info-item">
+                      <span className="payout-info-label">Account Holder:</span>
+                      <span className="payout-info-value">{selectedPayout.bankDetails.accountHolderName || 'N/A'}</span>
+                    </div>
+                    <div className="payout-info-item">
+                      <span className="payout-info-label">Account Number:</span>
+                      <span className="payout-info-value">{selectedPayout.bankDetails.accountNumber || 'N/A'}</span>
+                    </div>
+                    <div className="payout-info-item">
+                      <span className="payout-info-label">IFSC Code:</span>
+                      <span className="payout-info-value">{selectedPayout.bankDetails.ifscCode || 'N/A'}</span>
+                    </div>
+                    <div className="payout-info-item">
+                      <span className="payout-info-label">Bank Name:</span>
+                      <span className="payout-info-value">{selectedPayout.bankDetails.bankName || 'N/A'}</span>
+                    </div>
+                    {selectedPayout.bankDetails.upiId && (
+                      <div className="payout-info-item">
+                        <span className="payout-info-label">UPI ID:</span>
+                        <span className="payout-info-value">{selectedPayout.bankDetails.upiId}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="payout-warning">
+                    <span style={{ color: '#FF9800', fontSize: '1rem', marginRight: '0.5rem' }}>⚠️</span>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                      Bank details not provided by creator. Please contact {selectedPayout.email} to get bank account information.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="payout-instruction">
+                <p>Please process payment via bank transfer and then click "Mark as Paid".</p>
+              </div>
+
+              <div className="payout-modal-actions">
+                <button
+                  className="payout-modal-btn payout-btn-secondary"
+                  onClick={() => setSelectedPayout(null)}
+                >
+                  Close
+                </button>
+                <button
+                  className="payout-modal-btn payout-btn-primary"
+                  onClick={() => {
+                    if (confirm(`Mark payout of ₹${selectedPayout.totalEarnings.toFixed(2)} as paid for ${selectedPayout.name}?`)) {
+                      handleMarkPayoutAsPaid(selectedPayout);
+                      setSelectedPayout(null);
+                    }
+                  }}
+                  disabled={processingPayout === selectedPayout.creatorId}
+                >
+                  {processingPayout === selectedPayout.creatorId ? 'Processing...' : 'Mark as Paid'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

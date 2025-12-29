@@ -99,12 +99,14 @@ function InstructorsContent() {
         const creatorsData: Creator[] = [];
         querySnapshot.forEach((doc: any) => {
           const data = doc.data();
-          console.log('Creator data:', { id: doc.id, name: data.name, role: data.role });
+          console.log('Creator data:', { id: doc.id, name: data.name, role: data.role, photoURL: data.photoURL, profileImage: data.profileImage });
+          // Prefer photoURL, then profileImage, then empty string (will fallback to avatar API in component)
+          const imageUrl = data.photoURL || data.profileImage || '';
           creatorsData.push({
             id: doc.id,
             name: data.name || data.email?.split('@')[0] || 'Creator',
             email: data.email || '',
-            photoURL: data.photoURL || data.profileImage || '',
+            photoURL: imageUrl,
             role: data.role,
             totalClasses: 0
           });
@@ -198,6 +200,7 @@ function InstructorsContent() {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
+<<<<<<< HEAD
               {(creators || []).map((creator, index) => (
                 <InstructorCard
                   key={creator.id}
@@ -211,6 +214,35 @@ function InstructorsContent() {
                   index={index}
                 />
               ))}
+=======
+              {creators.map((creator, index) => {
+                // Use photoURL if available, otherwise fallback to avatar API with initials
+                const photoURL = creator.photoURL || '';
+                const hasImage = photoURL.trim() !== '';
+                const profileImageUrl = hasImage 
+                  ? photoURL
+                  : `https://ui-avatars.com/api/?name=${encodeURIComponent(creator.name)}&background=D92A63&color=fff&size=200`;
+                
+                // Debug logging
+                if (!hasImage) {
+                  console.log(`Creator "${creator.name}" (${creator.id}) - No profile image found. photoURL:`, creator.photoURL);
+                }
+                
+                return (
+                  <InstructorCard
+                    key={creator.id}
+                    instructor={{
+                      id: creator.id,
+                      slug: creator.name.toLowerCase().replace(/\s+/g, '-'),
+                      name: creator.name,
+                      title: `${creator.totalClasses || 0} Active Classes`,
+                      image: profileImageUrl
+                    }}
+                    index={index}
+                  />
+                );
+              })}
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
             </div>
           )}
         </div>

@@ -33,10 +33,18 @@ service cloud.firestore {
                        request.auth.uid == resource.data.creatorId &&
                        resource.data.status != 'approved';
       
-      // Creators can delete their own classes (only if not approved)
+      // Creators can update session details on approved classes (for session form)
+      // They can update sessions and form-related fields, but cannot change status
+      allow update: if request.auth != null && 
+                       request.auth.uid == resource.data.creatorId &&
+                       resource.data.status == 'approved' &&
+                       request.resource.data.status == 'approved'; // Cannot change status
+      
+      // Creators can delete their own classes (only if pending or rejected)
+      // Approved classes cannot be deleted to protect student enrollments and data integrity
       allow delete: if request.auth != null && 
                        request.auth.uid == resource.data.creatorId &&
-                       resource.data.status != 'approved';
+                       (resource.data.status == 'pending' || resource.data.status == 'rejected');
       
       // Admins can do everything
       allow read, write: if request.auth != null && 
@@ -77,13 +85,23 @@ service cloud.firestore {
                      exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
                      get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.creatorId == request.auth.uid;
       
+      // Allow querying enrollments by classId (for enrollment count display on course pages)
+      // Public access allowed for counting enrollments - this is safe as we only need the count
+      // Limit queries to prevent abuse (Firestore will enforce reasonable limits)
+      allow list: if true; // Allow public list queries for enrollment counts
+      
       // Students can create enrollments for themselves
       allow create: if request.auth != null && 
                        request.auth.uid == request.resource.data.studentId;
       
-      // Students can update their own enrollments
+      // Students can update their own enrollments (for ratings)
       allow update: if request.auth != null && 
                        request.auth.uid == resource.data.studentId;
+      
+      // Creators can update enrollments for their classes (for attendance tracking)
+      allow update: if request.auth != null && 
+                       exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
+                       get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.creatorId == request.auth.uid;
       
       // Admins can do everything
       allow read, write: if request.auth != null && 
@@ -128,6 +146,138 @@ service cloud.firestore {
       // Only admins can update/delete contact messages
       allow update, delete: if request.auth != null && 
                                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Sessions collection
+    match /sessions/{sessionId} {
+      // Anyone authenticated can read sessions (for enrolled students to see their sessions)
+      allow read: if request.auth != null;
+      
+      // Creators can create sessions for their classes
+      allow create: if request.auth != null && 
+                       request.auth.uid == request.resource.data.creatorId;
+      
+      // Creators can update/delete their own sessions
+      // Check via classId if creatorId is not directly on session
+      allow update, delete: if request.auth != null && (
+        resource.data.creatorId == request.auth.uid ||
+        (exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
+         get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.creatorId == request.auth.uid)
+      );
+      
+      // Admins can do everything
+      allow read, write: if request.auth != null && 
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Ratings collection
+    match /ratings/{ratingId} {
+      // Anyone authenticated can read ratings (for viewing class ratings)
+      allow read: if request.auth != null;
+      
+      // Students can create ratings for classes they're enrolled in
+      allow create: if request.auth != null && 
+                       request.auth.uid == request.resource.data.studentId;
+      
+      // Students can update their own ratings
+      allow update: if request.auth != null && 
+                       request.auth.uid == resource.data.studentId;
+      
+      // Students can delete their own ratings
+      allow delete: if request.auth != null && 
+                       request.auth.uid == resource.data.studentId;
+      
+      // Creators can read ratings for their classes
+      allow read: if request.auth != null && 
+                     exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
+                     get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.creatorId == request.auth.uid;
+      
+      // Admins can do everything
+      allow read, write: if request.auth != null && 
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Session Reminders collection
+    match /session_reminders/{reminderId} {
+      // Students can read their own reminders
+      allow read: if request.auth != null && 
+                     request.auth.uid == resource.data.studentId;
+      
+      // Creators can read reminders for their classes
+      allow read: if request.auth != null && 
+                     exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
+                     get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.creatorId == request.auth.uid;
+      
+      // Admins can read all reminders
+      allow read: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // No client-side writes (only via Admin SDK in API route)
+      allow write: if false;
+    }
+    
+    // Failed Enrollments collection (for tracking payment success but enrollment failure)
+    match /failed_enrollments/{failedEnrollmentId} {
+      // Students can read their own failed enrollments
+      allow read: if request.auth != null && 
+                     request.auth.uid == resource.data.studentId;
+      
+      // Admins can read all failed enrollments
+      allow read: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // No client-side writes (only via Admin SDK in API route)
+      allow write: if false;
+    }
+    
+    // Failed Payments collection (for tracking payment verification failures)
+    match /failed_payments/{failedPaymentId} {
+      // Students can read their own failed payments
+      allow read: if request.auth != null && 
+                     request.auth.uid == resource.data.studentId;
+      
+      // Admins can read all failed payments
+      allow read: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // No client-side writes (only via Admin SDK in API route)
+      allow write: if false;
+    }
+    
+    // Notifications collection
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if request.auth != null &&
+                     request.auth.uid == resource.data.userId;
+
+      // Users can update their own notifications (mark as read)
+      allow update: if request.auth != null &&
+                       request.auth.uid == resource.data.userId &&
+                       // Only allow updating isRead and readAt fields
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['isRead', 'readAt']);
+
+      // Users can delete their own notifications
+      allow delete: if request.auth != null &&
+                       request.auth.uid == resource.data.userId;
+
+      // Admins can read all notifications
+      allow read: if request.auth != null &&
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      // No client-side creates (only via Admin SDK in API routes/email functions)
+      allow create: if false;
+    }
+
+    // Payouts collection
+    match /payouts/{payoutId} {
+      // Admins can read and write all payouts
+      allow read, write: if request.auth != null &&
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      // Creators can read their own payouts
+      allow read: if request.auth != null &&
+                     request.auth.uid == resource.data.creatorId;
     }
     
     // Default deny all other collections

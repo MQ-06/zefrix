@@ -21,22 +21,22 @@ export default function Footer() {
   const socialLinks = [
     {
       name: 'Facebook',
-      href: 'https://www.facebook.com/',
+      href: 'https://www.facebook.com/profile.php?id=61581972350122',
       icon: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b890_facebook-dark.svg',
     },
     {
       name: 'Instagram',
-      href: 'https://www.instagram.com/',
+      href: 'https://www.instagram.com/zefrix_app/',
       icon: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b898_instagram-dark.svg',
     },
     {
       name: 'LinkedIn',
-      href: 'https://www.linkedin.com/',
+      href: 'https://in.linkedin.com/company/zefrix',
       icon: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b891_linkedin-dark.svg',
     },
     {
       name: 'Twitter',
-      href: 'https://www.twitter.com/',
+      href: 'https://x.com/Zefrix_app',
       icon: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b897_twitter-dark.svg',
     },
   ];

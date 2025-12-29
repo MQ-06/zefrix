@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotification } from '@/contexts/NotificationContext';
 import { categoryDetails } from '@/lib/categoriesData';
+import { uploadImage, getProfileImagePath, validateFile } from '@/lib/utils/serverStorage';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import HydrationGuard from '@/components/HydrationGuard';
@@ -36,10 +37,15 @@ const STEPS = [
 
 export default function BecomeACreatorPage() {
   const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false);
   const { signUp, signInWithGoogle, user, loading } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [whatsappError, setWhatsappError] = useState<string>('');
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [formData, setFormData] = useState({
     fullname: '',
     email: '',
@@ -96,15 +102,176 @@ export default function BecomeACreatorPage() {
     document.head.appendChild(initScript);
   }, []);
 
+  // Sync profileImage URL with preview when it changes
+  useEffect(() => {
+    const trimmedImage = formData.profileImage?.trim() || '';
+    if (trimmedImage && trimmedImage.startsWith('http')) {
+      // Only update if different to prevent infinite loop
+      if (profileImagePreview !== trimmedImage) {
+        setProfileImagePreview(trimmedImage);
+      }
+    } else if (!trimmedImage && profileImagePreview) {
+      // Clear preview if profileImage is cleared
+      setProfileImagePreview('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.profileImage]);
+
+  // WhatsApp number validation utility
+  const validateWhatsAppNumber = (phoneNumber: string): { valid: boolean; error?: string; formatted?: string } => {
+    try {
+      if (!phoneNumber || typeof phoneNumber !== 'string' || !phoneNumber.trim()) {
+        return { valid: false, error: 'WhatsApp number is required' };
+      }
+
+      // Remove all whitespace
+      let cleaned = phoneNumber.trim().replace(/\s+/g, '');
+
+      // Must start with +
+      if (!cleaned.startsWith('+')) {
+        return { valid: false, error: 'WhatsApp number must start with + (country code). Example: +1234567890' };
+      }
+
+      // Remove the + and check if remaining are only digits
+      const digitsOnly = cleaned.substring(1);
+      
+      if (!digitsOnly || digitsOnly.length === 0) {
+        return { valid: false, error: 'WhatsApp number must include digits after the country code.' };
+      }
+
+      if (!/^\d+$/.test(digitsOnly)) {
+        return { valid: false, error: 'WhatsApp number can only contain digits after the country code. Please remove any letters or special characters.' };
+      }
+
+      // WhatsApp numbers should be between 7-15 digits (E.164 format allows up to 15 digits total)
+      // Country codes are 1-4 digits, so the number part should be at least 4 digits
+      if (digitsOnly.length < 7) {
+        return { valid: false, error: 'WhatsApp number is too short. Please include country code and number. Example: +1234567890' };
+      }
+
+      if (digitsOnly.length > 15) {
+        return { valid: false, error: 'WhatsApp number is too long. Maximum 15 digits allowed.' };
+      }
+
+      // Country code validation (should be 1-4 digits)
+      // Common country codes are 1-3 digits, but some regions use 4
+      const countryCodeLength = Math.min(4, digitsOnly.length);
+      const countryCode = digitsOnly.substring(0, countryCodeLength);
+      
+      // Country code should not start with 0
+      if (countryCode && countryCode.length > 0 && countryCode.startsWith('0')) {
+        return { valid: false, error: 'Country code cannot start with 0. Please use the correct format: +[country code][number]' };
+      }
+
+      // Format the number for storage (with + prefix)
+      const formatted = '+' + digitsOnly;
+
+      return { valid: true, formatted };
+    } catch (error) {
+      console.error('Error in validateWhatsAppNumber:', error);
+      return { valid: false, error: 'Invalid WhatsApp number format. Please check and try again.' };
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    try {
+      const { name, value } = e.target;
+      
+      // Real-time validation for WhatsApp number
+      if (name === 'whatsapp') {
+        try {
+          setWhatsappError('');
+          // Only validate if user has typed something (not on empty)
+          if (value && typeof value === 'string' && value.trim()) {
+            const validation = validateWhatsAppNumber(value);
+            if (!validation.valid) {
+              setWhatsappError(validation.error || 'Invalid WhatsApp number');
+            }
+          }
+        } catch (error) {
+          console.error('Error validating WhatsApp number:', error);
+          // Don't block input if validation fails
+          setWhatsappError('');
+        }
+      }
+      
+      // Always update form data, even if validation fails
+      // If category changes, clear subCategory
+      if (name === 'category') {
+        setFormData(prev => ({ ...prev, [name]: value || '', subCategory: '' }));
+      } else if (name === 'profileImage') {
+        // When profile image URL is entered, just update form data
+        // The useEffect will handle syncing the preview to prevent infinite loops
+        setFormData(prev => ({ ...prev, [name]: value || '' }));
+      } else {
+        setFormData(prev => ({ ...prev, [name]: value || '' }));
+      }
+    } catch (error) {
+      console.error('Error in handleInputChange:', error);
+      // Don't crash the component - just log the error
+    }
+  };
+
+  const handleProfileImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file
+    const validation = validateFile(file, 'image');
+    if (!validation.valid) {
+      showError(validation.error || 'Invalid file');
+      return;
+    }
+
+    setProfileImageFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfileImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload image immediately
+    setUploadingImage(true);
+    try {
+      // Use current user ID if available (Google sign-in), otherwise use temporary ID
+      // The image will be re-uploaded with correct path during form submission if needed
+      const currentUser = window.firebaseAuth?.currentUser;
+      const userId = currentUser?.uid || user?.uid || 'temp-' + Date.now();
+      const path = getProfileImagePath(userId, file.name);
+      const downloadURL = await uploadImage(file, path, true);
+      setFormData(prev => ({ ...prev, profileImage: downloadURL }));
+      showSuccess('Profile image uploaded successfully!');
+    } catch (error: any) {
+      console.error('Image upload error:', error);
+      showError(error.message || 'Failed to upload image');
+      setProfileImageFile(null);
+      setProfileImagePreview('');
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        return !!(formData.fullname && formData.email && formData.whatsapp);
+        // Validate WhatsApp number format before allowing next step
+        if (!formData.fullname || !formData.email || !formData.whatsapp) {
+          return false;
+        }
+        try {
+          const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
+          if (!whatsappValidation.valid) {
+            setWhatsappError(whatsappValidation.error || 'Invalid WhatsApp number');
+            return false;
+          }
+          return true;
+        } catch (error) {
+          console.error('Error validating WhatsApp in validateStep:', error);
+          setWhatsappError('Invalid WhatsApp number format. Please check and try again.');
+          return false;
+        }
       case 2:
         return !!formData.category;
       case 3:
@@ -157,38 +324,77 @@ export default function BecomeACreatorPage() {
       return;
     }
 
-    if (formData.password.length < 6) {
+    // Only validate password if user signed up with email (not Google)
+    // Check if user is already authenticated via Google
+    const isGoogleUser = window.firebaseAuth?.currentUser?.providerData?.some(
+      (provider: any) => provider.providerId === 'google.com'
+    );
+    
+    if (!isGoogleUser && formData.password.length < 6) {
       showError('Password must be at least 6 characters long');
       setIsSubmitting(false);
       return;
     }
 
     try {
-      // Create user account using AuthContext
-      await signUp(formData.email.trim(), formData.password, formData.fullname.trim());
+      // Check if user is already authenticated (Google sign-in)
+      let currentUser = window.firebaseAuth?.currentUser;
       
+<<<<<<< HEAD
       // Get the current user from Firebase Auth directly (client-side only)
       if (!isClient || typeof window === 'undefined' || !window.firebaseAuth || !window.firebaseAuth.currentUser) {
         showError('User creation successful, but could not update profile. Please try logging in.');
         router.push('/signup-login');
+=======
+      // Only create account if not already authenticated
+      if (!currentUser) {
+        // Create user account using AuthContext
+        await signUp(formData.email.trim(), formData.password, formData.fullname.trim());
+        
+        // Get the current user from Firebase Auth directly
+        if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
+          showError('User creation successful, but could not update profile. Please try logging in.');
+          router.push('/signup-login');
+          return;
+        }
+
+        currentUser = window.firebaseAuth.currentUser;
+      }
+
+      // Validate WhatsApp number before saving
+      let whatsappValidation;
+      try {
+        whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
+        if (!whatsappValidation.valid) {
+          showError(whatsappValidation.error || 'Invalid WhatsApp number');
+          setIsSubmitting(false);
+          return;
+        }
+      } catch (error) {
+        console.error('Error validating WhatsApp in handleSubmit:', error);
+        showError('Invalid WhatsApp number format. Please check and try again.');
+        setIsSubmitting(false);
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
         return;
       }
 
-      const currentUser = window.firebaseAuth.currentUser;
-
+      // Get profile image URL (from form or use Firebase Auth photoURL if available)
+      const profileImageUrl = formData.profileImage?.trim() || currentUser.photoURL || '';
+      
       // Update user profile with creator-specific data
       await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
         uid: currentUser.uid,
         email: formData.email.trim(),
         name: formData.fullname.trim(),
-        whatsapp: formData.whatsapp.trim(),
+        whatsapp: whatsappValidation.formatted || formData.whatsapp.trim(),
         creatorCategory: formData.category,
         subCategory: formData.subCategory?.trim() || '',
         role: 'creator',
         bio: formData.bio?.trim() || '',
         expertise: formData.expertise?.trim() || '',
         introVideo: formData.introVideo?.trim() || '',
-        profileImage: formData.profileImage?.trim() || '',
+        profileImage: profileImageUrl,
+        photoURL: profileImageUrl, // Also set photoURL to keep them in sync
         socialHandles: {
           instagram: formData.instagram?.trim() || '',
           youtube: formData.youtube?.trim() || '',
@@ -246,12 +452,32 @@ export default function BecomeACreatorPage() {
       // Get the current user from Firebase Auth directly (client-side only)
       if (!isClient || typeof window === 'undefined' || !window.firebaseAuth || !window.firebaseAuth.currentUser) {
         showError('Google authentication successful, but could not update profile. Please try again.');
+        setIsSubmitting(false);
         return;
       }
 
       const currentUser = window.firebaseAuth.currentUser;
 
-      // Update user profile with creator role
+      // Pre-fill form with Google data
+      const googlePhotoURL = currentUser.photoURL || '';
+      console.log('🔍 Google photoURL:', googlePhotoURL); // Debug log
+      
+      setFormData(prev => ({
+        ...prev,
+        fullname: currentUser.displayName || prev.fullname || '',
+        email: currentUser.email || prev.email || '',
+        profileImage: googlePhotoURL || prev.profileImage || '',
+      }));
+      
+      // Set preview for Google image
+      if (googlePhotoURL) {
+        console.log('✅ Setting profile image preview:', googlePhotoURL); // Debug log
+        setProfileImagePreview(googlePhotoURL);
+      } else {
+        console.log('⚠️ No Google photoURL available'); // Debug log
+      }
+
+      // Update user profile with creator role (but mark as incomplete)
       await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
         uid: currentUser.uid,
         email: currentUser.email,
@@ -260,15 +486,14 @@ export default function BecomeACreatorPage() {
         profileImage: currentUser.photoURL || '',
         role: 'creator',
         isCreatorApproved: false,
-        isProfileComplete: false,
+        isProfileComplete: false, // Mark as incomplete so they complete the form
         createdAt: window.serverTimestamp(),
         lastLogin: window.serverTimestamp(),
       }, { merge: true });
 
-      showSuccess('Google signup successful! Please complete your creator profile.');
-      // Delay redirect to show notification
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      router.push('/creator-dashboard');
+      showSuccess('Google signup successful! Please complete the form below to finish your creator profile.');
+      setIsSubmitting(false);
+      // Stay on the form - don't redirect, let them complete it
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {
         let errorMessage = 'Google signup failed. ';
@@ -319,7 +544,47 @@ export default function BecomeACreatorPage() {
                 onChange={(value) => setFormData(prev => ({ ...prev, whatsapp: value }))}
                 placeholder="+1234567890"
                 required
+                pattern="^\+[1-9]\d{6,14}$"
+                maxLength={16}
+                suppressHydrationWarning
+                style={{
+                  borderColor: whatsappError ? '#ef4444' : undefined,
+                  borderWidth: whatsappError ? '2px' : undefined
+                }}
               />
+              {whatsappError && (
+                <div style={{ 
+                  color: '#ef4444', 
+                  fontSize: '12px', 
+                  marginTop: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <i className="fa-solid fa-circle-exclamation" style={{ fontSize: '12px' }}></i>
+                  {whatsappError}
+                </div>
+              )}
+              {!whatsappError && formData.whatsapp && (
+                <div style={{ 
+                  color: '#10b981', 
+                  fontSize: '12px', 
+                  marginTop: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <i className="fa-solid fa-circle-check" style={{ fontSize: '12px' }}></i>
+                  Valid WhatsApp number
+                </div>
+              )}
+              <div style={{ 
+                color: '#6b7280', 
+                fontSize: '11px', 
+                marginTop: '4px' 
+              }}>
+                Format: +[country code][number]. Example: +919876543210, +11234567890
+              </div>
             </div>
           </div>
         );
@@ -345,13 +610,30 @@ export default function BecomeACreatorPage() {
             </div>
             <div className="form-group">
               <label>Sub-Category (optional)</label>
-              <input
-                type="text"
+              <select
                 name="subCategory"
                 value={formData.subCategory}
                 onChange={handleInputChange}
-                placeholder="e.g., Graphic Design, Web Development"
-              />
+                disabled={!formData.category}
+              >
+                <option value="">Select Sub-Category</option>
+                {formData.category && categoryDetails
+                  .find(cat => cat.slug === formData.category)
+                  ?.subcategories.map((subcat, index) => (
+                    <option key={index} value={subcat}>
+                      {subcat}
+                    </option>
+                  ))}
+              </select>
+              {!formData.category && (
+                <div style={{ 
+                  color: '#6b7280', 
+                  fontSize: '11px', 
+                  marginTop: '4px' 
+                }}>
+                  Please select a category first
+                </div>
+              )}
             </div>
           </div>
         );
@@ -392,14 +674,108 @@ export default function BecomeACreatorPage() {
               />
             </div>
             <div className="form-group">
-              <label>Profile Image URL (optional)</label>
-              <input
-                type="url"
-                name="profileImage"
-                value={formData.profileImage}
-                onChange={handleInputChange}
-                placeholder="https://example.com/profile.jpg"
-              />
+              <label>Profile Image (optional)</label>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexDirection: 'column' }}>
+                <div style={{ width: '100%' }}>
+                  <input
+                    type="file"
+                    id="profile-image-upload"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                    onChange={handleProfileImageChange}
+                    disabled={uploadingImage}
+                    style={{ 
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#eee',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontFamily: 'Poppins, sans-serif',
+                      cursor: uploadingImage ? 'not-allowed' : 'pointer'
+                    }}
+                  />
+                  <small style={{ 
+                    display: 'block', 
+                    marginTop: '0.5rem', 
+                    color: '#999', 
+                    fontSize: '11px' 
+                  }}>
+                    Max size: 5MB. Formats: JPEG, PNG, WebP, GIF.
+                  </small>
+                  {uploadingImage && (
+                    <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '12px' }}>
+                      ⏳ Uploading image...
+                    </div>
+                  )}
+                </div>
+                <div style={{ 
+                  width: '120px', 
+                  height: '120px', 
+                  borderRadius: '50%', 
+                  overflow: 'hidden',
+                  border: '2px solid rgba(217, 42, 99, 0.5)',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: (profileImagePreview || formData.profileImage) ? 'transparent' : 'rgba(255, 255, 255, 0.1)'
+                }}>
+                  {(profileImagePreview || formData.profileImage) ? (
+                    <img
+                      src={profileImagePreview || formData.profileImage}
+                      alt="Profile preview"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onLoad={() => console.log('✅ Profile image loaded successfully')}
+                      onError={(e) => { 
+                        console.error('❌ Profile image failed to load:', profileImagePreview || formData.profileImage);
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        // Show placeholder on error
+                        const parent = (e.target as HTMLImageElement).parentElement;
+                        if (parent) {
+                          const placeholder = document.createElement('div');
+                          placeholder.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.5); font-size: 48px;';
+                          placeholder.innerHTML = '<i class="fa-solid fa-user"></i>';
+                          parent.appendChild(placeholder);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div style={{ 
+                      width: '100%', 
+                      height: '100%', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      fontSize: '48px'
+                    }}>
+                      <i className="fa-solid fa-user"></i>
+                    </div>
+                  )}
+                </div>
+                <div style={{ width: '100%', marginTop: '0.5rem' }}>
+                  <label style={{ fontSize: '12px', color: '#666', marginBottom: '0.25rem', display: 'block' }}>
+                    Or enter image URL:
+                  </label>
+                  <input
+                    type="url"
+                    name="profileImage"
+                    value={formData.profileImage}
+                    onChange={handleInputChange}
+                    placeholder="https://example.com/profile.jpg"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontFamily: 'Poppins, sans-serif',
+                      background: '#eee',
+                      color: '#000'
+                    }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         );
@@ -459,15 +835,25 @@ export default function BecomeACreatorPage() {
             <p className="step-description">Choose a strong password to secure your account</p>
             <div className="form-group">
               <label>Password *</label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                placeholder="Minimum 6 characters"
-                minLength={6}
-                required
-              />
+              <div className="password-input-wrapper">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  placeholder="Minimum 6 characters"
+                  minLength={6}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  <i className={showPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
+                </button>
+              </div>
             </div>
             <div className="form-summary">
               <h3>Review Your Information</h3>
@@ -697,6 +1083,42 @@ export default function BecomeACreatorPage() {
           outline: none;
         }
 
+        .password-input-wrapper {
+          position: relative;
+          width: 100%;
+        }
+
+        .password-input-wrapper input {
+          padding-right: 40px;
+          margin: 8px 0;
+        }
+
+        .password-toggle-btn {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none !important;
+          border: none !important;
+          cursor: pointer;
+          color: #000 !important;
+          font-size: 16px;
+          padding: 0 !important;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: auto !important;
+          height: auto !important;
+          border-radius: 0 !important;
+          transition: opacity 0.2s;
+          margin: 0 !important;
+        }
+
+        .password-toggle-btn:hover {
+          opacity: 0.7;
+          background: none !important;
+        }
+
         .form-group input::placeholder,
         .form-group textarea::placeholder {
           color: #999;
@@ -844,8 +1266,8 @@ export default function BecomeACreatorPage() {
           width: 50px;
           height: 50px;
           padding: 0;
-          background: rgba(255, 255, 255, 0.1);
-          border: 2px solid rgba(255, 255, 255, 0.2);
+          background: #000;
+          border: 2px solid #000;
           border-radius: 50%;
           cursor: pointer;
           transition: all 0.3s ease;
@@ -855,9 +1277,10 @@ export default function BecomeACreatorPage() {
         }
 
         .social-auth-btn:hover:not(:disabled) {
-          border-color: #4e54c8;
-          background: rgba(78, 84, 200, 0.2);
+          border-color: #333;
+          background: #333;
           transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
         
         .social-auth-btn:disabled {

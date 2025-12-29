@@ -15,6 +15,11 @@ declare global {
         collection: any;
         addDoc: any;
         serverTimestamp: any;
+        query: any;
+        where: any;
+        getDocs: any;
+        doc: any;
+        getDoc: any;
     }
 }
 
@@ -31,14 +36,22 @@ export default function CheckoutPage() {
     const [user, setUser] = useState<any>(null);
 
     useEffect(() => {
-        // Load Firebase - ensure addDoc is available
+        // Load Razorpay script
+        if (typeof window !== 'undefined' && !window.Razorpay) {
+            const razorpayScript = document.createElement('script');
+            razorpayScript.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            razorpayScript.async = true;
+            document.body.appendChild(razorpayScript);
+        }
+
+        // Load Firebase
         if (typeof window !== 'undefined' && (!window.firebaseAuth || !window.addDoc)) {
             const script = document.createElement('script');
             script.type = 'module';
             script.innerHTML = `
                 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
                 import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-                import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+                import { getFirestore, collection, addDoc, query, where, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
                 
                 const firebaseConfig = {
                     apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -56,6 +69,11 @@ export default function CheckoutPage() {
                 window.firebaseDb = getFirestore(app);
                 window.collection = collection;
                 window.addDoc = addDoc;
+                window.query = query;
+                window.where = where;
+                window.getDocs = getDocs;
+                window.doc = doc;
+                window.getDoc = getDoc;
                 console.log('✅ Firebase initialized in checkout with addDoc');
             `;
             document.body.appendChild(script);
@@ -115,65 +133,371 @@ export default function CheckoutPage() {
             if (!currentUser) {
                 showError('User not found. Please login again.');
                 router.push('/signup-login?redirect=/checkout');
+                setIsProcessing(false);
                 return;
             }
 
-            // Generate a mock payment ID
-            const mockPaymentId = `PAY_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+            // Check Razorpay is loaded
+            if (!window.Razorpay) {
+                showError('Payment gateway is loading. Please wait a moment and try again.');
+                setIsProcessing(false);
+                return;
+            }
 
-            // Process each item in cart
-            const enrollmentPromises = cart.map(async (item) => {
-                // Create enrollment in Firestore directly (bypass payment)
-                console.log('🔍 Firebase check:', {
-                    firebaseDb: !!window.firebaseDb,
-                    collection: !!window.collection,
-                    addDoc: !!window.addDoc
-                });
+            // Create Razorpay order
+            const createOrderResponse = await fetch('/api/payments/create-order', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    items: cart,
+                }),
+            });
 
-                if (window.firebaseDb && window.collection && window.addDoc) {
-                    console.log('📝 Creating enrollment for:', item.title);
-                    const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-                    const docRef = await window.addDoc(enrollmentsRef, {
+            if (!createOrderResponse.ok) {
+                const errorData = await createOrderResponse.json();
+                const errorMsg = errorData.error || 'Failed to create order';
+
+                // Provide specific guidance based on error type
+                if (createOrderResponse.status === 406) {
+                    throw new Error('Razorpay account may not be activated. Please check your Razorpay dashboard and ensure your test account is fully activated.');
+                } else if (createOrderResponse.status === 401) {
+                    throw new Error('Invalid Razorpay credentials. Please check your API keys.');
+                } else if (createOrderResponse.status === 500) {
+                    throw new Error(errorMsg);
+                }
+
+                throw new Error(errorMsg);
+            }
+
+            const orderData = await createOrderResponse.json();
+
+            // Initialize Razorpay checkout
+            const options = {
+                key: orderData.keyId,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: 'Zefrix',
+                description: `Payment for ${cart.length} ${cart.length === 1 ? 'course' : 'courses'}`,
+                order_id: orderData.orderId,
+                prefill: {
+                    name: currentUser.displayName || currentUser.email?.split('@')[0] || '',
+                    email: currentUser.email || '',
+                },
+                theme: {
+                    color: '#D92A63',
+                },
+                handler: async function (response: any) {
+                    // Payment successful - verify and create enrollments
+                    try {
+                        await handlePaymentSuccess(response, currentUser);
+                    } catch (error: any) {
+                        console.error('Payment success handler error:', error);
+                        showError(error.message || 'Failed to complete enrollment. Please contact support.');
+                        setIsProcessing(false);
+                    }
+                },
+                modal: {
+                    ondismiss: function () {
+                        // User closed the payment modal
+                        setIsProcessing(false);
+                    },
+                },
+            };
+
+            const razorpay = new window.Razorpay(options);
+            razorpay.on('payment.failed', function (response: any) {
+                console.error('Payment failed:', response);
+                showError(`Payment failed: ${response.error.description || 'Unknown error'}`);
+                setIsProcessing(false);
+            });
+
+            razorpay.open();
+        } catch (error: any) {
+            console.error('Error initiating payment:', error);
+            showError(error.message || 'Failed to initiate payment. Please try again.');
+            setIsProcessing(false);
+        }
+    };
+
+    const handlePaymentSuccess = async (paymentResponse: any, currentUser: any) => {
+        const paymentId = paymentResponse.razorpay_payment_id;
+        const orderId = paymentResponse.razorpay_order_id;
+        
+        try {
+            // Step 1: Verify payment with backend
+            const verifyResponse = await fetch('/api/payments/verify', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    razorpay_payment_id: paymentId,
+                    razorpay_order_id: orderId,
+                    razorpay_signature: paymentResponse.razorpay_signature,
+                    items: cart,
+                    studentId: currentUser.uid,
+                    studentEmail: currentUser.email,
+                    studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
+                }),
+            });
+
+            if (!verifyResponse.ok) {
+                const errorData = await verifyResponse.json();
+                const errorMsg = errorData.error || 'Payment verification failed';
+                console.error('Payment verification failed:', errorMsg);
+                
+                // Payment verification failed - payment might be invalid
+                showError(`Payment verification failed: ${errorMsg}. Please contact support with Payment ID: ${paymentId}`);
+                setIsProcessing(false);
+                
+                // Store failed verification for admin review
+                try {
+                    if (window.firebaseDb && window.collection && window.addDoc && window.serverTimestamp) {
+                        const failedPaymentsRef = window.collection(window.firebaseDb, 'failed_payments');
+                        await window.addDoc(failedPaymentsRef, {
+                            paymentId: paymentId,
+                            orderId: orderId,
+                            studentId: currentUser.uid,
+                            studentEmail: currentUser.email,
+                            reason: 'payment_verification_failed',
+                            error: errorMsg,
+                            items: cart,
+                            occurredAt: window.serverTimestamp(),
+                            status: 'pending_review',
+                        });
+                    }
+                } catch (logError) {
+                    console.error('Failed to log payment verification error:', logError);
+                }
+                
+                return;
+            }
+
+            const verifyData = await verifyResponse.json();
+            console.log('✅ Payment verified successfully');
+
+            // Step 2: Check Firebase is initialized
+            if (!window.firebaseDb || !window.collection || !window.addDoc) {
+                const errorMsg = 'Database connection error. Please refresh the page and try again.';
+                console.error('Firebase not initialized during enrollment');
+                
+                // Store failed enrollment for admin to process manually
+                await storeFailedEnrollment(paymentId, orderId, currentUser, cart, 'firebase_not_initialized', errorMsg);
+                
+                showError(`${errorMsg} Your payment was successful (Payment ID: ${paymentId}). Our team will enroll you manually. Please contact support if you don't see your enrollment within 24 hours.`);
+                setIsProcessing(false);
+                clearCart();
+                return;
+            }
+
+            // Step 3: Check max seats before creating enrollments
+            const seatCheckErrors: string[] = [];
+            for (const item of cart) {
+                try {
+                    let classData: any = null;
+                    if (window.firebaseDb && window.doc && window.getDoc) {
+                        const classRef = window.doc(window.firebaseDb, 'classes', item.id);
+                        const classSnap = await window.getDoc(classRef);
+                        if (classSnap.exists()) {
+                            classData = classSnap.data();
+                        } else {
+                            seatCheckErrors.push(`Class "${item.title}" no longer exists`);
+                            continue;
+                        }
+                    }
+
+                    // Check max seats
+                    if (classData?.maxSeats && window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+                        const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+                        const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', item.id));
+                        const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+                        const currentEnrollments = enrollmentsSnapshot.size;
+
+                        if (currentEnrollments >= classData.maxSeats) {
+                            seatCheckErrors.push(`Class "${item.title}" is full (${classData.maxSeats} seats)`);
+                        }
+                    }
+                } catch (error: any) {
+                    console.error(`Error checking class ${item.id}:`, error);
+                    seatCheckErrors.push(`Error checking "${item.title}": ${error.message || 'Unknown error'}`);
+                }
+            }
+
+            if (seatCheckErrors.length > 0) {
+                const errorMsg = seatCheckErrors.join('; ');
+                console.error('Seat check failed:', errorMsg);
+                
+                // Store failed enrollment
+                await storeFailedEnrollment(paymentId, orderId, currentUser, cart, 'seats_full', errorMsg);
+                
+                showError(`${errorMsg}. Your payment was successful (Payment ID: ${paymentId}). Please contact support for a refund.`);
+                setIsProcessing(false);
+                clearCart();
+                return;
+            }
+
+            // Step 4: Create enrollments with individual error handling
+            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+            const enrollmentResults: Array<{ success: boolean; item: any; error?: string }> = [];
+            
+            for (const item of cart) {
+                try {
+                    let classData: any = null;
+                    if (window.firebaseDb && window.doc && window.getDoc) {
+                        try {
+                            const classRef = window.doc(window.firebaseDb, 'classes', item.id);
+                            const classSnap = await window.getDoc(classRef);
+                            if (classSnap.exists()) {
+                                classData = classSnap.data();
+                            }
+                        } catch (error) {
+                            console.error('Error fetching class data:', error);
+                        }
+                    }
+
+                    const enrollmentData = {
                         studentId: currentUser.uid,
                         studentEmail: currentUser.email,
-                        studentName: currentUser.displayName || currentUser.email?.split('@')[0],
+                        studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
                         classId: item.id,
                         className: item.title,
                         classPrice: item.price,
-                        paymentId: mockPaymentId,
-                        orderId: 'DIRECT_ENROLLMENT',
+                        paymentId: paymentId,
+                        orderId: orderId,
                         paymentStatus: 'completed',
                         enrolledAt: new Date(),
-                        classType: 'one-time',
-                        numberOfSessions: 1,
-                        attended: 0,
-                        status: 'active'
+                        classType: classData?.scheduleType || 'one-time',
+                        numberOfSessions: classData?.numberSessions || 1,
+                        sessionAttendance: {}, // Per-session attendance tracking
+                        totalSessions: 0,
+                        attendedSessions: 0,
+                        attendanceRate: 0,
+                        status: 'active',
+                    };
+
+                    const enrollmentDocRef = await window.addDoc(enrollmentsRef, enrollmentData);
+                    enrollmentResults.push({ success: true, item });
+                    console.log(`✅ Enrollment created for class: ${item.title}`);
+
+                    // Create creator notification (non-blocking)
+                    try {
+                      await fetch('/api/notifications/enrollment', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          classId: item.id,
+                          className: item.title,
+                          studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
+                          studentEmail: currentUser.email || '',
+                          enrollmentId: enrollmentDocRef.id,
+                        }),
+                      }).then(response => {
+                        if (response.ok) {
+                          console.log(`✅ Creator notification created for enrollment in class: ${item.title}`);
+                        } else {
+                          console.log(`⚠️ Failed to create creator notification for class: ${item.title} (non-blocking)`);
+                        }
+                      }).catch(err => {
+                        console.log(`Notification creation failed for class ${item.title} (non-blocking):`, err);
+                      });
+                    } catch (notifError) {
+                      console.log(`Notification error for class ${item.title} (non-blocking):`, notifError);
+                    }
+                } catch (error: any) {
+                    console.error(`❌ Failed to create enrollment for ${item.title}:`, error);
+                    enrollmentResults.push({ 
+                        success: false, 
+                        item, 
+                        error: error.message || 'Unknown error' 
                     });
-                    console.log('✅ Enrollment created with ID:', docRef.id);
-                } else {
-                    console.error('❌ Firebase not initialized properly!');
                 }
-            });
+            }
 
-            await Promise.all(enrollmentPromises);
-            console.log('✅ All enrollments processed successfully');
+            // Step 5: Handle results
+            const successfulEnrollments = enrollmentResults.filter(r => r.success);
+            const failedEnrollments = enrollmentResults.filter(r => !r.success);
 
-            // Small delay to ensure Firestore writes complete
-            await new Promise(resolve => setTimeout(resolve, 500));
+            if (failedEnrollments.length > 0) {
+                // Some enrollments failed - store for admin review
+                const failedItems = failedEnrollments.map(r => r.item);
+                const failedErrors = failedEnrollments.map(r => r.error).join('; ');
+                
+                await storeFailedEnrollment(paymentId, orderId, currentUser, failedItems, 'enrollment_creation_failed', failedErrors);
+                
+                if (successfulEnrollments.length > 0) {
+                    // Partial success
+                    const successCount = successfulEnrollments.length;
+                    const failCount = failedEnrollments.length;
+                    showError(`${successCount} ${successCount === 1 ? 'class was' : 'classes were'} enrolled successfully, but ${failCount} ${failCount === 1 ? 'class' : 'classes'} failed. Your payment was successful (Payment ID: ${paymentId}). Our team will process the remaining enrollments. Please contact support if needed.`);
+                } else {
+                    // Complete failure
+                    showError(`Enrollment creation failed. Your payment was successful (Payment ID: ${paymentId}). Our team will enroll you manually. Please contact support at contact@zefrix.com with your Payment ID.`);
+                }
+                
+                setIsProcessing(false);
+                clearCart();
+                
+                // Still redirect to thank you page but with a warning
+                window.location.href = `/thank-you?payment_id=${paymentId}&order_id=${orderId}&status=partial_success&failed=${failedEnrollments.length}`;
+                return;
+            }
 
-            // Set redirecting state immediately to prevent empty cart UI
+            // Step 6: All enrollments successful
+            console.log('✅ All enrollments created successfully');
             setIsRedirecting(true);
-            
-            // Clear cart first (but UI won't show empty cart because isRedirecting is true)
             clearCart();
+            window.location.href = `/thank-you?payment_id=${paymentId}&order_id=${orderId}&status=success`;
             
-            // Use window.location for instant redirect (no React re-render delay)
-            window.location.href = `/thank-you?payment_id=${mockPaymentId}&status=success`;
-        } catch (error) {
-            console.error('Error processing enrollment:', error);
-            showError('Enrollment failed. Please try again.');
-        } finally {
+        } catch (error: any) {
+            console.error('Error handling payment success:', error);
+            const errorMessage = error.message || 'An unexpected error occurred';
+            
+            // Store failed enrollment for admin review
+            await storeFailedEnrollment(paymentId, orderId, currentUser, cart, 'unexpected_error', errorMessage);
+            
+            showError(`Enrollment failed: ${errorMessage}. Your payment was successful (Payment ID: ${paymentId}). Please contact support at contact@zefrix.com with your Payment ID for assistance.`);
             setIsProcessing(false);
+            clearCart();
+        }
+    };
+
+    // Helper function to store failed enrollments for admin review
+    const storeFailedEnrollment = async (
+        paymentId: string,
+        orderId: string,
+        currentUser: any,
+        items: any[],
+        reason: string,
+        errorDetails: string
+    ) => {
+        try {
+            if (window.firebaseDb && window.collection && window.addDoc && window.serverTimestamp) {
+                const failedEnrollmentsRef = window.collection(window.firebaseDb, 'failed_enrollments');
+                await window.addDoc(failedEnrollmentsRef, {
+                    paymentId: paymentId,
+                    orderId: orderId,
+                    studentId: currentUser.uid,
+                    studentEmail: currentUser.email,
+                    studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
+                    items: items.map(item => ({
+                        id: item.id,
+                        title: item.title,
+                        price: item.price,
+                    })),
+                    reason: reason,
+                    errorDetails: errorDetails,
+                    occurredAt: window.serverTimestamp(),
+                    status: 'pending_review',
+                    resolved: false,
+                });
+                console.log('✅ Failed enrollment logged for admin review');
+            }
+        } catch (logError) {
+            console.error('Failed to log enrollment error:', logError);
         }
     };
 
@@ -263,92 +587,86 @@ export default function CheckoutPage() {
                 <div className="container max-w-6xl mx-auto px-4">
                     <h1 className="text-4xl font-bold text-white mb-8">Checkout</h1>
 
-                {/* Cart Preview Section */}
-                <div className="mb-8 bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
-                    <h2 className="text-2xl font-bold text-white mb-4">Cart Preview</h2>
-                    <p className="text-gray-300 mb-4">Review your items before proceeding to payment</p>
-                    <div className="text-white">
-                        <span className="font-semibold">{cart.length}</span> {cart.length === 1 ? 'item' : 'items'} in your cart
+                    {/* Cart Preview Section */}
+                    <div className="mb-8 bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+                        <h2 className="text-2xl font-bold text-white mb-4">Cart Preview</h2>
+                        <p className="text-gray-300 mb-4">Review your items before proceeding to payment</p>
+                        <div className="text-white">
+                            <span className="font-semibold">{cart.length}</span> {cart.length === 1 ? 'item' : 'items'} in your cart
+                        </div>
                     </div>
-                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Cart Items */}
-                    <div className="lg:col-span-2 space-y-4">
-                        {cart.map((item) => (
-                            <div
-                                key={item.id}
-                                className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 flex gap-6"
-                            >
-                                <img
-                                    src={item.image}
-                                    alt={item.title}
-                                    className="w-32 h-32 rounded-lg object-cover"
-                                />
-                                <div className="flex-1">
-                                    <h3 className="text-xl font-bold text-white mb-2">{item.title}</h3>
-                                    <p className="text-gray-400 mb-4">by {item.instructor}</p>
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-2xl font-bold text-white">
-                                            ₹{item.price.toFixed(2)} INR
-                                        </p>
-                                        <button
-                                            onClick={() => removeFromCart(item.id)}
-                                            className="text-red-400 hover:text-red-300 transition-colors"
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* Cart Items */}
+                        <div className="lg:col-span-2 space-y-4">
+                            {cart.map((item) => (
+                                <div
+                                    key={item.id}
+                                    className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 flex gap-6"
+                                >
+                                    <img
+                                        src={item.image}
+                                        alt={item.title}
+                                        className="w-32 h-32 rounded-lg object-cover"
+                                    />
+                                    <div className="flex-1">
+                                        <h3 className="text-xl font-bold text-white mb-2">{item.title}</h3>
+                                        <p className="text-gray-400 mb-4">by {item.instructor}</p>
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-2xl font-bold text-white">
+                                                ₹{item.price.toFixed(2)} INR
+                                            </p>
+                                            <button
+                                                onClick={() => removeFromCart(item.id)}
+                                                className="text-red-400 hover:text-red-300 transition-colors"
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
 
-                    {/* Order Summary */}
-                    <div className="lg:col-span-1">
-                        <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 sticky top-24">
-                            <h2 className="text-2xl font-bold text-white mb-6">Order Summary</h2>
+                        {/* Order Summary */}
+                        <div className="lg:col-span-1">
+                            <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 sticky top-24">
+                                <h2 className="text-2xl font-bold text-white mb-6">Order Summary</h2>
 
-                            <div className="space-y-4 mb-6">
-                                <div className="flex justify-between text-gray-300">
-                                    <span>Subtotal</span>
-                                    <span>₹{cartTotal.toFixed(2)} INR</span>
-                                </div>
-                                <div className="flex justify-between text-gray-300">
-                                    <span>Tax</span>
-                                    <span>₹0.00 INR</span>
-                                </div>
-                                <div className="border-t border-white/10 pt-4">
-                                    <div className="flex justify-between text-white text-xl font-bold">
-                                        <span>Total</span>
+                                <div className="space-y-4 mb-6">
+                                    <div className="flex justify-between text-gray-300">
+                                        <span>Subtotal</span>
                                         <span>₹{cartTotal.toFixed(2)} INR</span>
                                     </div>
+                                    <div className="flex justify-between text-gray-300">
+                                        <span>Tax</span>
+                                        <span>₹0.00 INR</span>
+                                    </div>
+                                    <div className="border-t border-white/10 pt-4">
+                                        <div className="flex justify-between text-white text-xl font-bold">
+                                            <span>Total</span>
+                                            <span>₹{cartTotal.toFixed(2)} INR</span>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
 
-                            <button
-                                onClick={handlePayment}
-                                disabled={isProcessing || cart.length === 0}
-                                className="w-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-8 py-4 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-[#D92A63]/30 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isProcessing ? 'Processing...' : 'Proceed to Payment'}
-                            </button>
+                                <button
+                                    onClick={handlePayment}
+                                    disabled={isProcessing || cart.length === 0}
+                                    className="w-full bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-8 py-4 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-[#D92A63]/30 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isProcessing ? 'Processing...' : 'Proceed to Payment'}
+                                </button>
 
-                            <Link
-                                href="/courses"
-                                className="block w-full text-center border-2 border-white/20 px-8 py-4 rounded-lg text-white font-medium hover:bg-white/5 transition-colors"
-                            >
-                                Continue Shopping
-                            </Link>
-
-                            <div className="mt-6 p-4 bg-white/5 rounded-lg">
-                                <p className="text-gray-400 text-sm">
-                                    <strong className="text-white">Note:</strong> This is a demo checkout. In production, you'll need to configure your Razorpay API keys.
-                                </p>
+                                <Link
+                                    href="/courses"
+                                    className="block w-full text-center border-2 border-white/20 px-8 py-4 rounded-lg text-white font-medium hover:bg-white/5 transition-colors"
+                                >
+                                    Continue Shopping
+                                </Link>
                             </div>
                         </div>
                     </div>
-                </div>
                 </div>
             </div>
 

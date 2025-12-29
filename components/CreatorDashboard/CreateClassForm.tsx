@@ -118,6 +118,14 @@ export default function CreateClassForm() {
   const [thumbnailURL, setThumbnailURL] = useState<string>('');
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
+  // Time validation state
+  const [oneTimeStartTime, setOneTimeStartTime] = useState('');
+  const [oneTimeEndTime, setOneTimeEndTime] = useState('');
+  const [oneTimeTimeError, setOneTimeTimeError] = useState('');
+  const [recurringStartTime, setRecurringStartTime] = useState('');
+  const [recurringEndTime, setRecurringEndTime] = useState('');
+  const [recurringTimeError, setRecurringTimeError] = useState('');
+
   // Wait for Firebase to be ready
   useEffect(() => {
     const checkFirebase = () => {
@@ -163,6 +171,52 @@ export default function CreateClassForm() {
     );
   };
 
+  // Handle one-time time changes with validation
+  const handleOneTimeStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setOneTimeStartTime(value);
+    if (value && oneTimeEndTime) {
+      const validation = validateTimes(value, oneTimeEndTime);
+      setOneTimeTimeError(validation.valid ? '' : (validation.error || ''));
+    } else {
+      setOneTimeTimeError('');
+    }
+  };
+
+  const handleOneTimeEndTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setOneTimeEndTime(value);
+    if (value && oneTimeStartTime) {
+      const validation = validateTimes(oneTimeStartTime, value);
+      setOneTimeTimeError(validation.valid ? '' : (validation.error || ''));
+    } else {
+      setOneTimeTimeError('');
+    }
+  };
+
+  // Handle recurring time changes with validation
+  const handleRecurringStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setRecurringStartTime(value);
+    if (value && recurringEndTime) {
+      const validation = validateTimes(value, recurringEndTime);
+      setRecurringTimeError(validation.valid ? '' : (validation.error || ''));
+    } else {
+      setRecurringTimeError('');
+    }
+  };
+
+  const handleRecurringEndTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setRecurringEndTime(value);
+    if (value && recurringStartTime) {
+      const validation = validateTimes(recurringStartTime, value);
+      setRecurringTimeError(validation.valid ? '' : (validation.error || ''));
+    } else {
+      setRecurringTimeError('');
+    }
+  };
+
   const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -175,6 +229,7 @@ export default function CreateClassForm() {
     }
 
     setThumbnailFile(file);
+    setSubmitMessage(null); // Clear any previous errors
 
     // Create preview
     const reader = new FileReader();
@@ -183,11 +238,44 @@ export default function CreateClassForm() {
     };
     reader.readAsDataURL(file);
 
-    // Upload image immediately (we'll need classId after form submission, so store file for now)
-    // For now, we'll upload after class is created, but show preview
+    // File will be uploaded to server storage after class is created (we need classId first)
   };
 
-  // Helper function to calculate minutes between two times
+  // Helper function to validate that end time is after start time
+  const validateTimes = (startTime: string, endTime: string): { valid: boolean; error?: string } => {
+    if (!startTime || !endTime) {
+      return { valid: false, error: 'Start time and end time are required' };
+    }
+
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+
+    // Validate that times are valid numbers
+    if (isNaN(startHour) || isNaN(startMin) || isNaN(endHour) || isNaN(endMin)) {
+      return { valid: false, error: 'Invalid time format' };
+    }
+
+    // Validate hour range (0-23) and minute range (0-59)
+    if (startHour < 0 || startHour > 23 || startMin < 0 || startMin > 59 ||
+        endHour < 0 || endHour > 23 || endMin < 0 || endMin > 59) {
+      return { valid: false, error: 'Invalid time values' };
+    }
+
+    const startTotal = startHour * 60 + startMin;
+    const endTotal = endHour * 60 + endMin;
+
+    // End time must be after start time (at least 1 minute difference)
+    if (endTotal <= startTotal) {
+      return { 
+        valid: false, 
+        error: 'End time must be after start time. Please select an end time that is later than the start time.' 
+      };
+    }
+
+    return { valid: true };
+  };
+
+  // Helper function to calculate minutes between two times (assumes validation passed)
   const calculateMinutes = (startTime: string, endTime: string): number => {
     const [startHour, startMin] = startTime.split(':').map(Number);
     const [endHour, endMin] = endTime.split(':').map(Number);
@@ -307,7 +395,8 @@ export default function CreateClassForm() {
       const level = (formData.get('level') as string)?.trim();
       const videoLink = (formData.get('videoLink') as string)?.trim() || '';
       const price = parseFloat(formData.get('price') as string);
-      const maxSeats = formData.get('maxSeats') ? parseInt(formData.get('maxSeats') as string) : undefined;
+      const maxSeatsInput = formData.get('maxSeats') as string;
+      const maxSeats = maxSeatsInput && maxSeatsInput.trim() ? parseInt(maxSeatsInput.trim()) : null;
 
       // Calculate session fields based on schedule type
       let startISO: string;
@@ -317,11 +406,27 @@ export default function CreateClassForm() {
 
       if (scheduleType === 'one-time') {
         const date = formData.get('date') as string;
-        const startTime = formData.get('startTime') as string;
-        const endTime = formData.get('endTime') as string;
+        // Use state values if available, otherwise fall back to form data
+        const startTime = oneTimeStartTime || (formData.get('startTime') as string);
+        const endTime = oneTimeEndTime || (formData.get('endTime') as string);
 
         if (!date || !startTime || !endTime) {
           throw new Error('Please fill all date and time fields for one-time session');
+        }
+
+        // Validate date is not in the past
+        const selectedDate = new Date(date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (selectedDate < today) {
+          throw new Error('Class date cannot be in the past. Please select today or a future date.');
+        }
+
+        // Validate that end time is after start time
+        const timeValidation = validateTimes(startTime, endTime);
+        if (!timeValidation.valid) {
+          setOneTimeTimeError(timeValidation.error || 'Invalid time selection');
+          throw new Error(timeValidation.error || 'Invalid time selection');
         }
 
         startISO = createISOString(date, startTime);
@@ -332,10 +437,11 @@ export default function CreateClassForm() {
         // Recurring batch
         const startDate = formData.get('startDate') as string;
         const endDate = formData.get('endDate') as string;
-        const recurringStartTime = formData.get('recurringStartTime') as string;
-        const recurringEndTime = formData.get('recurringEndTime') as string;
+        // Use state values if available, otherwise fall back to form data
+        const recurringStartTimeValue = recurringStartTime || (formData.get('recurringStartTime') as string);
+        const recurringEndTimeValue = recurringEndTime || (formData.get('recurringEndTime') as string);
 
-        if (!startDate || !endDate || !recurringStartTime || !recurringEndTime) {
+        if (!startDate || !endDate || !recurringStartTimeValue || !recurringEndTimeValue) {
           throw new Error('Please fill all date and time fields for recurring batch');
         }
 
@@ -343,8 +449,31 @@ export default function CreateClassForm() {
           throw new Error('Please select at least one day for recurring batch');
         }
 
-        startISO = createISOString(startDate, recurringStartTime);
-        sessionLengthMinutes = calculateMinutes(recurringStartTime, recurringEndTime);
+        // Validate date range
+        const startDateObj = new Date(startDate);
+        const endDateObj = new Date(endDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Start date cannot be in the past
+        if (startDateObj < today) {
+          throw new Error('Batch start date cannot be in the past. Please select today or a future date.');
+        }
+
+        // End date must be after start date
+        if (endDateObj <= startDateObj) {
+          throw new Error('Batch end date must be after the start date. Please select an end date that is later than the start date.');
+        }
+
+        // Validate that end time is after start time
+        const timeValidation = validateTimes(recurringStartTimeValue, recurringEndTimeValue);
+        if (!timeValidation.valid) {
+          setRecurringTimeError(timeValidation.error || 'Invalid time selection');
+          throw new Error(timeValidation.error || 'Invalid time selection');
+        }
+
+        startISO = createISOString(startDate, recurringStartTimeValue);
+        sessionLengthMinutes = calculateMinutes(recurringStartTimeValue, recurringEndTimeValue);
         numberSessions = calculateRecurringSessions(startDate, endDate, selectedDays);
         daysBetweenSessions = calculateDaysBetween(startDate, endDate, numberSessions);
       }
@@ -352,7 +481,7 @@ export default function CreateClassForm() {
       // Generate class ID
       const classId = `CLASS_${new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Upload thumbnail if file was selected
+      // Upload thumbnail to server storage if file was selected
       let finalVideoLink = videoLink;
       if (thumbnailFile) {
         try {
@@ -360,14 +489,22 @@ export default function CreateClassForm() {
           const path = getClassThumbnailPath(classId, thumbnailFile.name);
           finalVideoLink = await uploadImage(thumbnailFile, path, true);
           setThumbnailURL(finalVideoLink);
+<<<<<<< HEAD
           console.log('🖼 Thumbnail uploaded', {
             classId,
             path,
             finalVideoLink,
             thumbnailURLAfterUpload: finalVideoLink,
           });
+=======
+          console.log('✅ Thumbnail uploaded to server storage:', finalVideoLink);
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
         } catch (error: any) {
           console.error('Thumbnail upload error:', error);
+          setSubmitMessage({ 
+            type: 'error', 
+            text: `Thumbnail upload failed: ${error.message}. Continuing with class creation...` 
+          });
           // Continue with form submission even if thumbnail upload fails
         } finally {
           setUploadingThumbnail(false);
@@ -435,7 +572,7 @@ export default function CreateClassForm() {
       }
 
       // Prepare Firestore document
-      const firestoreData = {
+      const firestoreData: any = {
         classId: classId,
         creatorId: user.uid,
         creatorEmail: user.email || '',
@@ -449,7 +586,6 @@ export default function CreateClassForm() {
         level: level,
         videoLink: finalVideoLink || videoLink,
         price: price,
-        maxSeats: maxSeats,
         scheduleType: scheduleType as 'one-time' | 'recurring',
         startISO: startISO,
         sessionLengthMinutes: sessionLengthMinutes,
@@ -473,50 +609,49 @@ export default function CreateClassForm() {
         }),
       };
 
+<<<<<<< HEAD
       console.log('📝 Saving class to Firestore', {
         classId,
         originalVideoLink: videoLink,
         finalVideoLink,
         firestoreVideoLink: firestoreData.videoLink,
       });
+=======
+      // Only include maxSeats if it has a valid value (not null/undefined)
+      if (maxSeats !== null && maxSeats > 0) {
+        firestoreData.maxSeats = maxSeats;
+      }
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
 
       // Write to Firestore
       await window.setDoc(window.doc(window.firebaseDb, 'classes', classId), firestoreData);
 
-      // Send to n8n webhook via Next.js API route (avoids CORS issues)
+      // Send email notification to admin about new class
       try {
-        const n8nPayload = {
-          class_id: classId,
-          creator_email: user.email || '',
-          creator_name: user.displayName || user.email?.split('@')[0] || 'Creator',
-          title: title,
-          category: category,
-          subcategory: subcategory,
-          start: startISO,
-          session_length_minutes: sessionLengthMinutes,
-          number_sessions: numberSessions,
-          days_between_sessions: daysBetweenSessions,
-          notes: description || ''
-        };
-
-        // Send via Next.js API route (server-side, no CORS issues)
-        fetch('/api/webhook/class-create', {
+        fetch('/api/email/class-created', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(n8nPayload),
+          body: JSON.stringify({
+            creatorName: user.displayName || user.email?.split('@')[0] || 'Creator',
+            creatorEmail: user.email || '',
+            className: title,
+            classId: classId,
+            category: category,
+            price: price,
+          }),
         }).then(response => {
           if (response.ok) {
-            console.log('✅ Webhook notification sent successfully');
+            console.log('✅ Admin notification email sent successfully');
           } else {
-            console.log('⚠️ Webhook notification failed (non-blocking)');
+            console.log('⚠️ Admin notification email failed (non-blocking)');
           }
         }).catch(err => {
-          console.log('Webhook call failed (non-blocking):', err);
+          console.log('Email notification failed (non-blocking):', err);
         });
-      } catch (webhookError) {
-        console.log('Webhook error (non-blocking):', webhookError);
+      } catch (emailError) {
+        console.log('Email error (non-blocking):', emailError);
       }
 
       // Show success message
@@ -773,11 +908,10 @@ export default function CreateClassForm() {
         </div>
       </div>
 
-      {/* Schedule Section */}
       <div className="creator-form-section">
         <h5 className="creator-form-heading">Schedule</h5>
-        <div className="creator-radio-group">
-          <label className="creator-radio-wrap">
+        <div className="creator-radio-group" style={{ display: 'flex', gap: '3.5rem', marginBottom: '2rem' }}>
+          <label className="creator-radio-wrap" style={{ margin: 0 }}>
             <input
               type="radio"
               name="scheduleType"
@@ -788,7 +922,7 @@ export default function CreateClassForm() {
             />
             <span className="creator-radio-label">One-time Session</span>
           </label>
-          <label className="creator-radio-wrap">
+          <label className="creator-radio-wrap" style={{ margin: 0 }}>
             <input
               type="radio"
               name="scheduleType"
@@ -823,6 +957,9 @@ export default function CreateClassForm() {
                   id="start-time"
                   name="startTime"
                   className="creator-form-input"
+                  value={oneTimeStartTime}
+                  onChange={handleOneTimeStartTimeChange}
+                  style={oneTimeTimeError ? { borderColor: '#ff4444' } : undefined}
                   required
                 />
               </div>
@@ -833,8 +970,16 @@ export default function CreateClassForm() {
                   id="end-time"
                   name="endTime"
                   className="creator-form-input"
+                  value={oneTimeEndTime}
+                  onChange={handleOneTimeEndTimeChange}
+                  style={oneTimeTimeError ? { borderColor: '#ff4444' } : undefined}
                   required
                 />
+                {oneTimeTimeError && (
+                  <div style={{ color: '#fff', fontSize: '0.875rem', marginTop: '0.25rem', fontWeight: 500 }}>
+                    {oneTimeTimeError}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -842,11 +987,11 @@ export default function CreateClassForm() {
 
         {scheduleType === 'recurring' && (
           <div className="creator-recurring-fields">
-            <div className="creator-form-group">
-              <label className="creator-field-label">Select Days *</label>
-              <div className="creator-pill-wrap">
+            <div className="creator-form-group" style={{ marginBottom: '1.5rem' }}>
+              <label className="creator-field-label" style={{ marginBottom: '0.75rem', display: 'block' }}>Select Days *</label>
+              <div className="creator-pill-wrap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1.5rem', padding: '1.5rem' }}>
                 {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
-                  <label key={day} className="creator-pill-item">
+                  <label key={day} className="creator-pill-item" style={{ margin: 0 }}>
                     <input
                       type="checkbox"
                       checked={selectedDays.includes(day)}
@@ -857,7 +1002,7 @@ export default function CreateClassForm() {
                   </label>
                 ))}
               </div>
-              <small className="creator-field-hint">Select the days when sessions will occur</small>
+              <small className="creator-field-hint" style={{ marginTop: '0.75rem', display: 'block' }}>Select the days when sessions will occur</small>
             </div>
             <div className="creator-form-grid">
               <div className="creator-form-group">
@@ -889,6 +1034,9 @@ export default function CreateClassForm() {
                   id="recurring-start-time"
                   name="recurringStartTime"
                   className="creator-form-input"
+                  value={recurringStartTime}
+                  onChange={handleRecurringStartTimeChange}
+                  style={recurringTimeError ? { borderColor: '#ff4444' } : undefined}
                   required
                 />
               </div>
@@ -899,8 +1047,16 @@ export default function CreateClassForm() {
                   id="recurring-end-time"
                   name="recurringEndTime"
                   className="creator-form-input"
+                  value={recurringEndTime}
+                  onChange={handleRecurringEndTimeChange}
+                  style={recurringTimeError ? { borderColor: '#ff4444' } : undefined}
                   required
                 />
+                {recurringTimeError && (
+                  <div style={{ color: '#fff', fontSize: '0.875rem', marginTop: '0.25rem', fontWeight: 500 }}>
+                    {recurringTimeError}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -912,7 +1068,33 @@ export default function CreateClassForm() {
           type="submit" 
           className="creator-submit-btn"
           disabled={isSubmitting}
-          style={{ opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
+          style={{
+            background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+            color: 'white',
+            border: '2px solid rgba(255, 255, 255, 0.3)',
+            padding: '16px 40px',
+            borderRadius: '10px',
+            fontSize: '1.0625rem',
+            fontWeight: 600,
+            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+            transition: 'all 0.3s',
+            width: 'auto',
+            opacity: isSubmitting ? 0.6 : 1,
+          }}
+          onMouseEnter={(e) => {
+            if (!isSubmitting) {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 20px rgba(217, 42, 99, 0.3)';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isSubmitting) {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+            }
+          }}
         >
           {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
         </button>
@@ -920,6 +1102,22 @@ export default function CreateClassForm() {
         {submitMessage && (
           <div 
             className={`creator-message ${submitMessage.type === 'success' ? 'creator-message-success' : 'creator-message-error'}`}
+            style={{
+              marginTop: '1rem',
+              padding: '1rem 1.25rem',
+              borderRadius: '8px',
+              fontSize: '0.9375rem',
+              fontWeight: 500,
+              backgroundColor: submitMessage.type === 'success' 
+                ? 'rgba(34, 197, 94, 0.15)' 
+                : 'rgba(239, 68, 68, 0.15)',
+              color: submitMessage.type === 'success' 
+                ? '#22c55e' 
+                : '#fff',
+              border: `1px solid ${submitMessage.type === 'success' 
+                ? 'rgba(34, 197, 94, 0.3)' 
+                : 'rgba(239, 68, 68, 0.3)'}`,
+            }}
           >
             {submitMessage.text}
           </div>

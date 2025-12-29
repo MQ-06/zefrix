@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useNotification } from '@/contexts/NotificationContext';
 import Link from 'next/link';
 import { courses } from '@/lib/data';
+import { categoryDetails } from '@/lib/categoriesData';
+import NotificationList from '@/components/Notifications/NotificationList';
+import NotificationBadge from '@/components/Notifications/NotificationBadge';
 
 declare global {
   interface Window {
@@ -15,12 +18,17 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
     doc: any;
     getDoc: any;
     setDoc: any;
     updateDoc: any;
     addDoc: any;
     Timestamp: any;
+    orderBy: any;
+    limit: any;
+    deleteDoc: any;
+    writeBatch: any;
   }
 }
 
@@ -40,12 +48,13 @@ interface ApprovedClass {
 }
 
 export default function StudentDashboard() {
-  const { showError } = useNotification();
+  const { showError, showSuccess } = useNotification();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [enrollmentClasses, setEnrollmentClasses] = useState<Record<string, any>>({});
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [loadingEnrollments, setLoadingEnrollments] = useState(false);
 
@@ -66,6 +75,14 @@ export default function StudentDashboard() {
   const [selectedClassForRating, setSelectedClassForRating] = useState<any>(null);
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState('');
+  
+  // Personalized feed state
+  const [recommendedClasses, setRecommendedClasses] = useState<ApprovedClass[]>([]);
+  const [trendingClasses, setTrendingClasses] = useState<ApprovedClass[]>([]);
+  const [loadingRecommended, setLoadingRecommended] = useState(false);
+  const [loadingTrending, setLoadingTrending] = useState(false);
+  const [classEnrollmentCounts, setClassEnrollmentCounts] = useState<Record<string, number>>({});
+  const [classRatings, setClassRatings] = useState<Record<string, { avg: number; count: number }>>({});
 
   const router = useRouter();
   const userInitial = ((user?.displayName || user?.email || 'S')[0] || 'S').toUpperCase();
@@ -82,7 +99,7 @@ export default function StudentDashboard() {
         firebaseAuthConfig.innerHTML = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-          import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -106,6 +123,11 @@ export default function StudentDashboard() {
           window.getDocs = getDocs;
           window.addDoc = addDoc;
           window.updateDoc = updateDoc;
+          window.orderBy = orderBy;
+          window.limit = limit;
+          window.onSnapshot = onSnapshot;
+          window.deleteDoc = deleteDoc;
+          window.writeBatch = writeBatch;
 
           window.logout = async () => {
             try {
@@ -163,10 +185,14 @@ export default function StudentDashboard() {
   }, []);
 
 
-  // Fetch enrollments from Firestore
+  // Fetch enrollments from Firestore with real-time updates
   useEffect(() => {
-    const fetchEnrollments = async () => {
-      if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+    let unsubscribe: (() => void) | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    const setupListener = async () => {
+      if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot || !window.doc || !window.getDoc) {
+        retryTimeout = setTimeout(setupListener, 500);
         return;
       }
 
@@ -174,31 +200,55 @@ export default function StudentDashboard() {
       try {
         const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
         const q = window.query(enrollmentsRef, window.where('studentId', '==', user.uid));
-        const querySnapshot = await window.getDocs(q);
+        
+        unsubscribe = window.onSnapshot(q, async (snapshot: any) => {
+          const fetchedEnrollments: any[] = [];
+          snapshot.forEach((doc: any) => {
+            fetchedEnrollments.push({ id: doc.id, ...doc.data() });
+          });
 
-        const fetchedEnrollments: any[] = [];
-        querySnapshot.forEach((doc: any) => {
-          fetchedEnrollments.push({ id: doc.id, ...doc.data() });
+          // Sort by enrollment date (newest first)
+          fetchedEnrollments.sort((a, b) => {
+            const aTime = a.enrolledAt?.toMillis?.() || 0;
+            const bTime = b.enrolledAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+
+          // Fetch class data for each enrollment
+          const classesData: Record<string, any> = {};
+          const classPromises = fetchedEnrollments.map(async (enrollment) => {
+            try {
+              const classRef = window.doc(window.firebaseDb, 'classes', enrollment.classId);
+              const classSnap = await window.getDoc(classRef);
+              if (classSnap.exists()) {
+                classesData[enrollment.classId] = classSnap.data();
+              }
+            } catch (error) {
+              console.error(`Error fetching class ${enrollment.classId}:`, error);
+            }
+          });
+
+          await Promise.all(classPromises);
+
+          setEnrollments(fetchedEnrollments);
+          setEnrollmentClasses(classesData);
+          setLoadingEnrollments(false);
+        }, (error: any) => {
+          console.error('Error in enrollments listener:', error);
+          setLoadingEnrollments(false);
         });
-
-        // Sort by enrollment date (newest first)
-        fetchedEnrollments.sort((a, b) => {
-          const aTime = a.enrolledAt?.toMillis?.() || 0;
-          const bTime = b.enrolledAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-
-        setEnrollments(fetchedEnrollments);
       } catch (error) {
-        console.error('Error fetching enrollments:', error);
-      } finally {
+        console.error('Error setting up enrollments listener:', error);
         setLoadingEnrollments(false);
       }
     };
 
-    if (user) {
-      fetchEnrollments();
-    }
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [user]);
 
   // Load user profile data
@@ -251,57 +301,142 @@ export default function StudentDashboard() {
   };
 
 
-  // Fetch approved classes from Firestore
+  // Fetch approved classes from Firestore with real-time updates
   useEffect(() => {
-    const fetchApprovedClasses = async () => {
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        setTimeout(fetchApprovedClasses, 500);
+    let unsubscribe: (() => void) | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    const setupListener = () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+        retryTimeout = setTimeout(setupListener, 500);
         return;
       }
 
       setLoadingClasses(true);
       try {
+        console.log('📦 Setting up real-time listener for approved classes...');
         const classesRef = window.collection(window.firebaseDb, 'classes');
         const q = window.query(classesRef, window.where('status', '==', 'approved'));
-        const querySnapshot = await window.getDocs(q);
+        
+        unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+          const classes: ApprovedClass[] = [];
+          snapshot.forEach((doc: any) => {
+            classes.push({ classId: doc.id, ...doc.data() });
+          });
 
-        const classes: ApprovedClass[] = [];
-        querySnapshot.forEach((doc: any) => {
-          classes.push({ classId: doc.id, ...doc.data() });
+          console.log(`✅ Real-time update: Found ${classes.length} approved classes`);
+
+          // Sort by creation date (newest first)
+          classes.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+
+          setApprovedClasses(classes);
+          setLoadingClasses(false);
+        }, (error: any) => {
+          console.error('Error in real-time listener:', error);
+          setLoadingClasses(false);
         });
-
-        // Sort by creation date (newest first)
-        classes.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-
-        setApprovedClasses(classes);
       } catch (error) {
-        console.error('Error fetching approved classes:', error);
-      } finally {
+        console.error('Error setting up real-time listener:', error);
         setLoadingClasses(false);
       }
     };
 
-    fetchApprovedClasses();
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, []);
 
   // Fetch upcoming sessions for enrolled classes
   useEffect(() => {
     const fetchUpcomingSessions = async () => {
       if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        console.log('📋 Cannot fetch sessions - missing Firebase or user');
+        return;
+      }
+
+      if (enrollments.length === 0) {
+        console.log('📋 No enrollments found, skipping session fetch');
+        setUpcomingSessions([]);
         return;
       }
 
       try {
-        const batchesRef = window.collection(window.firebaseDb, 'batches');
-        const allBatchesSnapshot = await window.getDocs(batchesRef);
-        
+        console.log('🔍 Fetching sessions for enrollments:', enrollments.map(e => e.classId));
         const sessions: any[] = [];
         const now = new Date();
 
+        // Fetch from sessions collection
+        const sessionsRef = window.collection(window.firebaseDb, 'sessions');
+        const sessionsSnapshot = await window.getDocs(sessionsRef);
+        
+        console.log(`📊 Found ${sessionsSnapshot.size} total sessions in collection`);
+        
+        sessionsSnapshot.forEach((doc: any) => {
+          const session = { id: doc.id, ...doc.data() };
+          console.log('📅 Processing session:', {
+            classId: session.classId,
+            className: session.className,
+            sessionDate: session.sessionDate,
+            hasDate: !!session.sessionDate
+          });
+          
+          // Handle different date formats
+          let sessionDate: Date;
+          if (session.sessionDate?.toDate) {
+            sessionDate = session.sessionDate.toDate();
+          } else if (session.sessionDate) {
+            sessionDate = new Date(session.sessionDate);
+          } else {
+            console.log('⚠️ Session missing date, skipping:', session.id);
+            return; // Skip if no date
+          }
+          
+          // Only include future sessions (or past sessions within last hour for debugging)
+          const isFuture = sessionDate > now;
+          const isRecent = (now.getTime() - sessionDate.getTime()) < 3600000; // Last hour
+          
+          if (isFuture || isRecent) {
+            // Check if student is enrolled in this class
+            const enrollmentIds = enrollments.map(e => e.classId);
+            const isEnrolled = enrollmentIds.includes(session.classId);
+            
+            console.log('✅ Session check:', {
+              classId: session.classId,
+              isEnrolled,
+              enrollmentIds,
+              isFuture,
+              isRecent
+            });
+            
+            if (isEnrolled) {
+              sessions.push({
+                ...session,
+                className: session.className || 'Class',
+                sessionDate: sessionDate,
+                sessionTime: session.sessionTime || session.startTime || '',
+                meetingLink: session.meetingLink || session.meetLink,
+                recordingLink: session.recordingLink || session.recording || null,
+                status: session.status || 'scheduled',
+                sessionNumber: session.sessionNumber,
+                classId: session.classId
+              });
+            }
+          }
+        });
+
+        // Also fetch from batches (for backward compatibility)
+        const batchesRef = window.collection(window.firebaseDb, 'batches');
+        const allBatchesSnapshot = await window.getDocs(batchesRef);
+        
+        console.log(`📊 Found ${allBatchesSnapshot.size} total batches`);
+        
         allBatchesSnapshot.forEach((doc: any) => {
           const batch = { id: doc.id, ...doc.data() };
           const batchDate = batch.batchDate?.toDate ? batch.batchDate.toDate() : new Date(batch.batchDate);
@@ -329,16 +464,222 @@ export default function StudentDashboard() {
           return aTime - bTime;
         });
 
+        console.log(`✅ Found ${sessions.length} upcoming sessions for enrolled classes`);
         setUpcomingSessions(sessions.slice(0, 10)); // Limit to 10 upcoming
       } catch (error) {
-        console.error('Error fetching upcoming sessions:', error);
+        console.error('❌ Error fetching upcoming sessions:', error);
       }
     };
 
-    if (user && enrollments.length > 0) {
+    if (user) {
       fetchUpcomingSessions();
     }
   }, [user, enrollments]);
+
+  // Fetch enrollment counts for all classes
+  useEffect(() => {
+    const fetchEnrollmentCounts = async () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || approvedClasses.length === 0) {
+        return;
+      }
+
+      try {
+        const enrollmentCounts: Record<string, number> = {};
+        const classIds = approvedClasses.map(c => c.classId);
+        
+        // Fetch in batches of 10 (Firestore 'in' query limit)
+        const batchSize = 10;
+        for (let i = 0; i < classIds.length; i += batchSize) {
+          const batch = classIds.slice(i, i + batchSize);
+          const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+          const q = window.query(enrollmentsRef, window.where('classId', 'in', batch));
+          const snapshot = await window.getDocs(q);
+          
+          snapshot.forEach((doc: any) => {
+            const data = doc.data();
+            const classId = data.classId;
+            if (classId) {
+              enrollmentCounts[classId] = (enrollmentCounts[classId] || 0) + 1;
+            }
+          });
+        }
+        
+        setClassEnrollmentCounts(enrollmentCounts);
+      } catch (error) {
+        console.error('Error fetching enrollment counts:', error);
+      }
+    };
+
+    fetchEnrollmentCounts();
+  }, [approvedClasses]);
+
+  // Fetch ratings for all classes
+  useEffect(() => {
+    const fetchRatings = async () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || approvedClasses.length === 0) {
+        return;
+      }
+
+      try {
+        const ratings: Record<string, { avg: number; count: number }> = {};
+        const classIds = approvedClasses.map(c => c.classId);
+        
+        // Fetch in batches of 10
+        const batchSize = 10;
+        for (let i = 0; i < classIds.length; i += batchSize) {
+          const batch = classIds.slice(i, i + batchSize);
+          const ratingsRef = window.collection(window.firebaseDb, 'ratings');
+          const q = window.query(ratingsRef, window.where('classId', 'in', batch));
+          const snapshot = await window.getDocs(q);
+          
+          snapshot.forEach((doc: any) => {
+            const data = doc.data();
+            const classId = data.classId;
+            const rating = data.rating || 0;
+            
+            if (classId) {
+              if (!ratings[classId]) {
+                ratings[classId] = { avg: 0, count: 0 };
+              }
+              ratings[classId].count += 1;
+              ratings[classId].avg = ((ratings[classId].avg * (ratings[classId].count - 1)) + rating) / ratings[classId].count;
+            }
+          });
+        }
+        
+        setClassRatings(ratings);
+      } catch (error) {
+        console.error('Error fetching ratings:', error);
+      }
+    };
+
+    fetchRatings();
+  }, [approvedClasses]);
+
+  // Calculate recommended classes
+  useEffect(() => {
+    const calculateRecommended = async () => {
+      if (!user || approvedClasses.length === 0 || Object.keys(classEnrollmentCounts).length === 0) {
+        return;
+      }
+
+      setLoadingRecommended(true);
+      try {
+        // Get enrolled class IDs to exclude
+        const enrolledClassIds = new Set(enrollments.map(e => e.classId));
+        
+        // Get user's enrolled categories
+        const enrolledCategories = new Set<string>();
+        enrollments.forEach(enrollment => {
+          const classData = enrollmentClasses[enrollment.classId] || {};
+          if (classData.category) {
+            enrolledCategories.add(classData.category);
+          }
+        });
+
+        // Get user's interests from profile
+        const userInterests = (profileInterests || '').toLowerCase().split(',').map(i => i.trim()).filter(Boolean);
+        
+        // Score each class
+        const scoredClasses = approvedClasses
+          .filter(cls => !enrolledClassIds.has(cls.classId)) // Exclude already enrolled
+          .map(cls => {
+            let score = 0;
+            
+            // Category match (40% weight)
+            if (enrolledCategories.has(cls.category)) {
+              score += 40;
+            }
+            
+            // Interest match (30% weight)
+            const classTitleLower = cls.title.toLowerCase();
+            const classCategoryLower = cls.category.toLowerCase();
+            const classSubCategoryLower = (cls.subCategory || '').toLowerCase();
+            userInterests.forEach(interest => {
+              if (classTitleLower.includes(interest) || 
+                  classCategoryLower.includes(interest) || 
+                  classSubCategoryLower.includes(interest)) {
+                score += 10; // Max 30 if all 3 match
+              }
+            });
+            
+            // Rating boost (20% weight)
+            const rating = classRatings[cls.classId];
+            if (rating && rating.count > 0) {
+              score += (rating.avg / 5) * 20; // Normalize to 0-20
+            }
+            
+            // Enrollment count boost (10% weight) - more popular = slightly better
+            const enrollmentCount = classEnrollmentCounts[cls.classId] || 0;
+            score += Math.min(enrollmentCount / 10, 10); // Cap at 10
+            
+            return { ...cls, recommendationScore: score };
+          })
+          .sort((a, b) => (b as any).recommendationScore - (a as any).recommendationScore)
+          .slice(0, 6); // Top 6 recommendations
+        
+        setRecommendedClasses(scoredClasses);
+      } catch (error) {
+        console.error('Error calculating recommendations:', error);
+      } finally {
+        setLoadingRecommended(false);
+      }
+    };
+
+    calculateRecommended();
+  }, [user, approvedClasses, enrollments, enrollmentClasses, profileInterests, classEnrollmentCounts, classRatings]);
+
+  // Calculate trending classes
+  useEffect(() => {
+    const calculateTrending = async () => {
+      if (approvedClasses.length === 0 || Object.keys(classEnrollmentCounts).length === 0) {
+        return;
+      }
+
+      setLoadingTrending(true);
+      try {
+        // Get enrolled class IDs to exclude
+        const enrolledClassIds = new Set(enrollments.map(e => e.classId));
+        
+        // Score each class based on trending factors
+        const now = Date.now();
+        const scoredClasses = approvedClasses
+          .filter(cls => !enrolledClassIds.has(cls.classId)) // Exclude already enrolled
+          .map(cls => {
+            let score = 0;
+            
+            // Recent enrollment activity (50% weight)
+            const enrollmentCount = classEnrollmentCounts[cls.classId] || 0;
+            score += Math.min(enrollmentCount * 5, 50); // Cap at 50
+            
+            // Rating quality (30% weight)
+            const rating = classRatings[cls.classId];
+            if (rating && rating.count >= 3) { // Need at least 3 ratings
+              score += (rating.avg / 5) * 30; // Normalize to 0-30
+            }
+            
+            // Recency boost (20% weight) - newer classes get a boost
+            const createdAt = cls.createdAt?.toMillis?.() || 0;
+            const daysSinceCreation = (now - createdAt) / (1000 * 60 * 60 * 24);
+            if (daysSinceCreation < 30) {
+              score += 20 * (1 - daysSinceCreation / 30); // Decay over 30 days
+            }
+            
+            return { ...cls, trendingScore: score };
+          })
+          .sort((a, b) => (b as any).trendingScore - (a as any).trendingScore)
+          .slice(0, 6); // Top 6 trending
+        
+        setTrendingClasses(scoredClasses);
+      } catch (error) {
+        console.error('Error calculating trending:', error);
+      } finally {
+        setLoadingTrending(false);
+      }
+    };
+
+    calculateTrending();
+  }, [approvedClasses, enrollments, classEnrollmentCounts, classRatings]);
 
   // Filter classes based on search and category
   const filteredClasses = approvedClasses.filter((cls) => {
@@ -356,38 +697,67 @@ export default function StudentDashboard() {
   const handleRatingSubmit = async () => {
     if (!selectedClassForRating || !rating || !user) return;
 
+    const classId = selectedClassForRating.classId || selectedClassForRating.id;
+
     try {
-      if (!window.firebaseDb || !window.collection || !window.addDoc) {
+      if (!window.firebaseDb || !window.collection || !window.addDoc || !window.query || !window.where || !window.getDocs || !window.updateDoc || !window.doc) {
         showError('Firebase not ready. Please try again.');
         return;
       }
 
-      const ratingsRef = window.collection(window.firebaseDb, 'ratings');
-      await window.addDoc(ratingsRef, {
-        classId: selectedClassForRating.classId || selectedClassForRating.id,
-        studentId: user.uid,
-        studentName: user.displayName || user.email?.split('@')[0],
-        rating: rating,
-        feedback: feedback,
-        createdAt: new Date()
-      });
+      // 1. Validate: Check if student is enrolled in this class
+      const enrollment = enrollments.find(e => e.classId === classId);
+      if (!enrollment) {
+        showError('You must be enrolled in this class to submit a rating.');
+        return;
+      }
 
-      // Update enrollment with rating
-      const enrollment = enrollments.find(e => e.classId === (selectedClassForRating.classId || selectedClassForRating.id));
-      if (enrollment && window.updateDoc && window.doc) {
-        const enrollmentRef = window.doc(window.firebaseDb, 'enrollments', enrollment.id);
-        await window.updateDoc(enrollmentRef, {
+      // 2. Check for duplicate rating (prevent multiple ratings)
+      const ratingsRef = window.collection(window.firebaseDb, 'ratings');
+      const existingRatingQuery = window.query(
+        ratingsRef,
+        window.where('classId', '==', classId),
+        window.where('studentId', '==', user.uid)
+      );
+      const existingRatingSnapshot = await window.getDocs(existingRatingQuery);
+      
+      if (!existingRatingSnapshot.empty) {
+        // Rating already exists - update it instead of creating new one
+        const existingRatingDoc = existingRatingSnapshot.docs[0];
+        const ratingDocRef = window.doc(window.firebaseDb, 'ratings', existingRatingDoc.id);
+        await window.updateDoc(ratingDocRef, {
           rating: rating,
           feedback: feedback,
-          ratedAt: new Date()
+          updatedAt: new Date()
         });
+        showSuccess('Rating updated successfully!');
+      } else {
+        // Create new rating
+        await window.addDoc(ratingsRef, {
+          classId: classId,
+          studentId: user.uid,
+          studentName: user.displayName || user.email?.split('@')[0] || 'Student',
+          rating: rating,
+          feedback: feedback,
+          createdAt: new Date()
+        });
+        showSuccess('Rating submitted successfully!');
       }
+
+      // 3. Update enrollment document for quick access (keep in sync)
+      const enrollmentRef = window.doc(window.firebaseDb, 'enrollments', enrollment.id);
+      await window.updateDoc(enrollmentRef, {
+        rating: rating,
+        feedback: feedback,
+        ratedAt: new Date()
+      });
 
       setShowRatingModal(false);
       setRating(0);
       setFeedback('');
       setSelectedClassForRating(null);
-      // Refresh enrollments
+      
+      // Refresh enrollments (this will also refresh class data via the useEffect)
       if (user) {
         const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
         const q = window.query(enrollmentsRef, window.where('studentId', '==', user.uid));
@@ -396,7 +766,29 @@ export default function StudentDashboard() {
         querySnapshot.forEach((doc: any) => {
           fetchedEnrollments.push({ id: doc.id, ...doc.data() });
         });
+        fetchedEnrollments.sort((a, b) => {
+          const aTime = a.enrolledAt?.toMillis?.() || 0;
+          const bTime = b.enrolledAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        // Fetch class data for each enrollment
+        const classesData: Record<string, any> = {};
+        const classPromises = fetchedEnrollments.map(async (enrollment) => {
+          try {
+            const classRef = window.doc(window.firebaseDb, 'classes', enrollment.classId);
+            const classSnap = await window.getDoc(classRef);
+            if (classSnap.exists()) {
+              classesData[enrollment.classId] = classSnap.data();
+            }
+          } catch (error) {
+            console.error(`Error fetching class ${enrollment.classId}:`, error);
+          }
+        });
+        await Promise.all(classPromises);
+
         setEnrollments(fetchedEnrollments);
+        setEnrollmentClasses(classesData);
       }
     } catch (error) {
       console.error('Error submitting rating:', error);
@@ -443,7 +835,7 @@ export default function StudentDashboard() {
     sessionDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
     
     const diffMinutes = (sessionDateTime.getTime() - now.getTime()) / (1000 * 60);
-    return diffMinutes >= -30 && diffMinutes <= 120; // Live if within 30 min before to 2 hours after
+    return diffMinutes >= -30 && diffMinutes <= 120; 
   };
 
   const dashboardStyles = `
@@ -750,6 +1142,165 @@ export default function StudentDashboard() {
           margin-bottom: 2rem;
         }
 
+        /* Dashboard Stats Grid */
+        .dashboard-stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 1.5rem;
+          margin-top: 2rem;
+          margin-bottom: 2rem;
+        }
+
+        .stat-card {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 1.5rem;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-value {
+          font-size: 2rem;
+          font-weight: 700;
+          margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+          color: rgba(255, 255, 255, 0.7);
+          font-size: 0.875rem;
+        }
+
+        /* Dashboard Quick Actions */
+        .dashboard-quick-actions {
+          display: flex;
+          gap: 1rem;
+          margin-bottom: 2rem;
+          flex-wrap: wrap;
+        }
+
+        .quick-action-button {
+          padding: 0.75rem 1.5rem;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 8px;
+          color: #fff;
+          text-decoration: none;
+          font-weight: 500;
+          font-size: 0.875rem;
+          transition: all 0.2s;
+          cursor: pointer;
+        }
+
+        .quick-action-button:hover {
+          background: rgba(255, 255, 255, 0.15);
+          border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .quick-action-button.primary {
+          background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
+          border: none;
+        }
+
+        .quick-action-button.primary:hover {
+          opacity: 0.9;
+        }
+
+        /* Dashboard Widgets */
+        .dashboard-widgets-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 2rem;
+          margin-bottom: 2rem;
+        }
+
+        .widget-card {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 1.5rem;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .widget-title {
+          font-size: 1.125rem;
+          font-weight: 600;
+          margin-bottom: 1rem;
+          color: #fff;
+        }
+
+        .widget-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .widget-list-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          transition: all 0.2s;
+        }
+
+        .widget-list-item:hover {
+          background: rgba(255, 255, 255, 0.05);
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .widget-list-item.clickable {
+          text-decoration: none;
+          color: inherit;
+        }
+
+        .widget-item-title {
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #fff;
+          margin-bottom: 0.25rem;
+        }
+
+        .widget-item-meta {
+          font-size: 0.8125rem;
+          color: rgba(255, 255, 255, 0.6);
+        }
+
+        .widget-button-join {
+          padding: 0.5rem 1rem;
+          background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
+          color: #fff;
+          text-decoration: none;
+          border-radius: 6px;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          transition: opacity 0.2s;
+        }
+
+        .widget-button-join:hover {
+          opacity: 0.9;
+        }
+
+        .widget-view-all {
+          display: block;
+          margin-top: 1rem;
+          color: #D92A63;
+          text-decoration: none;
+          font-size: 0.875rem;
+          font-weight: 600;
+          transition: opacity 0.2s;
+        }
+
+        .widget-view-all:hover {
+          opacity: 0.8;
+        }
+
+        .widget-empty-text {
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 0.875rem;
+          text-align: center;
+          padding: 1rem;
+        }
+
         .button-dark {
           background: linear-gradient(135deg, #D92A63 0%, #FF6B35 100%);
           color: #fff;
@@ -899,44 +1450,6 @@ export default function StudentDashboard() {
           display: none;
         }
 
-        @media (max-width: 991px) {
-          .sidebar {
-            transform: translateX(-100%);
-            transition: transform 0.3s;
-          }
-
-          .sidebar.open {
-            transform: translateX(0);
-          }
-
-          .main-content {
-            margin-left: 0;
-          }
-
-          .hamburger {
-            display: flex;
-          }
-
-          .course-grid {
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-          }
-        }
-
-        @media (max-width: 767px) {
-          .course-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .enrollment-item {
-            grid-template-columns: 1fr;
-            gap: 1rem;
-          }
-
-          .enrollment-actions {
-            flex-direction: column;
-          }
-        }
-
         /* Rating Modal */
         .rating-modal-overlay {
           position: fixed;
@@ -1008,6 +1521,272 @@ export default function StudentDashboard() {
           font-size: 0.875rem;
           font-weight: 600;
         }
+
+        /* Responsive Styles */
+        @media (max-width: 991px) {
+          .sidebar {
+            transform: translateX(-100%);
+            transition: transform 0.3s;
+          }
+
+          .sidebar.open {
+            transform: translateX(0);
+          }
+
+          .main-content {
+            margin-left: 0;
+            padding: 1rem;
+          }
+
+          .hamburger {
+            display: flex;
+          }
+
+          .course-grid {
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+          }
+
+          .dashboard-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 2rem;
+          }
+
+          .user-summary {
+            width: 100%;
+            min-width: auto;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.5rem;
+          }
+
+          .section-title {
+            font-size: 1.5rem;
+          }
+        }
+
+        @media (max-width: 767px) {
+          .main-content {
+            padding: 1rem;
+          }
+
+          .course-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+
+          .enrollment-item {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+
+          .enrollment-actions {
+            flex-direction: column;
+            width: 100%;
+          }
+
+          .dashboard-header {
+            margin-bottom: 1.5rem;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.25rem;
+          }
+
+          .welcome-section p {
+            font-size: 0.875rem;
+          }
+
+          .section-title {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+          }
+
+          .user-summary {
+            padding: 0.5rem 0.75rem;
+          }
+
+          .user-avatar {
+            width: 36px;
+            height: 36px;
+          }
+
+          .user-name {
+            font-size: 0.875rem;
+          }
+
+          .user-email {
+            font-size: 0.75rem;
+          }
+
+          .dashboard-stats-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 1rem !important;
+          }
+
+          .stat-card {
+            padding: 1rem !important;
+          }
+
+          .stat-value {
+            font-size: 1.5rem !important;
+          }
+
+          .stat-label {
+            font-size: 0.75rem !important;
+          }
+
+        .dashboard-two-col {
+          grid-template-columns: 1fr !important;
+        }
+
+        .dashboard-widgets-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 2rem;
+          margin-bottom: 2rem;
+        }
+
+          .dashboard-quick-actions {
+            flex-direction: column;
+            gap: 0.75rem !important;
+          }
+
+          .quick-action-button {
+            width: 100% !important;
+          }
+
+          .dashboard-widgets-grid {
+            grid-template-columns: 1fr !important;
+            gap: 1rem !important;
+          }
+
+          .widget-card {
+            padding: 1rem !important;
+          }
+
+          .widget-title {
+            font-size: 1rem !important;
+          }
+
+          .search-filter-container {
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+
+          .search-input {
+            width: 100%;
+            min-width: auto;
+            max-width: 100%;
+          }
+
+          .filter-select {
+            width: 100%;
+            min-width: auto;
+          }
+
+          .session-card {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 1rem;
+          }
+
+          .profile-form {
+            padding: 1.5rem;
+          }
+
+          .rating-modal-content {
+            padding: 1.5rem;
+            margin: 1rem;
+          }
+
+          .course-card {
+            margin-bottom: 1rem;
+          }
+
+          .course-info {
+            padding: 1rem;
+          }
+
+          .course-title {
+            font-size: 1.125rem;
+          }
+
+          .course-meta {
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .course-bottom {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 1rem;
+          }
+
+          .button-dark {
+            width: 100%;
+            text-align: center;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .main-content {
+            padding: 0.75rem;
+          }
+
+          .dashboard-stats-grid {
+            grid-template-columns: 1fr !important;
+            gap: 0.75rem !important;
+          }
+
+          .stat-card {
+            padding: 1rem !important;
+          }
+
+          .stat-value {
+            font-size: 1.5rem !important;
+          }
+
+          .stat-label {
+            font-size: 0.75rem !important;
+          }
+
+          .sidebar {
+            width: 100%;
+            max-width: 320px;
+          }
+
+          .sidebar-logo img {
+            width: 120px;
+          }
+
+          .welcome-section h2 {
+            font-size: 1.125rem;
+          }
+
+          .section-title {
+            font-size: 1.125rem;
+          }
+
+          .course-image-wrap {
+            height: 180px;
+          }
+
+          .widget-list-item {
+            padding: 0.75rem !important;
+          }
+
+          .widget-item-title {
+            font-size: 0.875rem !important;
+          }
+
+          .widget-item-meta {
+            font-size: 0.75rem !important;
+          }
+        }
       }
   `;
 
@@ -1026,9 +1805,10 @@ export default function StudentDashboard() {
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Dashboard</div>
             </a>
-            <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeView === 'notifications' ? 'active' : ''}`}>
+            <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeView === 'notifications' ? 'active' : ''}`} style={{ position: 'relative' }}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Notifications</div>
+              {user?.uid && <NotificationBadge userId={user.uid} />}
             </a>
             <a href="#" onClick={(e) => handleNavClick(e, 'upcoming-sessions')} className={`sidebar-nav-item ${activeView === 'upcoming-sessions' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
@@ -1069,49 +1849,342 @@ export default function StudentDashboard() {
             <>
               {/* Dashboard Header */}
               <div className="dashboard-header">
-            <div className="welcome-section">
-              <h2>Welcome back, {user?.displayName || 'Student'}!</h2>
-              <p>Continue your learning journey</p>
-            </div>
-            <div className="user-summary">
-              <div className="user-avatar">
-                {user?.photoURL ? (
-                  <img src={user.photoURL} alt={user?.displayName || 'Student'} />
+                <div className="welcome-section">
+                  <h2>Welcome back, {user?.displayName || 'Student'}!</h2>
+                  <p>Continue your learning journey</p>
+                </div>
+                <div className="user-summary">
+                  <div className="user-avatar">
+                    {user?.photoURL ? (
+                      <img src={user.photoURL} alt={user?.displayName || 'Student'} />
+                    ) : (
+                      userInitial
+                    )}
+                  </div>
+                  <div className="user-meta">
+                    <div className="user-name">{user?.displayName || user?.email?.split('@')[0] || 'Student'}</div>
+                    <div className="user-email">{user?.email || 'Student account'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Statistics Cards */}
+              <div className="dashboard-stats-grid">
+                <div className="stat-card">
+                  <div className="stat-value" style={{ color: '#D92A63' }}>
+                    {enrollments.length}
+                  </div>
+                  <div className="stat-label">
+                    Enrolled Classes
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value" style={{ color: '#FF654B' }}>
+                    {upcomingSessions.length}
+                  </div>
+                  <div className="stat-label">
+                    Upcoming Sessions
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value" style={{ color: '#4CAF50' }}>
+                    {upcomingSessions.filter(s => isClassLive(s.sessionDate, s.sessionTime) || s.status === 'live').length}
+                  </div>
+                  <div className="stat-label">
+                    Live Now
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value" style={{ color: '#2196F3' }}>
+                    {approvedClasses.length}
+                  </div>
+                  <div className="stat-label">
+                    Available Classes
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="dashboard-quick-actions">
+                <a
+                  href="#"
+                  onClick={(e) => handleNavClick(e, 'my-enrollments')}
+                  className="quick-action-button primary"
+                >
+                  View My Enrollments
+                </a>
+                <a
+                  href="#"
+                  onClick={(e) => handleNavClick(e, 'browse-classes')}
+                  className="quick-action-button"
+                >
+                  Browse All Classes
+                </a>
+                <a
+                  href="#"
+                  onClick={(e) => handleNavClick(e, 'upcoming-sessions')}
+                  className="quick-action-button"
+                >
+                  View Upcoming Sessions
+                </a>
+              </div>
+
+              {/* Two Column Layout */}
+              <div className="dashboard-widgets-grid">
+                {/* Upcoming Sessions Widget */}
+                <div className="widget-card">
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '1rem'
+                  }}>
+                    <h3 className="widget-title">Next Upcoming Sessions</h3>
+                    <a
+                      href="#"
+                      onClick={(e) => handleNavClick(e, 'upcoming-sessions')}
+                      className="widget-view-all"
+                    >
+                      View All →
+                    </a>
+                  </div>
+                  {upcomingSessions.length > 0 ? (
+                    <div className="widget-list">
+                      {upcomingSessions.slice(0, 3).map((session) => {
+                        const isLiveFromStatus = session.status === 'live';
+                        const isLive = isLiveFromStatus || isClassLive(session.sessionDate, session.sessionTime);
+                        return (
+                          <div key={session.id} className="widget-list-item">
+                            <div>
+                              <div className="widget-item-title">
+                                {session.className}
+                              </div>
+                              <div className="widget-item-meta">
+                                <strong>Date:</strong> {formatDate(session.sessionDate)} at {formatTime(session.sessionTime)}
+                              </div>
+                            </div>
+                            {isLive && session.meetingLink && (
+                              <a
+                                href={session.meetingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="widget-button-join"
+                              >
+                                Join Now
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="widget-empty-text">No upcoming sessions.</p>
+                  )}
+                  <a
+                    href="#"
+                    onClick={(e) => handleNavClick(e, 'upcoming-sessions')}
+                    className="widget-view-all"
+                  >
+                    View All Upcoming Sessions →
+                  </a>
+                </div>
+
+                {/* Recent Enrollments Widget */}
+                <div className="widget-card">
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '1rem'
+                  }}>
+                    <h3 className="widget-title">Recent Enrollments</h3>
+                    <a
+                      href="#"
+                      onClick={(e) => handleNavClick(e, 'my-enrollments')}
+                      className="widget-view-all"
+                    >
+                      View All →
+                    </a>
+                  </div>
+                  {enrollments.length > 0 ? (
+                    <div className="widget-list">
+                      {enrollments.slice(0, 3).map((enrollment) => {
+                        const classData = enrollmentClasses[enrollment.classId] || {};
+                        const className = enrollment.className || classData.title || 'Class';
+                        const enrollmentDate = enrollment.enrolledAt?.toDate ? enrollment.enrolledAt.toDate() : (enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null);
+                        
+                        return (
+                          <Link
+                            key={enrollment.id}
+                            href={`/product/${enrollment.classId}`}
+                            className="widget-list-item clickable"
+                          >
+                            <div>
+                              <div className="widget-item-title">
+                                {className}
+                              </div>
+                              <div className="widget-item-meta">
+                                Enrolled: {enrollmentDate ? formatDate(enrollmentDate) : 'N/A'}
+                              </div>
+                            </div>
+                            <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}>→</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="widget-empty-text">No enrollments yet. <a href="#" onClick={(e) => handleNavClick(e, 'browse-classes')} style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse classes</a> to get started!</p>
+                  )}
+                  <a
+                    href="#"
+                    onClick={(e) => handleNavClick(e, 'my-enrollments')}
+                    className="widget-view-all"
+                  >
+                    View All Enrollments →
+                  </a>
+                </div>
+              </div>
+
+              {/* Recommended Classes Section */}
+              <div className="section" style={{ marginTop: '3rem' }}>
+                <div className="section-title-inline">
+                  <h2 className="section-title" style={{ marginBottom: 0 }}>Recommended for You</h2>
+                  <a
+                    href="#"
+                    onClick={(e) => handleNavClick(e, 'browse-classes')}
+                    className="widget-view-all"
+                    style={{ fontSize: '0.875rem' }}
+                  >
+                    View All →
+                  </a>
+                </div>
+                {loadingRecommended ? (
+                  <div className="text-white text-center py-8">Loading recommendations...</div>
+                ) : recommendedClasses.length > 0 ? (
+                  <div className="course-grid">
+                    {recommendedClasses.map((course) => {
+                      const enrollmentCount = classEnrollmentCounts[course.classId] || 0;
+                      const rating = classRatings[course.classId];
+                      return (
+                        <Link key={course.classId} href={`/product/${course.classId}`} className="course-card">
+                          <div className="course-image-wrap">
+                            <img 
+                              src={(course.videoLink && course.videoLink.trim() !== '') ? course.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} 
+                              alt={course.title} 
+                              className="course-image"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                              }}
+                            />
+                            <div className="course-teacher-wrap">
+                              <div style={{
+                                width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'
+                              }}>
+                                {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
+                              </div>
+                              <div>{course.creatorName || 'Instructor'}</div>
+                            </div>
+                            <div style={{
+                              position: 'absolute',
+                              top: '0.75rem',
+                              right: '0.75rem',
+                              background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              color: '#fff',
+                              fontWeight: '600'
+                            }}>
+                              Recommended
+                            </div>
+                          </div>
+                          <div className="course-info">
+                            <h3 className="course-title">{course.title}</h3>
+                            <div className="course-meta">
+                              <div className="course-meta-item">
+                                <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
+                                <div>{course.numberSessions || 1} Sessions</div>
+                              </div>
+                              <div className="course-meta-item">
+                                <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg" alt="" className="course-meta-icon" />
+                                <div>{course.category || 'General'}</div>
+                              </div>
+                            </div>
+                            {rating && rating.count > 0 && (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.5rem', 
+                                marginTop: '0.5rem',
+                                fontSize: '0.875rem',
+                                color: '#FFD700'
+                              }}>
+                                <span>⭐</span>
+                                <span>{rating.avg.toFixed(1)} ({rating.count} {rating.count === 1 ? 'review' : 'reviews'})</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="course-bottom">
+                            <div className="course-price-wrap">
+                              <h4 className="course-price">₹{(course.price || 0).toFixed(2)}</h4>
+                            </div>
+                            {enrollmentCount > 0 && (
+                              <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                                {enrollmentCount} {enrollmentCount === 1 ? 'student' : 'students'}
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 ) : (
-                  userInitial
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '2rem',
+                    textAlign: 'center',
+                    color: 'rgba(255, 255, 255, 0.7)'
+                  }}>
+                    {enrollments.length === 0 ? (
+                      <>
+                        Complete your profile and enroll in classes to get personalized recommendations!
+                        <br />
+                        <a
+                          href="#"
+                          onClick={(e) => handleNavClick(e, 'profile')}
+                          style={{ color: '#D92A63', textDecoration: 'underline', marginTop: '0.5rem', display: 'inline-block' }}
+                        >
+                          Update Profile →
+                        </a>
+                      </>
+                    ) : (
+                      'No recommendations available at the moment. Check back later!'
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="user-meta">
-                <div className="user-name">{user?.displayName || user?.email?.split('@')[0] || 'Student'}</div>
-                <div className="user-email">{user?.email || 'Student account'}</div>
-              </div>
-            </div>
-          </div>
 
             </>
           )}
 
           {activeView === 'notifications' && (
             <>
-              {/* Notifications Placeholder */}
-              <div className="section" style={{ marginTop: '2rem' }}>
-            <h2 className="section-title">Notifications</h2>
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '16px',
-              padding: '2rem',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>Notifications Center</h3>
-              <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '1rem' }}>
-                Class reminders and updates are sent via email and WhatsApp through n8n automation.
-              </p>
-              <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
-                You'll receive notifications 24 hours and 1 hour before each class starts.
-              </p>
-            </div>
-              </div>
+              {user?.uid ? (
+                <NotificationList userId={user.uid} userRole="student" />
+              ) : (
+                <div className="section" style={{ marginTop: '2rem' }}>
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '16px',
+                    padding: '2rem',
+                    textAlign: 'center'
+                  }}>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.7)' }}>Loading notifications...</p>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -1123,13 +2196,15 @@ export default function StudentDashboard() {
                 {upcomingSessions.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {upcomingSessions.map((session) => {
-                      const isLive = isClassLive(session.sessionDate, session.sessionTime);
+                      const isLiveFromStatus = session.status === 'live';
+                      const isCompleted = session.status === 'completed';
+                      const isLive = isLiveFromStatus || isClassLive(session.sessionDate, session.sessionTime);
                       return (
                         <div key={session.id} style={{
-                          background: isLive ? 'rgba(217, 42, 99, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          background: isLive ? 'rgba(217, 42, 99, 0.2)' : isCompleted ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 255, 255, 0.05)',
                           borderRadius: '12px',
                           padding: '1.5rem',
-                          border: isLive ? '2px solid #D92A63' : '1px solid rgba(255, 255, 255, 0.1)',
+                          border: isLive ? '2px solid #D92A63' : isCompleted ? '1px solid rgba(76, 175, 80, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
@@ -1138,7 +2213,7 @@ export default function StudentDashboard() {
                         }}>
                           <div style={{ flex: 1, minWidth: '200px' }}>
                             <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-                              {session.className}
+                              {session.className} {session.sessionNumber && `- Session ${session.sessionNumber}`}
                             </h3>
                             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
                               <span>📅 {formatDate(session.sessionDate)}</span>
@@ -1159,20 +2234,71 @@ export default function StudentDashboard() {
                                 🔴 LIVE NOW
                               </span>
                             )}
-                            {session.meetingLink ? (
+                            {isCompleted && (
+                              <span style={{
+                                background: '#4CAF50',
+                                color: '#fff',
+                                padding: '0.5rem 1rem',
+                                borderRadius: '20px',
+                                fontSize: '0.875rem',
+                                fontWeight: '600'
+                              }}>
+                                ✓ Completed
+                              </span>
+                            )}
+                            {isCompleted && session.recordingLink ? (
+                              <a
+                                href={session.recordingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="button-dark"
+                                style={{ 
+                                  fontSize: '0.875rem', 
+                                  padding: '0.75rem 1.5rem', 
+                                  textDecoration: 'none',
+                                  background: 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)'
+                                }}
+                              >
+                                📹 Watch Recording
+                              </a>
+                            ) : session.meetingLink ? (
                               <a
                                 href={session.meetingLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="button-dark"
-                                style={{ fontSize: '0.875rem', padding: '0.75rem 1.5rem', textDecoration: 'none' }}
+                                style={{ 
+                                  fontSize: '0.875rem', 
+                                  padding: '0.75rem 1.5rem', 
+                                  textDecoration: 'none',
+                                  background: isLive ? '#D92A63' : 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)'
+                                }}
                               >
                                 {isLive ? 'Join Live Class' : 'Join Session'}
                               </a>
                             ) : (
                               <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
-                                Link will be sent via email
+                                {isCompleted ? 'Recording coming soon' : 'Link will be sent via email'}
                               </span>
+                            )}
+                            {isCompleted && (
+                              <button
+                                onClick={() => {
+                                  setSelectedClassForRating({ classId: session.classId, className: session.className });
+                                  setShowRatingModal(true);
+                                }}
+                                style={{
+                                  fontSize: '0.875rem',
+                                  padding: '0.75rem 1.5rem',
+                                  background: 'rgba(255, 255, 255, 0.1)',
+                                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                                  color: '#fff',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ⭐ Rate & Review
+                              </button>
                             )}
                           </div>
                         </div>
@@ -1203,44 +2329,122 @@ export default function StudentDashboard() {
               <div className="text-white text-center py-8">Loading enrollments...</div>
             ) : enrollments.length > 0 ? (
               <div className="course-grid">
-                {enrollments.map((course) => (
-                  <Link key={course.id} href={`/product/${course.classId}`} className="course-card">
-                    <div className="course-image-wrap">
-                      <img
-                        src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"
-                        alt={course.className}
-                        className="course-image"
-                      />
-                      <div className="course-teacher-wrap">
-                        <div style={{
-                          width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
-                        }}>
-                          Z
+                {enrollments.map((enrollment) => {
+                  const classData = enrollmentClasses[enrollment.classId] || {};
+                  const classImage = classData.videoLink || classData.thumbnail || "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                  const creatorName = classData.creatorName || enrollment.creatorName || 'Creator';
+                  const category = classData.category || enrollment.category || '';
+                  const scheduleType = classData.scheduleType || enrollment.classType || 'one-time';
+                  const numberOfSessions = classData.numberSessions || enrollment.numberOfSessions || 1;
+                  const enrollmentDate = enrollment.enrolledAt?.toDate ? enrollment.enrolledAt.toDate() : (enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null);
+                  const nextSession = upcomingSessions.find(s => s.classId === enrollment.classId);
+                  const creatorInitial = (creatorName[0] || 'C').toUpperCase();
+                  
+                  // Calculate attendance stats
+                  const sessionAttendance = enrollment.sessionAttendance || {};
+                  const totalSessions = Object.keys(sessionAttendance).length;
+                  const attendedSessions = Object.values(sessionAttendance).filter((s: any) => s.attended).length;
+                  const attendanceRate = totalSessions > 0 ? (attendedSessions / totalSessions) * 100 : 0;
+
+                  return (
+                    <Link key={enrollment.id} href={`/product/${enrollment.classId}`} className="course-card">
+                      <div className="course-image-wrap">
+                        <img
+                          src={classImage}
+                          alt={enrollment.className || classData.title || 'Class'}
+                          className="course-image"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                          }}
+                        />
+                        <div className="course-teacher-wrap">
+                          <div style={{
+                            width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold',
+                            color: '#fff', fontSize: '0.875rem'
+                          }}>
+                            {creatorInitial}
+                          </div>
+                          <div className="ml-2" style={{ color: '#fff', fontSize: '0.875rem', fontWeight: '500' }}>
+                            {creatorName}
+                          </div>
                         </div>
-                        <div className="ml-2">Zefrix</div>
+                        {category && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '0.75rem',
+                            right: '0.75rem',
+                            background: 'rgba(0, 0, 0, 0.7)',
+                            backdropFilter: 'blur(10px)',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            color: '#fff',
+                            fontWeight: '500'
+                          }}>
+                            {category}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="course-info">
-                      <h3 className="course-title">{course.className}</h3>
-                      <div className="course-meta">
-                        <div className="course-meta-item">
-                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
-                          <div>{course.numberOfSessions || 1} Sessions</div>
+                      <div className="course-info">
+                        <h3 className="course-title">{enrollment.className || classData.title || 'Class'}</h3>
+                        <div className="course-meta" style={{ marginBottom: '0.75rem' }}>
+                          <div className="course-meta-item">
+                            <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
+                            <div>{numberOfSessions} {numberOfSessions === 1 ? 'Session' : 'Sessions'}</div>
+                          </div>
+                          <div className="course-meta-item">
+                            <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
+                            <div>{scheduleType === 'recurring' ? 'Recurring' : 'One-time'}</div>
+                          </div>
                         </div>
-                        <div className="course-meta-item">
-                          <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7b8_icon-6.svg" alt="" className="course-meta-icon" />
-                          <div>{course.classType || 'One-time'}</div>
+                        {enrollmentDate && (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: 'rgba(255, 255, 255, 0.6)',
+                            marginBottom: '0.5rem'
+                          }}>
+                            Enrolled: {formatDate(enrollmentDate)}
+                          </div>
+                        )}
+                        {totalSessions > 0 && (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: attendanceRate >= 75 ? '#4CAF50' : attendanceRate >= 50 ? '#FF9800' : 'rgba(255, 255, 255, 0.6)',
+                            marginBottom: '0.5rem',
+                            fontWeight: '500'
+                          }}>
+                            Attendance: {attendedSessions}/{totalSessions} sessions ({attendanceRate.toFixed(0)}%)
+                          </div>
+                        )}
+                        {nextSession && (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: '#D92A63',
+                            fontWeight: '500',
+                            marginBottom: '0.5rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                          }}>
+                            <span>📅</span>
+                            <span>Next: {formatDate(nextSession.sessionDate)} {nextSession.sessionTime && `at ${formatTime(nextSession.sessionTime)}`}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="course-bottom">
+                        <div className="course-price-wrap">
+                          <h4 className="course-price">₹{(enrollment.classPrice || classData.price || 0).toFixed(2)}</h4>
                         </div>
+                        {enrollment.rating !== undefined && enrollment.rating !== null && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#FFD700', fontSize: '0.875rem' }}>
+                            ⭐ {enrollment.rating?.toFixed(1)} Rating
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="course-bottom">
-                      <div className="course-price-wrap">
-                        <h4 className="course-price">₹{(course.classPrice || 0).toFixed(2)}</h4>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-gray-400 py-8">
@@ -1280,8 +2484,8 @@ export default function StudentDashboard() {
                 style={{ minWidth: '150px' }}
               >
                 <option value="">All Categories</option>
-                {Array.from(new Set(approvedClasses.map(c => c.category))).map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                {categoryDetails.map(cat => (
+                  <option key={cat.slug} value={cat.title}>{cat.title}</option>
                 ))}
               </select>
               {(searchQuery || selectedCategory) && (
@@ -1306,27 +2510,44 @@ export default function StudentDashboard() {
                   Showing {filteredClasses.length} of {approvedClasses.length} classes
                 </div>
                 <div className="course-grid">
-                  {filteredClasses.map((course) => (
-                    <Link key={course.classId} href={`/product/${course.classId}`} className="course-card">
-                      <div className="course-image-wrap">
-                        <img 
-                          src={(course.videoLink && course.videoLink.trim() !== '') ? course.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} 
-                          alt={course.title} 
-                          className="course-image"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
-                          }}
-                        />
-                        <div className="course-teacher-wrap">
-                          <div style={{
-                            width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'
-                          }}>
-                            {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
+                  {filteredClasses.map((course) => {
+                    const isTrending = trendingClasses.some(tc => tc.classId === course.classId);
+                    return (
+                      <Link key={course.classId} href={`/product/${course.classId}`} className="course-card">
+                        <div className="course-image-wrap">
+                          <img 
+                            src={(course.videoLink && course.videoLink.trim() !== '') ? course.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"} 
+                            alt={course.title} 
+                            className="course-image"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                            }}
+                          />
+                          <div className="course-teacher-wrap">
+                            <div style={{
+                              width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'
+                            }}>
+                              {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
+                            </div>
+                            <div>{course.creatorName || 'Instructor'}</div>
                           </div>
-                          <div>{course.creatorName || 'Instructor'}</div>
+                          {isTrending && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '0.75rem',
+                              right: '0.75rem',
+                              background: 'linear-gradient(135deg, #FF654B 0%, #FF9800 100%)',
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              color: '#fff',
+                              fontWeight: '600'
+                            }}>
+                              Trending
+                            </div>
+                          )}
                         </div>
-                      </div>
                       <div className="course-info">
                         <h3 className="course-title">{course.title}</h3>
                         <div className="course-meta">
@@ -1350,7 +2571,8 @@ export default function StudentDashboard() {
                         </div>
                       </div>
                     </Link>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             ) : (

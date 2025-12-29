@@ -1,14 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import NotificationBadge from '@/components/Notifications/NotificationBadge';
 
 interface SidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
   onLogout: () => void;
+  userId?: string;
 }
 
-export default function CreatorSidebar({ activeSection, onSectionChange, onLogout }: SidebarProps) {
+export default function CreatorSidebar({ activeSection, onSectionChange, onLogout, userId }: SidebarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, section: string) => {
@@ -28,9 +30,10 @@ export default function CreatorSidebar({ activeSection, onSectionChange, onLogou
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
             <div>Dashboard</div>
           </a>
-          <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeSection === 'notifications' ? 'active' : ''}`}>
+          <a href="#" onClick={(e) => handleNavClick(e, 'notifications')} className={`sidebar-nav-item ${activeSection === 'notifications' ? 'active' : ''}`} style={{ position: 'relative' }}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
             <div>Notifications</div>
+            {userId && <NotificationBadge userId={userId} />}
           </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'analytics')} className={`sidebar-nav-item ${activeSection === 'analytics' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
@@ -44,17 +47,9 @@ export default function CreatorSidebar({ activeSection, onSectionChange, onLogou
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
             <div>Manage Classes</div>
           </a>
-          <a href="#" onClick={(e) => handleNavClick(e, 'manage-batches')} className={`sidebar-nav-item ${activeSection === 'manage-batches' ? 'active' : ''}`}>
-            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
-            <div>Manage Batches</div>
-          </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'enrollments')} className={`sidebar-nav-item ${activeSection === 'enrollments' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
             <div>All Enrollments</div>
-          </a>
-          <a href="#" onClick={(e) => handleNavClick(e, 'live-class')} className={`sidebar-nav-item ${activeSection === 'live-class' ? 'active' : ''}`}>
-            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
-            <div>Live Class</div>
           </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'profile')} className={`sidebar-nav-item ${activeSection === 'profile' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
@@ -71,10 +66,18 @@ export default function CreatorSidebar({ activeSection, onSectionChange, onLogou
 
       {/* Mobile Hamburger */}
       <div className="hamburger" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-        <div className="hamburger-line"></div>
-        <div className="hamburger-line"></div>
-        <div className="hamburger-line"></div>
+        <div className={`hamburger-line ${isMenuOpen ? 'top open' : ''}`}></div>
+        <div className={`hamburger-line ${isMenuOpen ? 'mid open' : ''}`}></div>
+        <div className={`hamburger-line ${isMenuOpen ? 'bot open' : ''}`}></div>
       </div>
+
+      {/* Overlay to close menu on mobile */}
+      {isMenuOpen && (
+        <div 
+          className="creator-nav-overlay" 
+          onClick={() => setIsMenuOpen(false)}
+        ></div>
+      )}
     </>
   );
 }

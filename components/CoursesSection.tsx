@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import CourseCard from './CourseCard';
+import { DEFAULT_COURSE_IMAGE } from '@/lib/constants';
 
 declare global {
   interface Window {
@@ -12,6 +13,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
   }
 }
 
@@ -42,7 +44,7 @@ export default function CoursesSection() {
         script.type = 'module';
         script.textContent = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
           
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -60,6 +62,7 @@ export default function CoursesSection() {
           window.query = query;
           window.where = where;
           window.getDocs = getDocs;
+          window.onSnapshot = onSnapshot;
         `;
         document.head.appendChild(script);
       };
@@ -68,73 +71,89 @@ export default function CoursesSection() {
   }, []);
 
   useEffect(() => {
-    const fetchApprovedClasses = async () => {
-      // Check if Firebase is already ready
-      if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
-        await loadClasses();
-        return;
+    let unsubscribe: (() => void) | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    const loadClasses = () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+        return () => {}; // Return empty cleanup function
       }
 
+      setLoading(true);
+      try {
+        console.log('Setting up real-time listener for approved classes...');
+        const classesRef = window.collection(window.firebaseDb, 'classes');
+        const q = window.query(classesRef, window.where('status', '==', 'approved'));
+        
+        // Set up real-time listener
+        const unsub = window.onSnapshot(q, (snapshot: any) => {
+          const classes: ApprovedClass[] = [];
+          snapshot.forEach((doc: any) => {
+            classes.push({ classId: doc.id, ...doc.data() });
+          });
+          
+          console.log(`✅ Real-time update: Found ${classes.length} approved classes`);
+          
+          // Sort by creation date (newest first) and take first 6
+          classes.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+          
+          setApprovedClasses(classes.slice(0, 6));
+          setLoading(false);
+        }, (error: any) => {
+          console.error('Error in real-time listener:', error);
+          setApprovedClasses([]);
+          setLoading(false);
+        });
+
+        return unsub; // Return cleanup function
+      } catch (error) {
+        console.error('Error setting up real-time listener:', error);
+        setApprovedClasses([]);
+        setLoading(false);
+        return () => {}; // Return empty cleanup function
+      }
+    };
+
+    // Check if Firebase is already ready
+    if (window.firebaseDb && window.collection && window.query && window.where && window.onSnapshot) {
+      unsubscribe = loadClasses();
+    } else {
       // Listen for firebaseReady event
       const handleFirebaseReady = () => {
-        loadClasses();
+        if (!unsubscribe) {
+          unsubscribe = loadClasses();
+        }
       };
 
       window.addEventListener('firebaseReady', handleFirebaseReady);
 
       // Fallback: try after a delay if event doesn't fire
-      const timeout = setTimeout(() => {
-        if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
-          loadClasses();
+      timeoutId = setTimeout(() => {
+        if (window.firebaseDb && window.collection && window.query && window.where && window.onSnapshot) {
+          if (!unsubscribe) {
+            unsubscribe = loadClasses();
+          }
         } else {
-          console.warn('Firebase not ready after timeout, using fallback data');
+          console.warn('Firebase not ready after timeout');
           setLoading(false);
         }
       }, 5000);
 
       return () => {
         window.removeEventListener('firebaseReady', handleFirebaseReady);
-        clearTimeout(timeout);
+        if (timeoutId) clearTimeout(timeoutId);
+        if (unsubscribe) unsubscribe();
       };
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (timeoutId) clearTimeout(timeoutId);
     };
-
-    const loadClasses = async () => {
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        return;
-      }
-
-      setLoading(true);
-      try {
-        console.log('Fetching approved classes from Firestore...');
-        const classesRef = window.collection(window.firebaseDb, 'classes');
-        const q = window.query(classesRef, window.where('status', '==', 'approved'));
-        const querySnapshot = await window.getDocs(q);
-        
-        const classes: ApprovedClass[] = [];
-        querySnapshot.forEach((doc: any) => {
-          classes.push({ classId: doc.id, ...doc.data() });
-        });
-        
-        console.log(`Found ${classes.length} approved classes`);
-        
-        // Sort by creation date (newest first) and take first 6
-        classes.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-        
-        setApprovedClasses(classes.slice(0, 6));
-      } catch (error) {
-        console.error('Error fetching approved classes:', error);
-        // Fallback to mock data if Firestore fails
-        setApprovedClasses([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchApprovedClasses();
   }, []);
 
   // Map approved classes to course format (only real classes, no dummy data)
@@ -149,7 +168,7 @@ export default function CoursesSection() {
     instructor: classItem.creatorName || 'Creator',
     instructorId: '',
     instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
-    image: classItem.videoLink || 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg',
+    image: classItem.videoLink || DEFAULT_COURSE_IMAGE,
     price: classItem.price,
     originalPrice: classItem.price * 1.2,
     sections: classItem.numberSessions,
@@ -161,17 +180,18 @@ export default function CoursesSection() {
   return (
     <section className="section-spacing-bottom">
       <div className="container">
-        <div className="flex items-center justify-between mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold text-white">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 mb-8 sm:mb-16">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
             Browse our courses
           </h2>
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            className="w-full sm:w-auto"
           >
             <Link
               href="/courses"
-              className="bg-gradient-to-r from-primary to-secondary px-8 py-4 rounded-lg text-white font-semibold text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
+              className="inline-block w-full sm:w-auto text-center bg-gradient-to-r from-primary to-secondary px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-white font-semibold text-base sm:text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
             >
               View all courses
             </Link>

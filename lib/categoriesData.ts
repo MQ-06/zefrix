@@ -11,10 +11,9 @@ export const categoryDetails: CategoryDetail[] = [
     slug: 'dance-performing-arts',
     title: 'Dance & Performing Arts',
     subcategories: [
-      'Singing (Western, Bollywood, Classical, Rap)',
-      'Songwriting',
-      'Music Production & Mixing',
-      'Instrument Training (Guitar, Piano, Drums)',
+      'Dance (Hip-Hop, Contemporary, Bollywood, Freestyle)',
+      'Acting / Theatre / Stage Presence',
+      'Movement & Expression',
     ],
   },
   {
@@ -149,11 +148,9 @@ export const categoryDetails: CategoryDetail[] = [
     slug: 'video-photography-filmmaking',
     title: 'Video, Photography & Filmmaking',
     subcategories: [
-      'Photography Basics / Portrait / Product',
-      'Video Production / Editing',
-      'Cinematography / Storytelling',
-      'Drone Photography / Videography',
+      'Mobile Photography',
+      'Filmmaking for Beginners',
+      'Color Grading / Editing',
     ],
   },
 ];
-

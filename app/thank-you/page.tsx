@@ -22,6 +22,8 @@ function ThankYouContent() {
   }, [searchParams]);
 
   const isSuccess = status === "success";
+  const isPartialSuccess = status === "partial_success";
+  const failedCount = searchParams.get("failed");
 
   return (
     <div className="min-h-screen pt-32 pb-16 bg-gradient-to-b from-[#1A1A2E] to-[#0F3460] flex items-center justify-center px-4">
@@ -32,7 +34,7 @@ function ThankYouContent() {
         className="max-w-2xl w-full"
       >
         <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-8 md:p-12 border border-white/10 text-center">
-          {isSuccess ? (
+          {isSuccess || isPartialSuccess ? (
             <>
               {/* Success Icon */}
               <motion.div
@@ -57,12 +59,29 @@ function ThankYouContent() {
               </motion.div>
 
               <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                Payment Successful 🎉
+                {isPartialSuccess ? "Partial Enrollment Success" : "Payment Successful 🎉"}
               </h1>
 
               <p className="text-xl text-gray-300 mb-6">
-                Thank you for enrolling in the class!
+                {isPartialSuccess 
+                  ? `Some classes were enrolled successfully. ${failedCount} ${failedCount === "1" ? "class" : "classes"} need manual processing.`
+                  : "Thank you for enrolling in the class!"}
               </p>
+              
+              {isPartialSuccess && (
+                <div className="bg-yellow-500/10 rounded-lg p-6 mb-8 border border-yellow-500/30 text-left">
+                  <h3 className="text-lg font-semibold text-yellow-400 mb-3">
+                    ⚠️ Action Required
+                  </h3>
+                  <p className="text-gray-300 text-sm mb-2">
+                    Your payment was successful (Payment ID: <span className="font-mono text-yellow-400">{paymentId || "N/A"}</span>), but some enrollments couldn't be completed automatically.
+                  </p>
+                  <p className="text-gray-300 text-sm">
+                    Our team will process the remaining enrollments within 24 hours. If you don't see them in your dashboard, please contact support at{" "}
+                    <a href="mailto:contact@zefrix.com" className="underline text-yellow-400">contact@zefrix.com</a>
+                  </p>
+                </div>
+              )}
 
               <div className="bg-white/5 rounded-lg p-6 mb-8 text-left">
                 <h3 className="text-lg font-semibold text-white mb-4">

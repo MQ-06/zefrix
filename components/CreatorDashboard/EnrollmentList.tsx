@@ -45,45 +45,20 @@ interface EnrollmentListProps {
   onBack?: () => void;
 }
 
+interface ClassInfo {
+  id: string;
+  title: string;
+}
+
 export default function EnrollmentList({ classId, className, onBack }: EnrollmentListProps) {
   const { showError } = useNotification();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [allEnrollments, setAllEnrollments] = useState<Enrollment[]>([]);
   const [studentsInfo, setStudentsInfo] = useState<Record<string, StudentInfo>>({});
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
-
-  useEffect(() => {
-    const checkFirebase = setInterval(() => {
-      if (window.firebaseAuth && window.firebaseDb) {
-        clearInterval(checkFirebase);
-        const currentUser = window.firebaseAuth.currentUser;
-        if (currentUser) {
-          setUser(currentUser);
-          if (classId) {
-            fetchEnrollments(classId);
-          } else {
-            fetchAllEnrollments(currentUser.uid);
-          }
-        } else {
-          const unsubscribe = window.firebaseAuth.onAuthStateChanged((user: any) => {
-            if (user) {
-              setUser(user);
-              if (classId) {
-                fetchEnrollments(classId);
-              } else {
-                fetchAllEnrollments(user.uid);
-              }
-            } else {
-              setLoading(false);
-            }
-          });
-          return () => unsubscribe();
-        }
-      }
-    }, 100);
-
-    return () => clearInterval(checkFirebase);
-  }, [classId]);
+  const [classes, setClasses] = useState<ClassInfo[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(classId || null);
 
   const fetchEnrollments = async (targetClassId: string) => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
@@ -121,7 +96,7 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
     }
   };
 
-  const fetchAllEnrollments = async (creatorId: string) => {
+  const fetchClassesAndEnrollments = async (creatorId: string) => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
       setLoading(false);
       return;
@@ -134,20 +109,28 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
       const classesQuery = window.query(classesRef, window.where('creatorId', '==', creatorId));
       const classesSnapshot = await window.getDocs(classesQuery);
 
+      const classesList: ClassInfo[] = [];
       const classIds: string[] = [];
       classesSnapshot.forEach((doc: any) => {
+        const data = doc.data();
+        classesList.push({ id: doc.id, title: data.title || 'Untitled Class' });
         classIds.push(doc.id);
       });
 
+      // Sort classes by title
+      classesList.sort((a, b) => a.title.localeCompare(b.title));
+      setClasses(classesList);
+
       if (classIds.length === 0) {
         setEnrollments([]);
+        setAllEnrollments([]);
         setLoading(false);
         return;
       }
 
       // Then get all enrollments for these classes
       const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-      const allEnrollments: Enrollment[] = [];
+      const fetchedEnrollments: Enrollment[] = [];
 
       // Firestore 'in' query has limit of 10, so we need to batch
       for (let i = 0; i < classIds.length; i += 10) {
@@ -155,19 +138,20 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
         const q = window.query(enrollmentsRef, window.where('classId', 'in', batch));
         const querySnapshot = await window.getDocs(q);
         querySnapshot.forEach((doc: any) => {
-          allEnrollments.push({ id: doc.id, ...doc.data() });
+          fetchedEnrollments.push({ id: doc.id, ...doc.data() });
         });
       }
 
       // Sort by enrollment date (newest first)
-      allEnrollments.sort((a, b) => {
+      fetchedEnrollments.sort((a, b) => {
         const aTime = a.enrolledAt?.toMillis?.() || 0;
         const bTime = b.enrolledAt?.toMillis?.() || 0;
         return bTime - aTime;
       });
 
-      setEnrollments(allEnrollments);
-      await fetchStudentsInfo(allEnrollments);
+      setAllEnrollments(fetchedEnrollments);
+      setEnrollments(fetchedEnrollments);
+      await fetchStudentsInfo(fetchedEnrollments);
     } catch (error) {
       console.error('Error fetching enrollments:', error);
       showError('Failed to load enrollments');
@@ -183,36 +167,38 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
     const uniqueStudentIds = Array.from(new Set(enrollmentsList.map(e => e.studentId)));
 
     for (const studentId of uniqueStudentIds) {
+      // Start with enrollment data as fallback
+      const enrollment = enrollmentsList.find(e => e.studentId === studentId);
+      const fallbackInfo: StudentInfo = {
+        name: enrollment?.studentName || 'Student',
+        email: enrollment?.studentEmail || '',
+      };
+
+      // Try to fetch additional user info, but don't fail if permissions are insufficient
       try {
         const userRef = window.doc(window.firebaseDb, 'users', studentId);
         const userSnap = await window.getDoc(userRef);
         if (userSnap.exists()) {
           const userData = userSnap.data();
           studentsMap[studentId] = {
-            name: userData.name || userData.displayName || userData.email?.split('@')[0] || 'Student',
-            email: userData.email || enrollmentsList.find(e => e.studentId === studentId)?.studentEmail || '',
+            name: userData.name || userData.displayName || fallbackInfo.name,
+            email: userData.email || fallbackInfo.email,
             phone: userData.phone || userData.whatsapp || '',
             photoURL: userData.photoURL || userData.profileImage || '',
           };
         } else {
-          // Fallback to enrollment data
-          const enrollment = enrollmentsList.find(e => e.studentId === studentId);
-          if (enrollment) {
-            studentsMap[studentId] = {
-              name: enrollment.studentName || 'Student',
-              email: enrollment.studentEmail || '',
-            };
-          }
+          // Use enrollment data if user document doesn't exist
+          studentsMap[studentId] = fallbackInfo;
         }
-      } catch (error) {
-        console.error(`Error fetching student ${studentId}:`, error);
-        // Fallback to enrollment data
-        const enrollment = enrollmentsList.find(e => e.studentId === studentId);
-        if (enrollment) {
-          studentsMap[studentId] = {
-            name: enrollment.studentName || 'Student',
-            email: enrollment.studentEmail || '',
-          };
+      } catch (error: any) {
+        // If permission denied or any other error, use enrollment data
+        // This is expected for creators who cannot read student user documents
+        if (error.code === 'permission-denied' || error.code === 'PERMISSION_DENIED') {
+          // Silently use enrollment data - this is expected behavior
+          studentsMap[studentId] = fallbackInfo;
+        } else {
+          console.error(`Error fetching student ${studentId}:`, error);
+          studentsMap[studentId] = fallbackInfo;
         }
       }
     }
@@ -267,6 +253,56 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
       <h2 className="creator-section-title">
         {className ? `Enrollments: ${className}` : 'All Enrollments'}
       </h2>
+
+      {/* Class Filter - Only show when viewing all enrollments */}
+      {!classId && classes.length > 0 && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ 
+            display: 'block', 
+            marginBottom: '0.5rem', 
+            color: 'rgba(255, 255, 255, 0.9)', 
+            fontWeight: '600',
+            fontSize: '0.9375rem'
+          }}>
+            Filter by Class:
+          </label>
+          <select
+            value={selectedClassId || 'all'}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSelectedClassId(value === 'all' ? null : value);
+            }}
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '8px',
+              color: '#fff',
+              fontSize: '0.9375rem',
+              cursor: 'pointer',
+              minWidth: '300px',
+              outline: 'none'
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = '#D92A63';
+              e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+              e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+            }}
+          >
+            <option value="all" style={{ background: '#1a1a2e', color: '#fff' }}>
+              All Classes
+            </option>
+            {classes.map((cls) => (
+              <option key={cls.id} value={cls.id} style={{ background: '#1a1a2e', color: '#fff' }}>
+                {cls.title}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {enrollments.length === 0 ? (
         <div style={{
@@ -328,8 +364,14 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                           {student.photoURL ? (
                             <img
-                              src={student.photoURL}
+                              src={student.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Student')}&background=D92A63&color=fff&size=128`}
                               alt={student.name}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (!target.src.includes('ui-avatars.com')) {
+                                  target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Student')}&background=D92A63&color=fff&size=128`;
+                                }
+                              }}
                               style={{
                                 width: '40px',
                                 height: '40px',

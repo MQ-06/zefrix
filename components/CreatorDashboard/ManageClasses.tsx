@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useNotification } from '@/contexts/NotificationContext';
 import styles from './ManageClasses.module.css';
+import { DEFAULT_COURSE_IMAGE } from '@/lib/constants';
 
 declare global {
   interface Window {
@@ -12,6 +13,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    getDoc: any;
     doc: any;
     deleteDoc: any;
     updateDoc: any;
@@ -34,11 +36,10 @@ interface ClassItem {
 interface ManageClassesProps {
   onEditClass?: (classId: string) => void;
   onViewClass?: (classId: string) => void;
-  onManageBatches?: (classId: string, className: string) => void;
   onViewEnrollments?: (classId: string, className: string) => void;
 }
 
-export default function ManageClasses({ onEditClass, onViewClass, onManageBatches, onViewEnrollments }: ManageClassesProps) {
+export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollments }: ManageClassesProps) {
   const { showSuccess, showError, showInfo } = useNotification();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,17 +126,82 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
     }
   };
 
+  const canDeleteClass = (classItem: ClassItem): { canDelete: boolean; reason: string } => {
+    // Approved classes cannot be deleted - they are live and visible to students
+    if (classItem.status === 'approved') {
+      return {
+        canDelete: false,
+        reason: 'Approved classes cannot be deleted. They are live on the platform and students may have enrolled or made purchases. Please contact admin if you need to remove an approved class.'
+      };
+    }
+
+    // Only pending and rejected classes can potentially be deleted
+    if (classItem.status !== 'pending' && classItem.status !== 'rejected') {
+      return {
+        canDelete: false,
+        reason: `Classes with status "${classItem.status}" cannot be deleted.`
+      };
+    }
+
+    return { canDelete: true, reason: '' };
+  };
+
   const handleDeleteClass = async (classId: string, className: string) => {
-    if (!window.firebaseDb || !window.doc || !window.deleteDoc) {
+    if (!window.firebaseDb || !window.doc || !window.deleteDoc || !window.getDoc || !window.collection || !window.query || !window.where || !window.getDocs) {
       showError('Firebase not ready. Please try again.');
       return;
     }
 
-    const confirmed = confirm(`Are you sure you want to delete "${className}"?\n\nThis action cannot be undone.`);
-    if (!confirmed) return;
+    // Find the class item
+    const classItem = classes.find(c => c.classId === classId);
+    if (!classItem) {
+      showError('Class not found.');
+      return;
+    }
+
+    // Check if class can be deleted based on status
+    const deletionCheck = canDeleteClass(classItem);
+    if (!deletionCheck.canDelete) {
+      showError(deletionCheck.reason);
+      return;
+    }
 
     setDeletingClassId(classId);
     try {
+      // Check for enrollments
+      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+      const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', classId));
+      const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+
+      if (!enrollmentsSnapshot.empty) {
+        setDeletingClassId(null);
+        showError(`Cannot delete "${className}". This class has ${enrollmentsSnapshot.size} student enrollment(s). Students have paid and enrolled in this class, so deletion would affect their access and purchases.`);
+        return;
+      }
+
+      // Check for sessions
+      const sessionsRef = window.collection(window.firebaseDb, 'sessions');
+      const sessionsQuery = window.query(sessionsRef, window.where('classId', '==', classId));
+      const sessionsSnapshot = await window.getDocs(sessionsQuery);
+
+      if (!sessionsSnapshot.empty) {
+        setDeletingClassId(null);
+        showError(`Cannot delete "${className}". This class has ${sessionsSnapshot.size} session(s) scheduled or completed. Sessions have been created for this class, so deletion is not allowed to preserve data integrity.`);
+        return;
+      }
+
+      // Confirm deletion
+      const confirmed = confirm(
+        `Are you sure you want to delete "${className}"?\n\n` +
+        `Status: ${classItem.status}\n` +
+        `This action cannot be undone.`
+      );
+      if (!confirmed) {
+        setDeletingClassId(null);
+        return;
+      }
+
+      // Delete the class
       const classRef = window.doc(window.firebaseDb, 'classes', classId);
       await window.deleteDoc(classRef);
 
@@ -143,21 +209,25 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
       setClasses(prev => prev.filter(c => c.classId !== classId));
 
       showSuccess('Class deleted successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting class:', error);
-      showError('Failed to delete class. Please try again.');
+      
+      // Handle specific Firebase permission errors
+      if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
+        const deletionCheck = canDeleteClass(classItem);
+        if (!deletionCheck.canDelete) {
+          showError(deletionCheck.reason);
+        } else {
+          showError(`Permission denied. You cannot delete this class. ${deletionCheck.reason || 'Please ensure you have the necessary permissions.'}`);
+        }
+      } else {
+        showError('Failed to delete class. Please try again.');
+      }
     } finally {
       setDeletingClassId(null);
     }
   };
 
-  const handleManageBatches = (classId: string, className: string) => {
-    if (onManageBatches) {
-      onManageBatches(classId, className);
-    } else {
-      showInfo(`Manage Batches for "${className}" - Batch management functionality coming soon! You'll be able to create recurring sessions, schedule multiple dates, and manage batch enrollments.`);
-    }
-  };
 
   const handleViewEnrollments = (classId: string, className: string) => {
     if (onViewEnrollments) {
@@ -182,6 +252,16 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
 
   const getStatusLabel = (status: string) => {
     return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  const getDeleteButtonInfo = (classItem: ClassItem) => {
+    const deletionCheck = canDeleteClass(classItem);
+    return {
+      disabled: !deletionCheck.canDelete || deletingClassId === classItem.classId,
+      title: deletionCheck.canDelete 
+        ? 'Delete this class (only if no enrollments or sessions exist)'
+        : deletionCheck.reason
+    };
   };
 
   return (
@@ -210,11 +290,11 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
             <div key={classItem.classId} className={styles.classItem}>
               <div className={styles.classGrid}>
                 <img
-                  src={(classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg"}
+                  src={(classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : DEFAULT_COURSE_IMAGE}
                   alt={classItem.title}
                   className={styles.thumbnail}
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
+                    (e.target as HTMLImageElement).src = DEFAULT_COURSE_IMAGE;
                   }}
                 />
                 <h3 className={styles.classTitle}>{classItem.title}</h3>
@@ -241,12 +321,6 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
                 </button>
                 <button
                   className={styles.button}
-                  onClick={() => handleManageBatches(classItem.classId, classItem.title)}
-                >
-                  Manage Batches
-                </button>
-                <button
-                  className={styles.button}
                   onClick={() => handleViewEnrollments(classItem.classId, classItem.title)}
                   style={{
                     background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)'
@@ -257,10 +331,16 @@ export default function ManageClasses({ onEditClass, onViewClass, onManageBatche
                 <button
                   className={styles.button}
                   onClick={() => handleDeleteClass(classItem.classId, classItem.title)}
-                  disabled={deletingClassId === classItem.classId}
+                  disabled={getDeleteButtonInfo(classItem).disabled}
+                  title={getDeleteButtonInfo(classItem).title}
                   style={{
-                    background: deletingClassId === classItem.classId ? '#666' : 'linear-gradient(135deg, #F44336 0%, #E91E63 100%)',
-                    opacity: deletingClassId === classItem.classId ? 0.6 : 1
+                    background: getDeleteButtonInfo(classItem).disabled 
+                      ? '#666' 
+                      : deletingClassId === classItem.classId 
+                        ? '#666' 
+                        : 'linear-gradient(135deg, #F44336 0%, #E91E63 100%)',
+                    opacity: getDeleteButtonInfo(classItem).disabled || deletingClassId === classItem.classId ? 0.6 : 1,
+                    cursor: getDeleteButtonInfo(classItem).disabled ? 'not-allowed' : 'pointer'
                   }}
                 >
                   {deletingClassId === classItem.classId ? 'Deleting...' : 'Delete'}

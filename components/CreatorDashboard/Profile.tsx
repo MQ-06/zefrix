@@ -27,7 +27,6 @@ export default function CreatorProfile() {
     name: '',
     bio: '',
     expertise: '',
-    phone: '',
     whatsapp: '',
     profileImage: '',
     introVideo: '',
@@ -123,7 +122,6 @@ export default function CreatorProfile() {
           name: data.name || data.displayName || '',
           bio: data.bio || '',
           expertise: data.expertise || data.skills || '',
-          phone: data.phone || '',
           whatsapp: data.whatsapp || '',
           profileImage: data.profileImage || data.photoURL || '',
           introVideo: data.introVideo || '',
@@ -221,7 +219,6 @@ export default function CreatorProfile() {
         displayName: formData.name.trim(),
         bio: formData.bio.trim(),
         expertise: formData.expertise.trim(),
-        phone: formData.phone.trim(),
         whatsapp: formData.whatsapp.trim(),
         profileImage: formData.profileImage.trim(),
         photoURL: formData.profileImage.trim(),
@@ -306,19 +303,6 @@ export default function CreatorProfile() {
             value={formData.expertise}
             onChange={handleInputChange}
             placeholder="e.g., Graphic Design, Web Development, Photography"
-          />
-        </div>
-
-        <div className="creator-form-group">
-          <label htmlFor="profile-phone" className="creator-field-label">Phone Number</label>
-          <input
-            type="tel"
-            id="profile-phone"
-            name="phone"
-            className="creator-form-input"
-            value={formData.phone}
-            onChange={handleInputChange}
-            placeholder="+91 1234567890"
           />
         </div>
 
@@ -460,7 +444,34 @@ export default function CreatorProfile() {
           type="submit" 
           className="creator-submit-btn"
           disabled={saving || !firebaseReady}
-          style={{ opacity: (saving || !firebaseReady) ? 0.6 : 1, cursor: (saving || !firebaseReady) ? 'not-allowed' : 'pointer' }}
+          style={{
+            background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+            color: 'white',
+            border: '2px solid rgba(255, 255, 255, 0.3)',
+            padding: '16px 40px',
+            borderRadius: '10px',
+            fontSize: '1.0625rem',
+            fontWeight: 600,
+            cursor: (saving || !firebaseReady) ? 'not-allowed' : 'pointer',
+            transition: 'all 0.3s',
+            width: 'auto',
+            opacity: (saving || !firebaseReady) ? 0.6 : 1,
+            marginTop: '1rem',
+          }}
+          onMouseEnter={(e) => {
+            if (!saving && firebaseReady) {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 20px rgba(217, 42, 99, 0.3)';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!saving && firebaseReady) {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+            }
+          }}
         >
           {saving ? 'Saving...' : 'Save Profile'}
         </button>

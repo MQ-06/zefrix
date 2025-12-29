@@ -14,7 +14,18 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'i.ytimg.com',
       },
+      // Allow images from the same domain (for Hostinger uploads)
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+      {
+        protocol: 'http',
+        hostname: '**',
+      },
     ],
+    // Allow images from the same origin (your domain)
+    unoptimized: false,
   },
   // Performance optimizations
   compiler: {

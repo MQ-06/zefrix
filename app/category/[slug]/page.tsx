@@ -13,6 +13,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
   }
 }
 
@@ -73,7 +74,7 @@ export default function CategoryPage({ params }: PageProps) {
         script.type = 'module';
         script.textContent = `
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+          import { getFirestore, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
           
           const firebaseConfig = {
             apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -91,6 +92,7 @@ export default function CategoryPage({ params }: PageProps) {
           window.query = query;
           window.where = where;
           window.getDocs = getDocs;
+          window.onSnapshot = onSnapshot;
         `;
         document.head.appendChild(script);
       };
@@ -99,44 +101,58 @@ export default function CategoryPage({ params }: PageProps) {
   }, []);
 
   useEffect(() => {
-    const fetchApprovedClasses = async () => {
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        // Wait for Firebase to load
-        setTimeout(fetchApprovedClasses, 500);
+    let unsubscribe: (() => void) | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    const setupListener = () => {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+        retryTimeout = setTimeout(setupListener, 500);
         return;
       }
 
       setLoading(true);
       try {
+        console.log(`📦 Setting up real-time listener for category: ${categoryName}`);
         const classesRef = window.collection(window.firebaseDb, 'classes');
         const q = window.query(
           classesRef,
           window.where('status', '==', 'approved'),
           window.where('category', '==', categoryName)
         );
-        const querySnapshot = await window.getDocs(q);
         
-        const classes: ApprovedClass[] = [];
-        querySnapshot.forEach((doc: any) => {
-          classes.push({ classId: doc.id, ...doc.data() });
+        unsubscribe = window.onSnapshot(q, (snapshot: any) => {
+          const classes: ApprovedClass[] = [];
+          snapshot.forEach((doc: any) => {
+            classes.push({ classId: doc.id, ...doc.data() });
+          });
+          
+          console.log(`✅ Real-time update: Found ${classes.length} classes in ${categoryName}`);
+          
+          // Sort by creation date (newest first)
+          classes.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+          
+          setApprovedClasses(classes);
+          setLoading(false);
+        }, (error: any) => {
+          console.error('Error in real-time listener:', error);
+          setLoading(false);
         });
-        
-        // Sort by creation date (newest first)
-        classes.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-        
-        setApprovedClasses(classes);
       } catch (error) {
-        console.error('Error fetching approved classes:', error);
-      } finally {
+        console.error('Error setting up real-time listener:', error);
         setLoading(false);
       }
     };
 
-    fetchApprovedClasses();
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [categoryName]);
 
   return (

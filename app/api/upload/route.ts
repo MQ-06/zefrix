@@ -52,7 +52,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Create upload directory structure
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', folder, subfolder);
+    // For Hostinger: Use public/uploads for public access
+    // Alternative: Use storage/uploads (outside public) for better security
+    const usePublicDir = process.env.UPLOAD_TO_PUBLIC !== 'false'; // Default to true for Hostinger
+    const baseDir = usePublicDir 
+      ? path.join(process.cwd(), 'public', 'uploads', folder, subfolder)
+      : path.join(process.cwd(), 'storage', 'uploads', folder, subfolder);
+    
+    const uploadDir = baseDir;
     
     // Ensure directory exists
     if (!existsSync(uploadDir)) {
@@ -90,9 +97,31 @@ export async function POST(request: NextRequest) {
     console.log('✅ [UPLOAD API] File write result:', { fileExistsAfterWrite, filePath });
 
     // Generate public URL
+<<<<<<< HEAD
     // Prefer NEXT_PUBLIC_BASE_URL, otherwise fall back to current request origin (works in dev and prod)
     const requestUrl = new URL(request.url);
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || requestUrl.origin;
+=======
+    // Detect base URL from request (works for both localhost and production)
+    let baseUrl: string;
+    
+    try {
+      // Use request.nextUrl to get the origin (works in both dev and production)
+      const origin = request.nextUrl.origin;
+      baseUrl = origin;
+    } catch (error) {
+      // Fallback: try to get from headers or use environment variable
+      const host = request.headers.get('host');
+      if (host) {
+        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+        baseUrl = `${protocol}://${host}`;
+      } else {
+        // Final fallback
+        baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+      }
+    }
+    
+>>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
     const relativePath = `uploads/${folder}${subfolder ? `/${subfolder}` : ''}/${uniqueFileName}`;
     const publicUrl = `${baseUrl}/${relativePath}`;
     
@@ -154,7 +183,10 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const fullPath = path.join(process.cwd(), 'public', filePath);
+    // Support both public/uploads and storage/uploads
+    const usePublicDir = process.env.UPLOAD_TO_PUBLIC !== 'false';
+    const baseDir = usePublicDir ? 'public' : 'storage';
+    const fullPath = path.join(process.cwd(), baseDir, filePath);
     
     // Check if file exists
     if (!existsSync(fullPath)) {
