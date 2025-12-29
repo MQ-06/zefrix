@@ -27,8 +27,19 @@ interface Creator {
 export default function InstructorPage() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
+    let isMounted = true;
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let eventListenerAdded = false;
+
     // Load Firebase if not already loaded
     if (typeof window !== 'undefined' && !window.firebaseDb) {
       const script = document.createElement('script');
@@ -54,14 +65,38 @@ export default function InstructorPage() {
         window.where = where;
         window.getDocs = getDocs;
         
-        window.dispatchEvent(new Event('firebaseReady'));
+        // Dispatch event after a small delay to ensure everything is set
+        setTimeout(() => {
+          window.dispatchEvent(new Event('firebaseReady'));
+        }, 100);
       `;
       document.head.appendChild(script);
     }
 
-    const fetchCreators = async () => {
+    const checkFirebaseAndFetch = () => {
+      if (typeof window === 'undefined') return;
+      
       if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        console.log('Firebase not ready yet');
+        // Retry after 200ms if not ready
+        retryTimeout = setTimeout(checkFirebaseAndFetch, 200);
+        return;
+      }
+
+      // Clear any pending retries
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+        retryTimeout = null;
+      }
+
+      fetchCreators();
+    };
+
+    const fetchCreators = async () => {
+      if (!isMounted || typeof window === 'undefined') return;
+
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        console.log('Firebase not ready yet, retrying...');
+        retryTimeout = setTimeout(checkFirebaseAndFetch, 200);
         return;
       }
 
@@ -72,6 +107,8 @@ export default function InstructorPage() {
         const querySnapshot = await window.getDocs(q);
 
         console.log(`Found ${querySnapshot.size} creators in query`);
+
+        if (!isMounted) return;
 
         const creatorsData: Creator[] = [];
         querySnapshot.forEach((doc: any) => {
@@ -106,6 +143,8 @@ export default function InstructorPage() {
           creator.totalClasses = creatorClassCount[creator.id] || 0;
         });
 
+        if (!isMounted) return;
+
         console.log(`Setting ${creatorsData.length} creators`);
         setCreators(creatorsData);
       } catch (error: any) {
@@ -117,17 +156,43 @@ export default function InstructorPage() {
           console.error('Permission denied - check Firestore rules');
         }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    if (window.firebaseDb) {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+
+    // Try to fetch immediately if Firebase is already loaded
+    if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
       fetchCreators();
     } else {
-      window.addEventListener('firebaseReady', fetchCreators);
-      return () => window.removeEventListener('firebaseReady', fetchCreators);
+      // Wait for firebaseReady event
+      const handleFirebaseReady = () => {
+        if (isMounted) {
+          checkFirebaseAndFetch();
+        }
+      };
+      
+      window.addEventListener('firebaseReady', handleFirebaseReady);
+      eventListenerAdded = true;
+      
+      // Also start polling as fallback (in case event doesn't fire)
+      checkFirebaseAndFetch();
     }
-  }, []);
+
+    return () => {
+      isMounted = false;
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+      if (eventListenerAdded) {
+        window.removeEventListener('firebaseReady', checkFirebaseAndFetch);
+      }
+    };
+  }, [mounted]);
 
   return (
     <>

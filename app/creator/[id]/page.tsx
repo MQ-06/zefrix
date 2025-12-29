@@ -87,10 +87,17 @@ export default function CreatorProfilePage() {
   const [similarCreators, setSimilarCreators] = useState<SimilarCreator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
     // Initialize Firebase
-    if (!window.firebaseDb) {
+    if (typeof window !== 'undefined' && !window.firebaseDb) {
       const script = document.createElement('script');
       script.type = 'module';
       script.innerHTML = `
@@ -115,13 +122,43 @@ export default function CreatorProfilePage() {
         window.query = query;
         window.where = where;
         window.getDocs = getDocs;
+        
+        // Dispatch event after a small delay to ensure everything is set
+        setTimeout(() => {
+          window.dispatchEvent(new Event('firebaseReady'));
+        }, 100);
       `;
       document.head.appendChild(script);
     }
 
+    let isMounted = true;
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let eventListenerAdded = false;
+
+    const checkFirebaseAndFetch = () => {
+      if (typeof window === 'undefined') return;
+      
+      if (!window.firebaseDb || !window.doc || !window.getDoc || !window.collection || !window.query || !window.where || !window.getDocs) {
+        // Retry after 200ms if not ready
+        retryTimeout = setTimeout(checkFirebaseAndFetch, 200);
+        return;
+      }
+
+      // Clear any pending retries
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+        retryTimeout = null;
+      }
+
+      fetchData();
+    };
+
     const fetchData = async () => {
-      if (!window.firebaseDb || !window.doc || !window.getDoc) {
-        setTimeout(fetchData, 500);
+      if (!isMounted || typeof window === 'undefined') return;
+
+      if (!window.firebaseDb || !window.doc || !window.getDoc || !window.collection || !window.query || !window.where || !window.getDocs) {
+        console.log('Firebase not ready yet, retrying...');
+        retryTimeout = setTimeout(checkFirebaseAndFetch, 200);
         return;
       }
 
@@ -331,7 +368,7 @@ export default function CreatorProfilePage() {
 
                 // Expertise match
                 const otherExpertise = (data.expertise || data.skills || '').toLowerCase();
-                expertiseKeywords.forEach(keyword => {
+                expertiseKeywords.forEach((keyword: string) => {
                   if (keyword && otherExpertise.includes(keyword)) matchScore += 1;
                 });
 
@@ -376,13 +413,44 @@ export default function CreatorProfilePage() {
         fetchSimilarCreators();
       } catch (err) {
         console.error('Error fetching creator profile:', err);
-        setError('Failed to load creator profile');
-        setLoading(false);
+        if (isMounted) {
+          setError('Failed to load creator profile');
+          setLoading(false);
+        }
       }
     };
 
-    fetchData();
-  }, [creatorId]);
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+
+    // Try to fetch immediately if Firebase is already loaded
+    if (window.firebaseDb && window.doc && window.getDoc && window.collection && window.query && window.where && window.getDocs) {
+      checkFirebaseAndFetch();
+    } else {
+      // Wait for firebaseReady event
+      const handleFirebaseReady = () => {
+        if (isMounted) {
+          checkFirebaseAndFetch();
+        }
+      };
+      
+      window.addEventListener('firebaseReady', handleFirebaseReady);
+      eventListenerAdded = true;
+      
+      // Also start polling as fallback (in case event doesn't fire)
+      checkFirebaseAndFetch();
+    }
+
+    return () => {
+      isMounted = false;
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+      if (eventListenerAdded) {
+        window.removeEventListener('firebaseReady', checkFirebaseAndFetch);
+      }
+    };
+  }, [creatorId, mounted]);
 
   const calculateAverageRating = () => {
     if (reviews.length === 0) return 0;
