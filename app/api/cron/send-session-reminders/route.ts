@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
     // Process each session
     for (const sessionDoc of sessionsSnapshot.docs) {
       try {
-        const session = { id: sessionDoc.id, ...sessionDoc.data() };
+        const session: any = { id: sessionDoc.id, ...sessionDoc.data() };
 
         // Skip cancelled or completed sessions
         if (session.status === 'cancelled' || session.status === 'completed') {

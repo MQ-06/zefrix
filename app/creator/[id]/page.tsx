@@ -331,7 +331,7 @@ export default function CreatorProfilePage() {
 
                 // Expertise match
                 const otherExpertise = (data.expertise || data.skills || '').toLowerCase();
-                expertiseKeywords.forEach(keyword => {
+                expertiseKeywords.forEach((keyword: string) => {
                   if (keyword && otherExpertise.includes(keyword)) matchScore += 1;
                 });
 
