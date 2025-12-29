@@ -177,17 +177,18 @@ function InstructorContent() {
     // Only run on client side
     if (typeof window === 'undefined') return;
 
+    // Define event handler outside conditional so it's available for cleanup
+    const handleFirebaseReady = () => {
+      if (isMounted) {
+        checkFirebaseAndFetch();
+      }
+    };
+
     // Try to fetch immediately if Firebase is already loaded
     if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
       fetchCreators();
     } else {
       // Wait for firebaseReady event
-      const handleFirebaseReady = () => {
-        if (isMounted) {
-          checkFirebaseAndFetch();
-        }
-      };
-      
       window.addEventListener('firebaseReady', handleFirebaseReady);
       eventListenerAdded = true;
       
@@ -199,8 +200,9 @@ function InstructorContent() {
       isMounted = false;
       if (retryTimeout) {
         clearTimeout(retryTimeout);
+        retryTimeout = null;
       }
-      if (eventListenerAdded) {
+      if (eventListenerAdded && typeof window !== 'undefined') {
         window.removeEventListener('firebaseReady', handleFirebaseReady);
       }
     };

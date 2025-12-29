@@ -423,17 +423,18 @@ export default function CreatorProfilePage() {
     // Only run on client side
     if (typeof window === 'undefined') return;
 
+    // Define event handler outside conditional so it's available for cleanup
+    const handleFirebaseReady = () => {
+      if (isMounted) {
+        checkFirebaseAndFetch();
+      }
+    };
+
     // Try to fetch immediately if Firebase is already loaded
     if (window.firebaseDb && window.doc && window.getDoc && window.collection && window.query && window.where && window.getDocs) {
       checkFirebaseAndFetch();
     } else {
       // Wait for firebaseReady event
-      const handleFirebaseReady = () => {
-        if (isMounted) {
-          checkFirebaseAndFetch();
-        }
-      };
-      
       window.addEventListener('firebaseReady', handleFirebaseReady);
       eventListenerAdded = true;
       
@@ -445,9 +446,10 @@ export default function CreatorProfilePage() {
       isMounted = false;
       if (retryTimeout) {
         clearTimeout(retryTimeout);
+        retryTimeout = null;
       }
-      if (eventListenerAdded) {
-        window.removeEventListener('firebaseReady', checkFirebaseAndFetch);
+      if (eventListenerAdded && typeof window !== 'undefined') {
+        window.removeEventListener('firebaseReady', handleFirebaseReady);
       }
     };
   }, [creatorId, mounted]);
