@@ -489,16 +489,13 @@ export default function CreateClassForm() {
           const path = getClassThumbnailPath(classId, thumbnailFile.name);
           finalVideoLink = await uploadImage(thumbnailFile, path, true);
           setThumbnailURL(finalVideoLink);
-<<<<<<< HEAD
           console.log('🖼 Thumbnail uploaded', {
             classId,
             path,
             finalVideoLink,
             thumbnailURLAfterUpload: finalVideoLink,
           });
-=======
           console.log('✅ Thumbnail uploaded to server storage:', finalVideoLink);
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
         } catch (error: any) {
           console.error('Thumbnail upload error:', error);
           setSubmitMessage({ 
@@ -609,19 +606,16 @@ export default function CreateClassForm() {
         }),
       };
 
-<<<<<<< HEAD
       console.log('📝 Saving class to Firestore', {
         classId,
         originalVideoLink: videoLink,
         finalVideoLink,
         firestoreVideoLink: firestoreData.videoLink,
       });
-=======
       // Only include maxSeats if it has a valid value (not null/undefined)
       if (maxSeats !== null && maxSeats > 0) {
         firestoreData.maxSeats = maxSeats;
       }
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
 
       // Write to Firestore
       await window.setDoc(window.doc(window.firebaseDb, 'classes', classId), firestoreData);

@@ -5,15 +5,8 @@ import Link from 'next/link';
 import CoursesPageCard from '@/components/CoursesPageCard';
 import FooterCTA from '@/components/FooterCTA';
 import { motion } from 'framer-motion';
-<<<<<<< HEAD
-import { ChevronRight } from 'lucide-react';
-import { useReliableFetch } from '@/app/hooks/useReliableFetch';
-import { isClient } from '@/app/utils/environment';
-=======
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import { DEFAULT_COURSE_IMAGE } from '@/lib/constants';
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
-
 declare global {
   interface Window {
     firebaseDb: any;
@@ -43,28 +36,9 @@ const COURSES_PER_PAGE = 6;
 
 function CoursesContent() {
   const [currentPage, setCurrentPage] = useState(1);
+  const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
+  const [loading, setLoading] = useState(true);
 
-<<<<<<< HEAD
-  // Use reliable fetch hook with retry logic
-  const { data: approvedClasses = [], loading } = useReliableFetch<ApprovedClass[]>({
-    fetchFn: async () => {
-      // Wait for Firebase to be ready
-      if (!isClient || typeof window === 'undefined') {
-        throw new Error('Client-side only');
-      }
-
-      // Wait for Firebase to initialize
-      let attempts = 0;
-      while (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        if (attempts++ > 50) {
-          throw new Error('Firebase initialization timeout');
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-
-      // If Firebase is not initialized, try to initialize it
-      if (!window.firebaseDb) {
-=======
   useEffect(() => {
     // Initialize Firebase if not already loaded
     if (!window.firebaseDb) {
@@ -72,53 +46,32 @@ function CoursesContent() {
       const existingScript = document.querySelector('script[data-firebase-init]');
       if (existingScript) return;
 
-      const loadFirebase = () => {
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.setAttribute('data-firebase-init', 'true');
-        script.textContent = `
-          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-          
-          const firebaseConfig = {
-            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-            authDomain: "zefrix-custom.firebaseapp.com",
-            projectId: "zefrix-custom",
-            storageBucket: "zefrix-custom.firebasestorage.app",
-            messagingSenderId: "50732408558",
-            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-            measurementId: "G-27HS1SWB5X"
-          };
-          
-          const app = initializeApp(firebaseConfig);
-          window.firebaseDb = getFirestore(app);
-          window.collection = collection;
-          window.query = query;
-          window.where = where;
-          window.getDocs = getDocs;
-          window.dispatchEvent(new CustomEvent('firebaseReady'));
-        `;
-        document.head.appendChild(script);
-<<<<<<< HEAD
+      const script = document.createElement('script');
+      script.type = 'module';
+      script.setAttribute('data-firebase-init', 'true');
+      script.textContent = `
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         
-        // Wait for Firebase to be ready
-        await new Promise<void>((resolve) => {
-          const handleReady = () => {
-            window.removeEventListener('firebaseReady', handleReady);
-            resolve();
-          };
-          window.addEventListener('firebaseReady', handleReady);
-          
-          // Timeout after 5 seconds
-          setTimeout(() => {
-            window.removeEventListener('firebaseReady', handleReady);
-            resolve();
-          }, 5000);
-        });
-=======
-      };
-      loadFirebase();
+        const firebaseConfig = {
+          apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+          authDomain: "zefrix-custom.firebaseapp.com",
+          projectId: "zefrix-custom",
+          storageBucket: "zefrix-custom.firebasestorage.app",
+          messagingSenderId: "50732408558",
+          appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+          measurementId: "G-27HS1SWB5X"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        window.firebaseDb = getFirestore(app);
+        window.collection = collection;
+        window.query = query;
+        window.where = where;
+        window.getDocs = getDocs;
+        window.dispatchEvent(new CustomEvent('firebaseReady'));
+      `;
+      document.head.appendChild(script);
     }
   }, []);
 
@@ -228,75 +181,9 @@ function CoursesContent() {
           setApprovedClasses([]);
           setLoading(false);
         }
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
       }
-
-<<<<<<< HEAD
-      // Fetch classes
-      console.log('Fetching approved classes from Firestore...');
-      const classesRef = window.collection(window.firebaseDb, 'classes');
-      const q = window.query(classesRef, window.where('status', '==', 'approved'));
-      const querySnapshot = await window.getDocs(q);
-      
-      const classes: ApprovedClass[] = [];
-      querySnapshot.forEach((doc: any) => {
-        classes.push({ classId: doc.id, ...doc.data() });
-      });
-      
-      console.log(`Found ${classes.length} approved classes`);
-      
-      // Sort by creation date (newest first)
-      classes.sort((a, b) => {
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
-      });
-      
-      return classes;
-    },
-    retries: 2,
-    retryDelay: 1000
-  });
-
-  // Convert approved classes to course format (only real classes, no dummy data)
-  const allCourses = (approvedClasses || []).map((classItem) => {
-    const image =
-      classItem.videoLink && classItem.videoLink.trim() !== ''
-        ? classItem.videoLink
-        : 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg';
-
-    console.log('🎨 Course image mapping (courses page)', {
-      classId: classItem.classId,
-      videoLink: classItem.videoLink,
-      finalImage: image,
-    });
-
-    return {
-      id: classItem.classId,
-      slug: classItem.classId,
-      title: classItem.title,
-      subtitle: classItem.subtitle || '',
-      category: classItem.category,
-      categorySlug: '',
-      subCategory: classItem.subCategory,
-      instructor: classItem.creatorName || 'Creator',
-      instructorId: '',
-      instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(
-        classItem.creatorName || 'Creator'
-      )}&background=D92A63&color=fff&size=128`,
-      image,
-      price: classItem.price,
-      originalPrice: classItem.price * 1.2,
-      sections: classItem.numberSessions,
-      duration:
-        classItem.scheduleType === 'one-time'
-          ? 1
-          : Math.ceil(classItem.numberSessions / 7),
-      students: 0,
-      level: 'Beginner' as const,
     };
-  });
-=======
+    
     fetchCourses();
 
     return () => {
@@ -325,8 +212,6 @@ function CoursesContent() {
     students: (classItem as any).enrollmentCount || 0, // Use actual enrollment count
     level: 'Beginner' as const,
   }));
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
-
   const totalPages = Math.ceil(allCourses.length / COURSES_PER_PAGE);
   const startIndex = (currentPage - 1) * COURSES_PER_PAGE;
   const endIndex = startIndex + COURSES_PER_PAGE;

@@ -200,21 +200,6 @@ function InstructorsContent() {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
-<<<<<<< HEAD
-              {(creators || []).map((creator, index) => (
-                <InstructorCard
-                  key={creator.id}
-                  instructor={{
-                    id: creator.id,
-                    slug: creator.name.toLowerCase().replace(/\s+/g, '-'),
-                    name: creator.name,
-                    title: `${creator.totalClasses || 0} Active Classes`,
-                    image: creator.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(creator.name)}&background=D92A63&color=fff&size=200`
-                  }}
-                  index={index}
-                />
-              ))}
-=======
               {creators.map((creator, index) => {
                 // Use photoURL if available, otherwise fallback to avatar API with initials
                 const photoURL = creator.photoURL || '';
@@ -242,7 +227,6 @@ function InstructorsContent() {
                   />
                 );
               })}
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
             </div>
           )}
         </div>

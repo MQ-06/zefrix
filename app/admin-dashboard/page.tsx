@@ -250,7 +250,6 @@ export default function AdminDashboard() {
         setLoadingClasses(false);
       });
 
-<<<<<<< HEAD
       classes.sort((a, b) => {
         const aTime = a.createdAt?.toMillis?.() || 0;
         const bTime = b.createdAt?.toMillis?.() || 0;
@@ -264,9 +263,7 @@ export default function AdminDashboard() {
       })));
 
       setPendingClasses(classes);
-=======
       return unsubscribe;
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
     } catch (error) {
       console.error('Error setting up pending classes listener:', error);
       setLoadingClasses(false);
@@ -428,7 +425,6 @@ export default function AdminDashboard() {
         setLoadingApproved(false);
       });
 
-<<<<<<< HEAD
       classes.sort((a, b) => {
         const aTime = a.createdAt?.toMillis?.() || 0;
         const bTime = b.createdAt?.toMillis?.() || 0;
@@ -442,9 +438,7 @@ export default function AdminDashboard() {
       })));
 
       setApprovedClasses(classes);
-=======
       return unsubscribe;
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
     } catch (error) {
       console.error('Error setting up approved classes listener:', error);
       setLoadingApproved(false);

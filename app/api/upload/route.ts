@@ -97,11 +97,9 @@ export async function POST(request: NextRequest) {
     console.log('✅ [UPLOAD API] File write result:', { fileExistsAfterWrite, filePath });
 
     // Generate public URL
-<<<<<<< HEAD
     // Prefer NEXT_PUBLIC_BASE_URL, otherwise fall back to current request origin (works in dev and prod)
     const requestUrl = new URL(request.url);
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || requestUrl.origin;
-=======
     // Detect base URL from request (works for both localhost and production)
     let baseUrl: string;
     
@@ -121,7 +119,6 @@ export async function POST(request: NextRequest) {
       }
     }
     
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
     const relativePath = `uploads/${folder}${subfolder ? `/${subfolder}` : ''}/${uniqueFileName}`;
     const publicUrl = `${baseUrl}/${relativePath}`;
     

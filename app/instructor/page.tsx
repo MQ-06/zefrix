@@ -4,8 +4,6 @@ import { useState, useEffect, Suspense } from 'react';
 import InstructorCard from '@/components/InstructorCard';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useReliableFetch } from '@/app/hooks/useReliableFetch';
-import { isClient } from '@/app/utils/environment';
 
 declare global {
   interface Window {
@@ -26,69 +24,7 @@ interface Creator {
   totalClasses?: number;
 }
 
-<<<<<<< HEAD
 function InstructorContent() {
-  // Use reliable fetch hook with retry logic
-  const { data: creators = [], loading } = useReliableFetch<Creator[]>({
-    fetchFn: async () => {
-      // Wait for Firebase to be ready
-      if (!isClient || typeof window === 'undefined') {
-        throw new Error('Client-side only');
-      }
-
-      // Wait for Firebase to initialize
-      let attempts = 0;
-      while (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        if (attempts++ > 50) {
-          throw new Error('Firebase initialization timeout');
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-
-      // If Firebase is not initialized, try to initialize it
-      if (!window.firebaseDb) {
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.textContent = `
-          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-          import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-          
-          const firebaseConfig = {
-            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-            authDomain: "zefrix-custom.firebaseapp.com",
-            projectId: "zefrix-custom",
-            storageBucket: "zefrix-custom.firebasestorage.app",
-            messagingSenderId: "50732408558",
-            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-            measurementId: "G-27HS1SWB5X"
-          };
-          
-          const app = initializeApp(firebaseConfig);
-          window.firebaseDb = getFirestore(app);
-          window.collection = collection;
-          window.query = query;
-          window.where = where;
-          window.getDocs = getDocs;
-          window.dispatchEvent(new CustomEvent('firebaseReady'));
-        `;
-        document.head.appendChild(script);
-        
-        // Wait for Firebase to be ready
-        await new Promise<void>((resolve) => {
-          const handleReady = () => {
-            window.removeEventListener('firebaseReady', handleReady);
-            resolve();
-          };
-          window.addEventListener('firebaseReady', handleReady);
-          
-          // Timeout after 5 seconds
-          setTimeout(() => {
-            window.removeEventListener('firebaseReady', handleReady);
-            resolve();
-          }, 5000);
-        });
-=======
-export default function InstructorPage() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -162,7 +98,6 @@ export default function InstructorPage() {
         console.log('Firebase not ready yet, retrying...');
         retryTimeout = setTimeout(checkFirebaseAndFetch, 200);
         return;
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
       }
 
       try {
@@ -211,7 +146,7 @@ export default function InstructorPage() {
         if (!isMounted) return;
 
         console.log(`Setting ${creatorsData.length} creators`);
-        return creatorsData;
+        setCreators(creatorsData);
       } catch (error: any) {
         console.error('Error fetching creators:', error);
         console.error('Error code:', error.code);
@@ -220,14 +155,7 @@ export default function InstructorPage() {
         if (error.code === 'permission-denied') {
           console.error('Permission denied - check Firestore rules');
         }
-<<<<<<< HEAD
-        throw error;
-      }
-    },
-    retries: 2,
-    retryDelay: 1000
-  });
-=======
+        setCreators([]);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -262,12 +190,10 @@ export default function InstructorPage() {
         clearTimeout(retryTimeout);
       }
       if (eventListenerAdded) {
-        window.removeEventListener('firebaseReady', checkFirebaseAndFetch);
+        window.removeEventListener('firebaseReady', handleFirebaseReady);
       }
     };
   }, [mounted]);
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
-
   return (
     <>
       {/* Hero Section */}
@@ -322,21 +248,6 @@ export default function InstructorPage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
-<<<<<<< HEAD
-              {(creators || []).map((creator, index) => (
-                <InstructorCard
-                  key={creator.id}
-                  instructor={{
-                    id: creator.id,
-                    slug: creator.name.toLowerCase().replace(/\s+/g, '-'),
-                    name: creator.name,
-                    title: `${creator.totalClasses || 0} Active Classes`,
-                    image: creator.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(creator.name)}&background=D92A63&color=fff&size=200`
-                  }}
-                  index={index}
-                />
-              ))}
-=======
               {creators.map((creator, index) => {
                 // Use photoURL if available, otherwise fallback to avatar API with initials
                 const photoURL = creator.photoURL || '';
@@ -364,7 +275,6 @@ export default function InstructorPage() {
                   />
                 );
               })}
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
             </div>
           )}
         </div>

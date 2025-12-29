@@ -340,12 +340,10 @@ export default function BecomeACreatorPage() {
       // Check if user is already authenticated (Google sign-in)
       let currentUser = window.firebaseAuth?.currentUser;
       
-<<<<<<< HEAD
       // Get the current user from Firebase Auth directly (client-side only)
       if (!isClient || typeof window === 'undefined' || !window.firebaseAuth || !window.firebaseAuth.currentUser) {
         showError('User creation successful, but could not update profile. Please try logging in.');
         router.push('/signup-login');
-=======
       // Only create account if not already authenticated
       if (!currentUser) {
         // Create user account using AuthContext
@@ -374,7 +372,6 @@ export default function BecomeACreatorPage() {
         console.error('Error validating WhatsApp in handleSubmit:', error);
         showError('Invalid WhatsApp number format. Please check and try again.');
         setIsSubmitting(false);
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
         return;
       }
 
