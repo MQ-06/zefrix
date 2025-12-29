@@ -340,10 +340,6 @@ export default function BecomeACreatorPage() {
       // Check if user is already authenticated (Google sign-in)
       let currentUser = window.firebaseAuth?.currentUser;
       
-      // Get the current user from Firebase Auth directly (client-side only)
-      if (!isClient || typeof window === 'undefined' || !window.firebaseAuth || !window.firebaseAuth.currentUser) {
-        showError('User creation successful, but could not update profile. Please try logging in.');
-        router.push('/signup-login');
       // Only create account if not already authenticated
       if (!currentUser) {
         // Create user account using AuthContext

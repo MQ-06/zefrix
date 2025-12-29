@@ -97,9 +97,6 @@ export async function POST(request: NextRequest) {
     console.log('✅ [UPLOAD API] File write result:', { fileExistsAfterWrite, filePath });
 
     // Generate public URL
-    // Prefer NEXT_PUBLIC_BASE_URL, otherwise fall back to current request origin (works in dev and prod)
-    const requestUrl = new URL(request.url);
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || requestUrl.origin;
     // Detect base URL from request (works for both localhost and production)
     let baseUrl: string;
     

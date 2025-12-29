@@ -197,11 +197,7 @@ export default function ProductPage({ params }: PageProps) {
               title: data.title || 'Untitled Class',
               subtitle: data.subtitle || '',
               price: data.price || 0,
-<<<<<<< HEAD
-              image: (data.videoLink && data.videoLink.trim() !== '') ? data.videoLink : "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg",
-=======
-              image: data.videoLink || DEFAULT_COURSE_IMAGE,
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
+              image: (data.videoLink && data.videoLink.trim() !== '') ? data.videoLink : DEFAULT_COURSE_IMAGE,
               instructor: data.creatorName || 'Instructor',
               instructorId: data.creatorId || '',
               instructorImage: getAvatarUrl(data.creatorName || 'Instructor', 200),
@@ -213,7 +209,6 @@ export default function ProductPage({ params }: PageProps) {
               students: 0,
               enrollmentCount: enrollmentCount,
               originalPrice: data.price || 0,
-<<<<<<< HEAD
               // Schedule information
               scheduleType: data.scheduleType || 'one-time',
               startISO: data.startISO || '',
@@ -224,13 +219,8 @@ export default function ProductPage({ params }: PageProps) {
               sessionLengthMinutes: data.sessionLengthMinutes || 60,
               maxSeats: data.maxSeats || null,
               days: data.days || [],
-=======
               category: data.category || '',
               subCategory: data.subCategory || data.subcategory || '',
-              maxSeats: data.maxSeats || undefined,
-              scheduleType: data.scheduleType || '',
-              startDate: data.startDate || data.date || null,
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
             });
           } else {
             setCourse(null);
@@ -1044,17 +1034,10 @@ export default function ProductPage({ params }: PageProps) {
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-gray-400">
-<<<<<<< HEAD
                       <Clock className="w-5 h-5" />
                       <span>Sessions</span>
                     </div>
                     <span className="text-white font-semibold">{course.sections} {course.sections === 1 ? 'Session' : 'Sessions'}</span>
-=======
-                      <BookOpen className="w-5 h-5" />
-                      <span>Sessions</span>
-                    </div>
-                    <span className="text-white font-semibold">{course.sections} Sessions</span>
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
                   </div>
 
                   {course.sessionLengthMinutes && (
@@ -1098,8 +1081,6 @@ export default function ProductPage({ params }: PageProps) {
                     </div>
                     <span className="text-white font-semibold">English</span>
                   </div>
-<<<<<<< HEAD
-=======
 
                   {course.category && (
                     <div className="flex items-center justify-between">
@@ -1161,7 +1142,6 @@ export default function ProductPage({ params }: PageProps) {
                       <span className="text-white font-semibold">{course.maxSeats}</span>
                     </div>
                   )}
->>>>>>> ab07d6bfcc8e9018609dd7db73b8a8cdc5e31de6
                 </div>
 
                 {/* Add to Cart Button - Hide if enrolled */}
