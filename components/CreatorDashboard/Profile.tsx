@@ -27,7 +27,6 @@ export default function CreatorProfile() {
     name: '',
     bio: '',
     expertise: '',
-    whatsapp: '',
     profileImage: '',
     introVideo: '',
     instagram: '',
@@ -122,7 +121,6 @@ export default function CreatorProfile() {
           name: data.name || data.displayName || '',
           bio: data.bio || '',
           expertise: data.expertise || data.skills || '',
-          whatsapp: data.whatsapp || '',
           profileImage: data.profileImage || data.photoURL || '',
           introVideo: data.introVideo || '',
           instagram: data.socialHandles?.instagram || '',
@@ -219,7 +217,6 @@ export default function CreatorProfile() {
         displayName: formData.name.trim(),
         bio: formData.bio.trim(),
         expertise: formData.expertise.trim(),
-        whatsapp: formData.whatsapp.trim(),
         profileImage: formData.profileImage.trim(),
         photoURL: formData.profileImage.trim(),
         introVideo: formData.introVideo.trim(),
@@ -303,19 +300,6 @@ export default function CreatorProfile() {
             value={formData.expertise}
             onChange={handleInputChange}
             placeholder="e.g., Graphic Design, Web Development, Photography"
-          />
-        </div>
-
-        <div className="creator-form-group">
-          <label htmlFor="profile-whatsapp" className="creator-field-label">WhatsApp Number</label>
-          <input
-            type="tel"
-            id="profile-whatsapp"
-            name="whatsapp"
-            className="creator-form-input"
-            value={formData.whatsapp}
-            onChange={handleInputChange}
-            placeholder="+91 1234567890"
           />
         </div>
 
