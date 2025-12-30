@@ -22,6 +22,17 @@ declare global {
   }
 }
 
+// Constants
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+  authDomain: "zefrix-custom.firebaseapp.com",
+  projectId: "zefrix-custom",
+  storageBucket: "zefrix-custom.firebasestorage.app",
+  messagingSenderId: "50732408558",
+  appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+  measurementId: "G-27HS1SWB5X"
+};
+
 const categories = categoryDetails.map(cat => ({
   value: cat.slug,
   label: cat.title,
@@ -35,12 +46,46 @@ const STEPS = [
   { id: 5, title: 'Security', icon: 'fa-lock' },
 ];
 
+const INITIAL_FORM_DATA = {
+  fullname: '',
+  email: '',
+  whatsapp: '',
+  category: '',
+  subCategory: '',
+  bio: '',
+  expertise: '',
+  introVideo: '',
+  profileImage: '',
+  instagram: '',
+  youtube: '',
+  twitter: '',
+  linkedin: '',
+  password: '',
+};
+
+interface FormData {
+  fullname: string;
+  email: string;
+  whatsapp: string;
+  category: string;
+  subCategory: string;
+  bio: string;
+  expertise: string;
+  introVideo: string;
+  profileImage: string;
+  instagram: string;
+  youtube: string;
+  twitter: string;
+  linkedin: string;
+  password: string;
+}
+
 export default function BecomeACreatorPage() {
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const { signUp, signInWithGoogle, user, loading } = useAuth();
-  const { showSuccess, showError, showInfo } = useNotification();
+  const { signUp, signInWithGoogle, user } = useAuth();
+  const { showSuccess, showError } = useNotification();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [whatsappError, setWhatsappError] = useState<string>('');
@@ -48,58 +93,35 @@ export default function BecomeACreatorPage() {
   const [profileImagePreview, setProfileImagePreview] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [profileImageError, setProfileImageError] = useState(false);
-  const [formData, setFormData] = useState({
-    fullname: '',
-    email: '',
-    whatsapp: '',
-    category: '',
-    subCategory: '',
-    bio: '',
-    expertise: '',
-    introVideo: '',
-    profileImage: '',
-    instagram: '',
-    youtube: '',
-    twitter: '',
-    linkedin: '',
-    password: '',
-  });
+  const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
 
-  // Ensure component only renders on client to prevent SSR/hydration issues
+  // Set mounted flag on client-side
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Initialize Firestore for creator profile data
-  // Only run on client-side to prevent hydration errors
+  // Initialize Firestore
   useEffect(() => {
-    if (!mounted) return;
-    if (typeof window === 'undefined') return;
+    if (!mounted || typeof window === 'undefined' || typeof document === 'undefined') return;
 
     // Check if Firestore is already initialized
-    if (typeof window !== 'undefined' && window.firebaseDb && window.doc && window.setDoc && window.serverTimestamp) {
+    if (window.firebaseDb && window.doc && window.setDoc && window.serverTimestamp) {
       return;
     }
 
-    // Wait for document to be available
-    if (typeof document === 'undefined') return;
+    // Check if script is already being loaded
+    const existingScript = document.querySelector('script[data-firebase-creator-init]');
+    if (existingScript) return;
 
     // Load Firestore initialization script
     const initScript = document.createElement('script');
     initScript.type = 'module';
+    initScript.setAttribute('data-firebase-creator-init', 'true');
     initScript.textContent = `
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
       import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
       
-      const firebaseConfig = {
-        apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-        authDomain: "zefrix-custom.firebaseapp.com",
-        projectId: "zefrix-custom",
-        storageBucket: "zefrix-custom.firebasestorage.app",
-        messagingSenderId: "50732408558",
-        appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-        measurementId: "G-27HS1SWB5X"
-      };
+      const firebaseConfig = ${JSON.stringify(FIREBASE_CONFIG)};
       
       const app = initializeApp(firebaseConfig);
       window.firebaseDb = getFirestore(app);
@@ -108,28 +130,25 @@ export default function BecomeACreatorPage() {
       window.serverTimestamp = serverTimestamp;
     `;
     document.head.appendChild(initScript);
-  }, []); // Only run once after component mounts
+  }, [mounted]);
 
-  // Sync profileImage URL with preview when it changes
+  // Sync profileImage URL with preview
   useEffect(() => {
     const trimmedImage = formData.profileImage?.trim() || '';
     if (trimmedImage && trimmedImage.startsWith('http')) {
-      // Only update if different to prevent infinite loop
       if (profileImagePreview !== trimmedImage) {
         setProfileImagePreview(trimmedImage);
-        setProfileImageError(false); // Reset error when image URL changes
+        setProfileImageError(false);
       }
     } else if (!trimmedImage && profileImagePreview) {
-      // Clear preview if profileImage is cleared
       setProfileImagePreview('');
       setProfileImageError(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.profileImage]);
 
-  // WhatsApp validation side effects - moved from validateStep and handleInputChange
+  // WhatsApp validation side effects
   useEffect(() => {
-    // Only validate if user has typed something (not on empty)
     if (!formData.whatsapp || typeof formData.whatsapp !== 'string' || !formData.whatsapp.trim()) {
       setWhatsappError('');
       return;
@@ -155,15 +174,12 @@ export default function BecomeACreatorPage() {
         return { valid: false, error: 'WhatsApp number is required' };
       }
 
-      // Remove all whitespace
       let cleaned = phoneNumber.trim().replace(/\s+/g, '');
 
-      // Must start with +
       if (!cleaned.startsWith('+')) {
         return { valid: false, error: 'WhatsApp number must start with + (country code). Example: +1234567890' };
       }
 
-      // Remove the + and check if remaining are only digits
       const digitsOnly = cleaned.substring(1);
       
       if (!digitsOnly || digitsOnly.length === 0) {
@@ -174,8 +190,6 @@ export default function BecomeACreatorPage() {
         return { valid: false, error: 'WhatsApp number can only contain digits after the country code. Please remove any letters or special characters.' };
       }
 
-      // WhatsApp numbers should be between 7-15 digits (E.164 format allows up to 15 digits total)
-      // Country codes are 1-4 digits, so the number part should be at least 4 digits
       if (digitsOnly.length < 7) {
         return { valid: false, error: 'WhatsApp number is too short. Please include country code and number. Example: +1234567890' };
       }
@@ -184,90 +198,77 @@ export default function BecomeACreatorPage() {
         return { valid: false, error: 'WhatsApp number is too long. Maximum 15 digits allowed.' };
       }
 
-      // Country code validation (should be 1-4 digits)
-      // Common country codes are 1-3 digits, but some regions use 4
       const countryCodeLength = Math.min(4, digitsOnly.length);
       const countryCode = digitsOnly.substring(0, countryCodeLength);
       
-      // Country code should not start with 0
       if (countryCode && countryCode.length > 0 && countryCode.startsWith('0')) {
         return { valid: false, error: 'Country code cannot start with 0. Please use the correct format: +[country code][number]' };
       }
 
-      // Format the number for storage (with + prefix)
-      const formatted = '+' + digitsOnly;
-
-      return { valid: true, formatted };
+      return { valid: true, formatted: '+' + digitsOnly };
     } catch (error) {
       console.error('Error in validateWhatsAppNumber:', error);
       return { valid: false, error: 'Invalid WhatsApp number format. Please check and try again.' };
     }
   };
 
-  // Handler for WhatsApp input from SafePhoneInput (receives string value, not event)
+  // Filter WhatsApp input value
+  const filterWhatsAppValue = (value: string): string => {
+    if (value.length === 0) return value;
+
+    let filteredValue = value;
+    
+    if (!value.startsWith('+')) {
+      if (/^\d/.test(value)) {
+        filteredValue = '+' + value.replace(/[^\d]/g, '');
+      } else {
+        filteredValue = '+' + value.replace(/[^\d]/g, '');
+      }
+    } else {
+      filteredValue = '+' + value.substring(1).replace(/[^\d]/g, '');
+    }
+    
+    if (filteredValue.length > 16) {
+      filteredValue = filteredValue.substring(0, 16);
+    }
+
+    return filteredValue;
+  };
+
+  // Handler for WhatsApp input from SafePhoneInput
   const handleWhatsAppChange = (value: string) => {
     try {
-      // Filter input: only allow + at start, then digits only
-      let filteredValue = value;
-      if (value.length > 0) {
-        // If it doesn't start with +, add it if first character is a digit
-        if (!value.startsWith('+')) {
-          // If first char is a digit, prepend +
-          if (/^\d/.test(value)) {
-            filteredValue = '+' + value.replace(/[^\d]/g, '');
-          } else {
-            // If first char is not + or digit, remove it and prepend +
-            filteredValue = '+' + value.replace(/[^\d]/g, '');
-          }
-        } else {
-          // Already starts with +, remove any non-digit characters after +
-          filteredValue = '+' + value.substring(1).replace(/[^\d]/g, '');
-        }
-        
-        // Limit to 16 characters (1 for + and 15 for digits)
-        if (filteredValue.length > 16) {
-          filteredValue = filteredValue.substring(0, 16);
-        }
-      }
+      const filteredValue = filterWhatsAppValue(value);
       
-      // Only update if the value actually changed to prevent unnecessary re-renders
       if (filteredValue !== formData.whatsapp) {
         setFormData(prev => ({ ...prev, whatsapp: filteredValue }));
       }
     } catch (error) {
       console.error('Error filtering WhatsApp number:', error);
-      // Still update form data with the original value on error
       setFormData(prev => ({ ...prev, whatsapp: value }));
     }
   };
 
+  // Handle general input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     try {
       const { name, value } = e.target;
       
-      // Always update form data
-      // WhatsApp validation is handled in useEffect
-      // If category changes, clear subCategory
       if (name === 'category') {
         setFormData(prev => ({ ...prev, [name]: value || '', subCategory: '' }));
-      } else if (name === 'profileImage') {
-        // When profile image URL is entered, just update form data
-        // The useEffect will handle syncing the preview to prevent infinite loops
-        setFormData(prev => ({ ...prev, [name]: value || '' }));
       } else {
         setFormData(prev => ({ ...prev, [name]: value || '' }));
       }
     } catch (error) {
       console.error('Error in handleInputChange:', error);
-      // Don't crash the component - just log the error
     }
   };
 
+  // Handle profile image file upload
   const handleProfileImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file
     const validation = validateFile(file, 'image');
     if (!validation.valid) {
       showError(validation.error || 'Invalid file');
@@ -280,15 +281,13 @@ export default function BecomeACreatorPage() {
     const reader = new FileReader();
     reader.onloadend = () => {
       setProfileImagePreview(reader.result as string);
-      setProfileImageError(false); // Reset error on new file
+      setProfileImageError(false);
     };
     reader.readAsDataURL(file);
 
     // Upload image immediately
     setUploadingImage(true);
     try {
-      // Use current user ID if available (Google sign-in), otherwise use temporary ID
-      // The image will be re-uploaded with correct path during form submission if needed
       const currentUser = window.firebaseAuth?.currentUser;
       const userId = currentUser?.uid || user?.uid || 'temp-' + Date.now();
       const path = getProfileImagePath(userId, file.name);
@@ -309,20 +308,14 @@ export default function BecomeACreatorPage() {
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        // Validate WhatsApp number format before allowing next step
         if (!formData.fullname || !formData.email || !formData.whatsapp) {
           return false;
         }
         try {
           const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
-          if (!whatsappValidation.valid) {
-            // Don't set error here - useEffect handles it
-            return false;
-          }
-          return true;
+          return whatsappValidation.valid;
         } catch (error) {
           console.error('Error validating WhatsApp in validateStep:', error);
-          // Don't set error here - useEffect handles it
           return false;
         }
       case 2:
@@ -338,6 +331,7 @@ export default function BecomeACreatorPage() {
     }
   };
 
+  // Navigation handlers
   const nextStep = () => {
     if (validateStep(currentStep) && currentStep < STEPS.length) {
       setCurrentStep(prev => prev + 1);
@@ -350,14 +344,26 @@ export default function BecomeACreatorPage() {
     }
   };
 
+  // Check if Firebase is ready
+  const isFirebaseReady = (): boolean => {
+    return !!(
+      isClient &&
+      typeof window !== 'undefined' &&
+      window.firebaseDb &&
+      window.doc &&
+      window.setDoc &&
+      window.serverTimestamp
+    );
+  };
+
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (isSubmitting) return;
     setIsSubmitting(true);
     
-    // Safely check for Firebase (client-side only)
-    if (!isClient || typeof window === 'undefined' || !window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
+    if (!isFirebaseReady()) {
       showError('Firebase not initialized. Please wait...');
       setIsSubmitting(false);
       return;
@@ -369,7 +375,6 @@ export default function BecomeACreatorPage() {
       return;
     }
 
-    // Additional validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       showError('Please enter a valid email address');
@@ -377,8 +382,6 @@ export default function BecomeACreatorPage() {
       return;
     }
 
-    // Only validate password if user signed up with email (not Google)
-    // Check if user is already authenticated via Google
     const isGoogleUser = window.firebaseAuth?.currentUser?.providerData?.some(
       (provider: any) => provider.providerId === 'google.com'
     );
@@ -390,15 +393,11 @@ export default function BecomeACreatorPage() {
     }
 
     try {
-      // Check if user is already authenticated (Google sign-in)
       let currentUser = window.firebaseAuth?.currentUser;
       
-      // Only create account if not already authenticated
       if (!currentUser) {
-        // Create user account using AuthContext
         await signUp(formData.email.trim(), formData.password, formData.fullname.trim());
         
-        // Get the current user from Firebase Auth directly
         if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
           showError('User creation successful, but could not update profile. Please try logging in.');
           router.push('/signup-login');
@@ -408,26 +407,15 @@ export default function BecomeACreatorPage() {
         currentUser = window.firebaseAuth.currentUser;
       }
 
-      // Validate WhatsApp number before saving
-      let whatsappValidation;
-      try {
-        whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
-        if (!whatsappValidation.valid) {
-          showError(whatsappValidation.error || 'Invalid WhatsApp number');
-          setIsSubmitting(false);
-          return;
-        }
-      } catch (error) {
-        console.error('Error validating WhatsApp in handleSubmit:', error);
-        showError('Invalid WhatsApp number format. Please check and try again.');
+      const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
+      if (!whatsappValidation.valid) {
+        showError(whatsappValidation.error || 'Invalid WhatsApp number');
         setIsSubmitting(false);
         return;
       }
 
-      // Get profile image URL (from form or use Firebase Auth photoURL if available)
       const profileImageUrl = formData.profileImage?.trim() || currentUser.photoURL || '';
       
-      // Update user profile with creator-specific data
       await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
         uid: currentUser.uid,
         email: formData.email.trim(),
@@ -440,7 +428,7 @@ export default function BecomeACreatorPage() {
         expertise: formData.expertise?.trim() || '',
         introVideo: formData.introVideo?.trim() || '',
         profileImage: profileImageUrl,
-        photoURL: profileImageUrl, // Also set photoURL to keep them in sync
+        photoURL: profileImageUrl,
         socialHandles: {
           instagram: formData.instagram?.trim() || '',
           youtube: formData.youtube?.trim() || '',
@@ -454,7 +442,6 @@ export default function BecomeACreatorPage() {
       }, { merge: true });
 
       showSuccess('Creator account created successfully!');
-      // Delay redirect to show notification
       await new Promise(resolve => setTimeout(resolve, 2000));
       router.push('/creator-dashboard');
     } catch (err: any) {
@@ -481,12 +468,12 @@ export default function BecomeACreatorPage() {
     }
   };
 
+  // Handle Google authentication
   const handleGoogleAuth = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     
-    // Safely check for Firebase (client-side only)
-    if (!isClient || typeof window === 'undefined' || !window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
+    if (!isFirebaseReady()) {
       showError('Firebase not initialized. Please wait...');
       setIsSubmitting(false);
       return;
@@ -495,7 +482,6 @@ export default function BecomeACreatorPage() {
     try {
       await signInWithGoogle();
       
-      // Get the current user from Firebase Auth directly (client-side only)
       if (!isClient || typeof window === 'undefined' || !window.firebaseAuth || !window.firebaseAuth.currentUser) {
         showError('Google authentication successful, but could not update profile. Please try again.');
         setIsSubmitting(false);
@@ -503,10 +489,7 @@ export default function BecomeACreatorPage() {
       }
 
       const currentUser = window.firebaseAuth.currentUser;
-
-      // Pre-fill form with Google data
       const googlePhotoURL = currentUser.photoURL || '';
-      console.log('🔍 Google photoURL:', googlePhotoURL); // Debug log
       
       setFormData(prev => ({
         ...prev,
@@ -515,15 +498,10 @@ export default function BecomeACreatorPage() {
         profileImage: googlePhotoURL || prev.profileImage || '',
       }));
       
-      // Set preview for Google image
       if (googlePhotoURL) {
-        console.log('✅ Setting profile image preview:', googlePhotoURL); // Debug log
         setProfileImagePreview(googlePhotoURL);
-      } else {
-        console.log('⚠️ No Google photoURL available'); // Debug log
       }
 
-      // Update user profile with creator role (but mark as incomplete)
       await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
         uid: currentUser.uid,
         email: currentUser.email,
@@ -532,14 +510,13 @@ export default function BecomeACreatorPage() {
         profileImage: currentUser.photoURL || '',
         role: 'creator',
         isCreatorApproved: false,
-        isProfileComplete: false, // Mark as incomplete so they complete the form
+        isProfileComplete: false,
         createdAt: window.serverTimestamp(),
         lastLogin: window.serverTimestamp(),
       }, { merge: true });
 
       showSuccess('Google signup successful! Please complete the form below to finish your creator profile.');
       setIsSubmitting(false);
-      // Stay on the form - don't redirect, let them complete it
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {
         let errorMessage = 'Google signup failed. ';
@@ -554,6 +531,7 @@ export default function BecomeACreatorPage() {
     }
   };
 
+  // Render step content
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
@@ -918,7 +896,7 @@ export default function BecomeACreatorPage() {
     }
   };
 
-  // Prevent SSR/hydration mismatch - only render on client
+  // Prevent SSR/hydration mismatch
   if (!mounted) {
     return null;
   }
