@@ -36,6 +36,7 @@ const STEPS = [
 ];
 
 export default function BecomeACreatorPage() {
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const { signUp, signInWithGoogle, user, loading } = useAuth();
@@ -64,10 +65,16 @@ export default function BecomeACreatorPage() {
     password: '',
   });
 
+  // Ensure component only renders on client to prevent SSR/hydration issues
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Initialize Firestore for creator profile data
   // Only run on client-side to prevent hydration errors
   useEffect(() => {
-    if (!isClient) return;
+    if (!mounted) return;
+    if (typeof window === 'undefined') return;
 
     // Check if Firestore is already initialized
     if (typeof window !== 'undefined' && window.firebaseDb && window.doc && window.setDoc && window.serverTimestamp) {
@@ -101,7 +108,7 @@ export default function BecomeACreatorPage() {
       window.serverTimestamp = serverTimestamp;
     `;
     document.head.appendChild(initScript);
-  }, []);
+  }, []); // Only run once after component mounts
 
   // Sync profileImage URL with preview when it changes
   useEffect(() => {
@@ -194,6 +201,43 @@ export default function BecomeACreatorPage() {
     } catch (error) {
       console.error('Error in validateWhatsAppNumber:', error);
       return { valid: false, error: 'Invalid WhatsApp number format. Please check and try again.' };
+    }
+  };
+
+  // Handler for WhatsApp input from SafePhoneInput (receives string value, not event)
+  const handleWhatsAppChange = (value: string) => {
+    try {
+      // Filter input: only allow + at start, then digits only
+      let filteredValue = value;
+      if (value.length > 0) {
+        // If it doesn't start with +, add it if first character is a digit
+        if (!value.startsWith('+')) {
+          // If first char is a digit, prepend +
+          if (/^\d/.test(value)) {
+            filteredValue = '+' + value.replace(/[^\d]/g, '');
+          } else {
+            // If first char is not + or digit, remove it and prepend +
+            filteredValue = '+' + value.replace(/[^\d]/g, '');
+          }
+        } else {
+          // Already starts with +, remove any non-digit characters after +
+          filteredValue = '+' + value.substring(1).replace(/[^\d]/g, '');
+        }
+        
+        // Limit to 16 characters (1 for + and 15 for digits)
+        if (filteredValue.length > 16) {
+          filteredValue = filteredValue.substring(0, 16);
+        }
+      }
+      
+      // Only update if the value actually changed to prevent unnecessary re-renders
+      if (filteredValue !== formData.whatsapp) {
+        setFormData(prev => ({ ...prev, whatsapp: filteredValue }));
+      }
+    } catch (error) {
+      console.error('Error filtering WhatsApp number:', error);
+      // Still update form data with the original value on error
+      setFormData(prev => ({ ...prev, whatsapp: value }));
     }
   };
 
@@ -543,7 +587,7 @@ export default function BecomeACreatorPage() {
               <SafePhoneInput
                 name="whatsapp"
                 value={formData.whatsapp}
-                onChange={(value) => setFormData(prev => ({ ...prev, whatsapp: value }))}
+                onChange={handleWhatsAppChange}
                 placeholder="+1234567890"
                 required
                 pattern="^\+[1-9]\d{6,14}$"
@@ -873,6 +917,11 @@ export default function BecomeACreatorPage() {
         return null;
     }
   };
+
+  // Prevent SSR/hydration mismatch - only render on client
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <HydrationGuard>

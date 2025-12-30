@@ -91,6 +91,13 @@ function InstructorContent() {
       document.head.appendChild(script);
     }
 
+    // Define event handler outside conditional so it's accessible in cleanup
+    const handleFirebaseReady = () => {
+      if (isMounted) {
+        checkFirebaseAndFetch();
+      }
+    };
+
     const checkFirebaseAndFetch = () => {
       if (typeof window === 'undefined') return;
       
