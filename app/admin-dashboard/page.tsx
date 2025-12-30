@@ -2159,7 +2159,8 @@ export default function AdminDashboard() {
           font-family: 'Poppins', sans-serif;
           background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
           color: #fff;
-          overflow-x: hidden;
+          overflow-x: auto;
+          overflow-y: auto;
         }
 
         .dashboard-container {
@@ -2267,6 +2268,8 @@ export default function AdminDashboard() {
           flex: 1;
           padding: 2rem;
           min-height: 100vh;
+          overflow-x: auto;
+          overflow-y: visible;
         }
 
         .dashboard-header {
@@ -2331,13 +2334,34 @@ export default function AdminDashboard() {
         .creator-table-wrapper {
           background: rgba(255, 255, 255, 0.05);
           border-radius: 12px;
-          overflow: hidden;
+          overflow-x: auto;
+          overflow-y: visible;
           border: 1px solid rgba(255, 255, 255, 0.1);
           margin-top: 2rem;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .creator-table-wrapper::-webkit-scrollbar {
+          height: 8px;
+        }
+
+        .creator-table-wrapper::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 4px;
+        }
+
+        .creator-table-wrapper::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 4px;
+        }
+
+        .creator-table-wrapper::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.3);
         }
 
         .creator-table {
           width: 100%;
+          min-width: 900px;
           border-collapse: collapse;
         }
 
@@ -2354,6 +2378,7 @@ export default function AdminDashboard() {
           text-transform: uppercase;
           letter-spacing: 0.5px;
           border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+          white-space: nowrap;
         }
 
         .creator-table-row {
@@ -2372,6 +2397,7 @@ export default function AdminDashboard() {
         .creator-table-row td {
           padding: 1rem;
           vertical-align: middle;
+          white-space: nowrap;
         }
 
         .creator-info-cell {
