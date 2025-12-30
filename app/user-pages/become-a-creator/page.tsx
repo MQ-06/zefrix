@@ -46,6 +46,7 @@ export default function BecomeACreatorPage() {
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [profileImagePreview, setProfileImagePreview] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [profileImageError, setProfileImageError] = useState(false);
   const [formData, setFormData] = useState({
     fullname: '',
     email: '',
@@ -109,13 +110,36 @@ export default function BecomeACreatorPage() {
       // Only update if different to prevent infinite loop
       if (profileImagePreview !== trimmedImage) {
         setProfileImagePreview(trimmedImage);
+        setProfileImageError(false); // Reset error when image URL changes
       }
     } else if (!trimmedImage && profileImagePreview) {
       // Clear preview if profileImage is cleared
       setProfileImagePreview('');
+      setProfileImageError(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.profileImage]);
+
+  // WhatsApp validation side effects - moved from validateStep and handleInputChange
+  useEffect(() => {
+    // Only validate if user has typed something (not on empty)
+    if (!formData.whatsapp || typeof formData.whatsapp !== 'string' || !formData.whatsapp.trim()) {
+      setWhatsappError('');
+      return;
+    }
+
+    try {
+      const validation = validateWhatsAppNumber(formData.whatsapp);
+      if (!validation.valid) {
+        setWhatsappError(validation.error || 'Invalid WhatsApp number');
+      } else {
+        setWhatsappError('');
+      }
+    } catch (error) {
+      console.error('Error validating WhatsApp number:', error);
+      setWhatsappError('');
+    }
+  }, [formData.whatsapp]);
 
   // WhatsApp number validation utility
   const validateWhatsAppNumber = (phoneNumber: string): { valid: boolean; error?: string; formatted?: string } => {
@@ -177,25 +201,8 @@ export default function BecomeACreatorPage() {
     try {
       const { name, value } = e.target;
       
-      // Real-time validation for WhatsApp number
-      if (name === 'whatsapp') {
-        try {
-          setWhatsappError('');
-          // Only validate if user has typed something (not on empty)
-          if (value && typeof value === 'string' && value.trim()) {
-            const validation = validateWhatsAppNumber(value);
-            if (!validation.valid) {
-              setWhatsappError(validation.error || 'Invalid WhatsApp number');
-            }
-          }
-        } catch (error) {
-          console.error('Error validating WhatsApp number:', error);
-          // Don't block input if validation fails
-          setWhatsappError('');
-        }
-      }
-      
-      // Always update form data, even if validation fails
+      // Always update form data
+      // WhatsApp validation is handled in useEffect
       // If category changes, clear subCategory
       if (name === 'category') {
         setFormData(prev => ({ ...prev, [name]: value || '', subCategory: '' }));
@@ -229,6 +236,7 @@ export default function BecomeACreatorPage() {
     const reader = new FileReader();
     reader.onloadend = () => {
       setProfileImagePreview(reader.result as string);
+      setProfileImageError(false); // Reset error on new file
     };
     reader.readAsDataURL(file);
 
@@ -253,6 +261,7 @@ export default function BecomeACreatorPage() {
     }
   };
 
+  // PURE validation function - no side effects, no setState calls
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
@@ -263,13 +272,13 @@ export default function BecomeACreatorPage() {
         try {
           const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
           if (!whatsappValidation.valid) {
-            setWhatsappError(whatsappValidation.error || 'Invalid WhatsApp number');
+            // Don't set error here - useEffect handles it
             return false;
           }
           return true;
         } catch (error) {
           console.error('Error validating WhatsApp in validateStep:', error);
-          setWhatsappError('Invalid WhatsApp number format. Please check and try again.');
+          // Don't set error here - useEffect handles it
           return false;
         }
       case 2:
@@ -713,23 +722,18 @@ export default function BecomeACreatorPage() {
                   justifyContent: 'center',
                   background: (profileImagePreview || formData.profileImage) ? 'transparent' : 'rgba(255, 255, 255, 0.1)'
                 }}>
-                  {(profileImagePreview || formData.profileImage) ? (
+                  {(profileImagePreview || formData.profileImage) && !profileImageError ? (
                     <img
                       src={profileImagePreview || formData.profileImage}
                       alt="Profile preview"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      onLoad={() => console.log('✅ Profile image loaded successfully')}
-                      onError={(e) => { 
+                      onLoad={() => {
+                        console.log('✅ Profile image loaded successfully');
+                        setProfileImageError(false);
+                      }}
+                      onError={() => { 
                         console.error('❌ Profile image failed to load:', profileImagePreview || formData.profileImage);
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        // Show placeholder on error
-                        const parent = (e.target as HTMLImageElement).parentElement;
-                        if (parent) {
-                          const placeholder = document.createElement('div');
-                          placeholder.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.5); font-size: 48px;';
-                          placeholder.innerHTML = '<i class="fa-solid fa-user"></i>';
-                          parent.appendChild(placeholder);
-                        }
+                        setProfileImageError(true);
                       }}
                     />
                   ) : (
