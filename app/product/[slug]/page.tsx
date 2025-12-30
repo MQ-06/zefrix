@@ -1144,15 +1144,13 @@ export default function ProductPage({ params }: PageProps) {
                   )}
                 </div>
 
-                {/* Add to Cart Button - Hide if enrolled */}
                 {!isEnrolled && (
                   <>
                     {!user ? (
-                      // Show login prompt for non-authenticated users
                       <div className="space-y-3">
-                        <div className="w-full px-8 py-4 rounded-lg text-white font-semibold bg-gradient-to-r from-[#D92A63] to-[#FF654B] text-center border-2 border-transparent">
+                        <p className="text-center text-blue-300 font-medium text-base">
                           Login Required to Enroll
-                        </div>
+                        </p>
                         <Link
                           href={`/signup-login?redirect=/product/${params.slug}`}
                           className="w-full px-8 py-4 rounded-lg text-white font-semibold transition-all duration-200 shadow-lg bg-gradient-to-r from-[#6C63FF] to-[#D92A63] hover:opacity-90 shadow-[#6C63FF]/30 flex items-center justify-center"
