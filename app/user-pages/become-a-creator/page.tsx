@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotification } from '@/contexts/NotificationContext';
@@ -330,6 +330,37 @@ export default function BecomeACreatorPage() {
         return false;
     }
   };
+
+  // Memoize validation result to prevent hydration mismatches
+  // Only validate after component is mounted to ensure consistent server/client rendering
+  const isStepValid = useMemo(() => {
+    // Always return false during SSR/hydration to prevent mismatches
+    if (!mounted) return false;
+    
+    // Validate the current step
+    switch (currentStep) {
+      case 1:
+        if (!formData.fullname || !formData.email || !formData.whatsapp) {
+          return false;
+        }
+        try {
+          const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
+          return whatsappValidation.valid;
+        } catch (error) {
+          return false;
+        }
+      case 2:
+        return !!formData.category;
+      case 3:
+        return !!(formData.bio && formData.expertise);
+      case 4:
+        return true;
+      case 5:
+        return !!formData.password && formData.password.length >= 6;
+      default:
+        return false;
+    }
+  }, [mounted, currentStep, formData.fullname, formData.email, formData.whatsapp, formData.category, formData.bio, formData.expertise, formData.password]);
 
   // Navigation handlers
   const nextStep = () => {
@@ -1419,7 +1450,7 @@ export default function BecomeACreatorPage() {
                   type="button"
                   className="btn btn-primary"
                   onClick={nextStep}
-                  disabled={!validateStep(currentStep)}
+                  disabled={!isStepValid}
                 >
                   Next <i className="fa-solid fa-arrow-right"></i>
                 </button>
