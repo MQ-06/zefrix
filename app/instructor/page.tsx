@@ -24,6 +24,16 @@ interface Creator {
   totalClasses?: number;
 }
 
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+  authDomain: "zefrix-custom.firebaseapp.com",
+  projectId: "zefrix-custom",
+  storageBucket: "zefrix-custom.firebasestorage.app",
+  messagingSenderId: "50732408558",
+  appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+  measurementId: "G-27HS1SWB5X"
+};
+
 function InstructorContent() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +41,7 @@ function InstructorContent() {
   const fetchingRef = useRef(false);
   const isMountedRef = useRef(true);
 
+  // Set mounted flag on client-side
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -57,10 +68,7 @@ function InstructorContent() {
     if (typeof window !== 'undefined' && !window.firebaseDb) {
       // Check if script is already being loaded to prevent duplicates
       const existingScript = document.querySelector('script[data-firebase-instructor-init]');
-      if (existingScript) {
-        // Script already exists, wait for it
-        return;
-      }
+      if (existingScript) return;
 
       const script = document.createElement('script');
       script.type = 'module';
@@ -70,17 +78,8 @@ function InstructorContent() {
           import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
           
-          const firebaseConfig = {
-            apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-            authDomain: "zefrix-custom.firebaseapp.com",
-            projectId: "zefrix-custom",
-            storageBucket: "zefrix-custom.firebasestorage.app",
-            messagingSenderId: "50732408558",
-            appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-            measurementId: "G-27HS1SWB5X"
-          };
+          const firebaseConfig = ${JSON.stringify(FIREBASE_CONFIG)};
           
-          // Use existing app if already initialized
           const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
           window.firebaseDb = getFirestore(app);
           window.collection = collection;
@@ -88,7 +87,6 @@ function InstructorContent() {
           window.where = where;
           window.getDocs = getDocs;
           
-          // Dispatch event after a small delay to ensure everything is set
           setTimeout(() => {
             window.dispatchEvent(new Event('firebaseReady'));
           }, 100);
@@ -175,9 +173,8 @@ function InstructorContent() {
         const creatorsData: Creator[] = [];
         querySnapshot.forEach((doc: any) => {
           const data = doc.data();
-          console.log('Creator data:', { id: doc.id, name: data.name, role: data.role, photoURL: data.photoURL, profileImage: data.profileImage });
-          // Prefer photoURL, then profileImage, then empty string (will fallback to avatar API in component)
           const imageUrl = data.photoURL || data.profileImage || '';
+          
           creatorsData.push({
             id: doc.id,
             name: data.name || data.email?.split('@')[0] || 'Creator',
@@ -270,9 +267,6 @@ function InstructorContent() {
       }
     };
 
-    // Only run on client side
-    if (typeof window === 'undefined') return;
-
     // Define event handler outside conditional so it's available for cleanup
     const handleFirebaseReady = () => {
       console.log('📢 firebaseReady event received');
@@ -301,10 +295,11 @@ function InstructorContent() {
       window.addEventListener('firebaseReady', handleFirebaseReady);
       eventListenerAdded = true;
       
-      // Also start polling as fallback (in case event doesn't fire)
+      // Also start polling as fallback
       checkFirebaseAndFetch();
     }
 
+    // Cleanup
     return () => {
       console.log('🧹 Cleanup: Setting isMountedRef to false');
       isMountedRef.current = false;
@@ -318,16 +313,14 @@ function InstructorContent() {
     };
   }, [mounted]); // Only re-run when mounted changes from false to true
 
-  // Separate effect to prevent infinite loops - only run fetch once
-  const hasFetchedRef = useRef(false);
-  
-  useEffect(() => {
-    if (mounted && !hasFetchedRef.current && !loading && creators.length === 0) {
-      // This is a safety check - if somehow we're mounted but haven't fetched
-      // But actually, the main effect should handle this
-      console.log('⚠️ Safety check: mounted but no data, but main effect should handle this');
+  // Helper function to get profile image URL with fallback
+  const getProfileImageUrl = (creator: Creator): string => {
+    if (creator.photoURL && creator.photoURL.trim() !== '') {
+      return creator.photoURL;
     }
-  }, [mounted, loading, creators.length]);
+    // Fallback to avatar API with creator's name
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(creator.name)}&background=D92A63&color=fff&size=200`;
+  };
   // Debug render
   console.log('🎨 InstructorContent render:', {
     loading,
@@ -343,7 +336,6 @@ function InstructorContent() {
     <>
       {/* Hero Section */}
       <section className="hero-inner pt-24 pb-16 md:pt-32 md:pb-20 relative overflow-hidden">
-        {/* Background Gradient */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A2E] via-[#2D1B3D] to-[#E91E63]"></div>
 
         <div className="container relative z-10">
@@ -365,7 +357,6 @@ function InstructorContent() {
               Meet our talented creators who are sharing their expertise and passion with students worldwide.
             </motion.p>
 
-            {/* Decorative Element */}
             <motion.img
               src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b765_element-3.svg"
               loading="lazy"
@@ -411,33 +402,19 @@ function InstructorContent() {
             console.log('📊 Rendering: Creators grid with', creators.length, 'creators');
             return (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
-              {creators.map((creator, index) => {
-                // Use photoURL if available, otherwise fallback to avatar API with initials
-                const photoURL = creator.photoURL || '';
-                const hasImage = photoURL.trim() !== '';
-                const profileImageUrl = hasImage 
-                  ? photoURL
-                  : `https://ui-avatars.com/api/?name=${encodeURIComponent(creator.name)}&background=D92A63&color=fff&size=200`;
-                
-                // Debug logging
-                if (!hasImage) {
-                  console.log(`Creator "${creator.name}" (${creator.id}) - No profile image found. photoURL:`, creator.photoURL);
-                }
-                
-                return (
-                  <InstructorCard
-                    key={creator.id}
-                    instructor={{
-                      id: creator.id,
-                      slug: creator.name.toLowerCase().replace(/\s+/g, '-'),
-                      name: creator.name,
-                      title: `${creator.totalClasses || 0} Active Classes`,
-                      image: profileImageUrl
-                    }}
-                    index={index}
-                  />
-                );
-              })}
+              {creators.map((creator, index) => (
+                <InstructorCard
+                  key={creator.id}
+                  instructor={{
+                    id: creator.id,
+                    slug: creator.name.toLowerCase().replace(/\s+/g, '-'),
+                    name: creator.name,
+                    title: `${creator.totalClasses || 0} Active Classes`,
+                    image: getProfileImageUrl(creator)
+                  }}
+                  index={index}
+                />
+              ))}
             </div>
             );
           })()}
