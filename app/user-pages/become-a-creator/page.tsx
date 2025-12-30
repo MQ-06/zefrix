@@ -9,7 +9,6 @@ import { uploadImage, getProfileImagePath, validateFile } from '@/lib/utils/serv
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import HydrationGuard from '@/components/HydrationGuard';
-import SafePhoneInput from '@/components/SafePhoneInput';
 import { isClient } from '@/app/utils/environment';
 
 declare global {
@@ -49,7 +48,6 @@ const STEPS = [
 const INITIAL_FORM_DATA = {
   fullname: '',
   email: '',
-  whatsapp: '',
   category: '',
   subCategory: '',
   bio: '',
@@ -66,7 +64,6 @@ const INITIAL_FORM_DATA = {
 interface FormData {
   fullname: string;
   email: string;
-  whatsapp: string;
   category: string;
   subCategory: string;
   bio: string;
@@ -88,7 +85,6 @@ export default function BecomeACreatorPage() {
   const { showSuccess, showError } = useNotification();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [whatsappError, setWhatsappError] = useState<string>('');
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [profileImagePreview, setProfileImagePreview] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -147,107 +143,6 @@ export default function BecomeACreatorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.profileImage]);
 
-  // WhatsApp validation side effects
-  useEffect(() => {
-    if (!formData.whatsapp || typeof formData.whatsapp !== 'string' || !formData.whatsapp.trim()) {
-      setWhatsappError('');
-      return;
-    }
-
-    try {
-      const validation = validateWhatsAppNumber(formData.whatsapp);
-      if (!validation.valid) {
-        setWhatsappError(validation.error || 'Invalid WhatsApp number');
-      } else {
-        setWhatsappError('');
-      }
-    } catch (error) {
-      console.error('Error validating WhatsApp number:', error);
-      setWhatsappError('');
-    }
-  }, [formData.whatsapp]);
-
-  // WhatsApp number validation utility
-  const validateWhatsAppNumber = (phoneNumber: string): { valid: boolean; error?: string; formatted?: string } => {
-    try {
-      if (!phoneNumber || typeof phoneNumber !== 'string' || !phoneNumber.trim()) {
-        return { valid: false, error: 'WhatsApp number is required' };
-      }
-
-      let cleaned = phoneNumber.trim().replace(/\s+/g, '');
-
-      if (!cleaned.startsWith('+')) {
-        return { valid: false, error: 'WhatsApp number must start with + (country code). Example: +1234567890' };
-      }
-
-      const digitsOnly = cleaned.substring(1);
-      
-      if (!digitsOnly || digitsOnly.length === 0) {
-        return { valid: false, error: 'WhatsApp number must include digits after the country code.' };
-      }
-
-      if (!/^\d+$/.test(digitsOnly)) {
-        return { valid: false, error: 'WhatsApp number can only contain digits after the country code. Please remove any letters or special characters.' };
-      }
-
-      if (digitsOnly.length < 7) {
-        return { valid: false, error: 'WhatsApp number is too short. Please include country code and number. Example: +1234567890' };
-      }
-
-      if (digitsOnly.length > 15) {
-        return { valid: false, error: 'WhatsApp number is too long. Maximum 15 digits allowed.' };
-      }
-
-      const countryCodeLength = Math.min(4, digitsOnly.length);
-      const countryCode = digitsOnly.substring(0, countryCodeLength);
-      
-      if (countryCode && countryCode.length > 0 && countryCode.startsWith('0')) {
-        return { valid: false, error: 'Country code cannot start with 0. Please use the correct format: +[country code][number]' };
-      }
-
-      return { valid: true, formatted: '+' + digitsOnly };
-    } catch (error) {
-      console.error('Error in validateWhatsAppNumber:', error);
-      return { valid: false, error: 'Invalid WhatsApp number format. Please check and try again.' };
-    }
-  };
-
-  // Filter WhatsApp input value
-  const filterWhatsAppValue = (value: string): string => {
-    if (value.length === 0) return value;
-
-    let filteredValue = value;
-    
-    if (!value.startsWith('+')) {
-      if (/^\d/.test(value)) {
-        filteredValue = '+' + value.replace(/[^\d]/g, '');
-      } else {
-        filteredValue = '+' + value.replace(/[^\d]/g, '');
-      }
-    } else {
-      filteredValue = '+' + value.substring(1).replace(/[^\d]/g, '');
-    }
-    
-    if (filteredValue.length > 16) {
-      filteredValue = filteredValue.substring(0, 16);
-    }
-
-    return filteredValue;
-  };
-
-  // Handler for WhatsApp input from SafePhoneInput
-  const handleWhatsAppChange = (value: string) => {
-    try {
-      const filteredValue = filterWhatsAppValue(value);
-      
-      if (filteredValue !== formData.whatsapp) {
-        setFormData(prev => ({ ...prev, whatsapp: filteredValue }));
-      }
-    } catch (error) {
-      console.error('Error filtering WhatsApp number:', error);
-      setFormData(prev => ({ ...prev, whatsapp: value }));
-    }
-  };
 
   // Handle general input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -308,16 +203,8 @@ export default function BecomeACreatorPage() {
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        if (!formData.fullname || !formData.email || !formData.whatsapp) {
-          return false;
-        }
-        try {
-          const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
-          return whatsappValidation.valid;
-        } catch (error) {
-          console.error('Error validating WhatsApp in validateStep:', error);
-          return false;
-        }
+        // Only require fullname and email
+        return !!(formData.fullname && formData.email);
       case 2:
         return !!formData.category;
       case 3:
@@ -340,15 +227,7 @@ export default function BecomeACreatorPage() {
     // Validate the current step
     switch (currentStep) {
       case 1:
-        if (!formData.fullname || !formData.email || !formData.whatsapp) {
-          return false;
-        }
-        try {
-          const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
-          return whatsappValidation.valid;
-        } catch (error) {
-          return false;
-        }
+        return !!(formData.fullname && formData.email);
       case 2:
         return !!formData.category;
       case 3:
@@ -360,7 +239,7 @@ export default function BecomeACreatorPage() {
       default:
         return false;
     }
-  }, [mounted, currentStep, formData.fullname, formData.email, formData.whatsapp, formData.category, formData.bio, formData.expertise, formData.password]);
+  }, [mounted, currentStep, formData.fullname, formData.email, formData.category, formData.bio, formData.expertise, formData.password]);
 
   // Navigation handlers
   const nextStep = () => {
@@ -438,20 +317,12 @@ export default function BecomeACreatorPage() {
         currentUser = window.firebaseAuth.currentUser;
       }
 
-      const whatsappValidation = validateWhatsAppNumber(formData.whatsapp);
-      if (!whatsappValidation.valid) {
-        showError(whatsappValidation.error || 'Invalid WhatsApp number');
-        setIsSubmitting(false);
-        return;
-      }
-
       const profileImageUrl = formData.profileImage?.trim() || currentUser.photoURL || '';
       
       await window.setDoc(window.doc(window.firebaseDb, 'users', currentUser.uid), {
         uid: currentUser.uid,
         email: formData.email.trim(),
         name: formData.fullname.trim(),
-        whatsapp: whatsappValidation.formatted || formData.whatsapp.trim(),
         creatorCategory: formData.category,
         subCategory: formData.subCategory?.trim() || '',
         role: 'creator',
@@ -590,56 +461,6 @@ export default function BecomeACreatorPage() {
                 placeholder="john@example.com"
                 required
               />
-            </div>
-            <div className="form-group">
-              <label>WhatsApp Number *</label>
-              <SafePhoneInput
-                name="whatsapp"
-                value={formData.whatsapp}
-                onChange={handleWhatsAppChange}
-                placeholder="+1234567890"
-                required
-                pattern="^\+[1-9]\d{6,14}$"
-                maxLength={16}
-                suppressHydrationWarning
-                style={{
-                  borderColor: whatsappError ? '#ef4444' : undefined,
-                  borderWidth: whatsappError ? '2px' : undefined
-                }}
-              />
-              {whatsappError && (
-                <div style={{ 
-                  color: '#ef4444', 
-                  fontSize: '12px', 
-                  marginTop: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <i className="fa-solid fa-circle-exclamation" style={{ fontSize: '12px' }}></i>
-                  {whatsappError}
-                </div>
-              )}
-              {!whatsappError && formData.whatsapp && (
-                <div style={{ 
-                  color: '#10b981', 
-                  fontSize: '12px', 
-                  marginTop: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <i className="fa-solid fa-circle-check" style={{ fontSize: '12px' }}></i>
-                  Valid WhatsApp number
-                </div>
-              )}
-              <div style={{ 
-                color: '#6b7280', 
-                fontSize: '11px', 
-                marginTop: '4px' 
-              }}>
-                Format: +[country code][number]. Example: +919876543210, +11234567890
-              </div>
             </div>
           </div>
         );
