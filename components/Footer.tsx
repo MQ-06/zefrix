@@ -9,7 +9,7 @@ export default function Footer() {
     { href: '/', label: 'Home' },
     { href: '/courses', label: 'Courses' },
     { href: '/categories', label: 'Categories' },
-    { href: '/instructor', label: 'Instructors' },
+    { href: '/instructor', label: 'Creators' },
     { href: '/contact-us', label: 'Contact Us' },
   ];
 

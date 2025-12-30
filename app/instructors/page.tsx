@@ -95,7 +95,7 @@ function InstructorsContent() {
             window.dispatchEvent(new CustomEvent('firebaseError', { detail: new Error('Script load failed') }));
           };
           document.head.appendChild(script);
-          
+
           // Wait for Firebase to be ready
           await new Promise<void>((resolve) => {
             const handleReady = () => {
@@ -109,12 +109,20 @@ function InstructorsContent() {
       }
 
       try {
-        console.log('Fetching creators from Firestore...');
+        console.log('🔍 Fetching creators from Firestore...');
+        console.log('Firebase DB:', !!window.firebaseDb);
+        console.log('Collection function:', !!window.collection);
+
         const usersRef = window.collection(window.firebaseDb, 'users');
+        console.log('Users ref created:', !!usersRef);
+
         const q = window.query(usersRef, window.where('role', '==', 'creator'));
+        console.log('Query created:', !!q);
+
+        console.log('📡 Executing getDocs...');
         const querySnapshot = await window.getDocs(q);
 
-        console.log(`Found ${querySnapshot.size} creators in query`);
+        console.log(`✅ Query executed! Found ${querySnapshot.size} creators in query`);
 
         const creatorsData: Creator[] = [];
         querySnapshot.forEach((doc: any) => {
@@ -235,15 +243,15 @@ function InstructorsContent() {
                 // Use photoURL if available, otherwise fallback to avatar API with initials
                 const photoURL = creator.photoURL || '';
                 const hasImage = photoURL.trim() !== '';
-                const profileImageUrl = hasImage 
+                const profileImageUrl = hasImage
                   ? photoURL
                   : `https://ui-avatars.com/api/?name=${encodeURIComponent(creator.name)}&background=D92A63&color=fff&size=200`;
-                
+
                 // Debug logging
                 if (!hasImage) {
                   console.log(`Creator "${creator.name}" (${creator.id}) - No profile image found. photoURL:`, creator.photoURL);
                 }
-                
+
                 return (
                   <InstructorCard
                     key={creator.id}

@@ -43,6 +43,10 @@ declare global {
     getDoc: any;
     updateDoc: any;
     serverTimestamp: any;
+    collection: any;
+    query: any;
+    where: any;
+    getDocs: any;
   }
 }
 
@@ -82,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initScript.textContent = `
       import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
       import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-      import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
       
       const firebaseConfig = {
         apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
@@ -115,9 +119,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.updateDoc = updateDoc;
         window.serverTimestamp = serverTimestamp;
         
+        // Add Firestore query functions for instructors page and other components
+        window.collection = collection;
+        window.query = query;
+        window.where = where;
+        window.getDocs = getDocs;
+        
         console.log('✅ Firebase initialized successfully');
         console.log('Firebase Auth:', !!window.firebaseAuth);
         console.log('Firebase Firestore:', !!window.firebaseDb);
+        console.log('Firestore Query Functions:', !!window.collection, !!window.query, !!window.where, !!window.getDocs);
         
         // Dispatch ready event
         window.dispatchEvent(new CustomEvent('firebaseReady'));
@@ -170,11 +181,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       console.log('🔐 Setting up auth state listener...');
-      
+
       // Listen for auth state changes
       const unsubscribe = window.onAuthStateChanged(window.firebaseAuth, async (firebaseUser: any) => {
         console.log('👤 Auth state changed:', firebaseUser ? `User: ${firebaseUser.email}` : 'No user');
-        
+
         if (firebaseUser) {
           try {
             // Fetch user data from Firestore
@@ -185,13 +196,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const userData = userDoc.data();
                 console.log('📄 User data from Firestore:', userData);
                 let role = userData.role || 'student';
-                
+
                 // Sync photoURL from Firebase Auth to Firestore if it exists and is different
                 const authPhotoURL = firebaseUser.photoURL || '';
                 const firestorePhotoURL = userData.photoURL || '';
                 if (authPhotoURL && authPhotoURL !== firestorePhotoURL && window.updateDoc) {
                   try {
-                    await window.updateDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid), { 
+                    await window.updateDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid), {
                       photoURL: authPhotoURL,
                       profileImage: authPhotoURL // Also update profileImage to keep them in sync
                     });
@@ -200,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     console.error('Failed to sync photoURL to Firestore:', err);
                   }
                 }
-                
+
                 if (isAdminEmail) {
                   role = 'admin';
                   if (userData.role !== 'admin' && window.updateDoc) {
@@ -212,10 +223,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                   }
                 }
-                
+
                 // Use synced photoURL (from Auth if available, otherwise from Firestore)
                 const finalPhotoURL = authPhotoURL || firestorePhotoURL || userData.profileImage || '';
-                
+
                 setUser({
                   uid: firebaseUser.uid,
                   email: firebaseUser.email,
@@ -286,7 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Try to set up immediately
     let unsubscribe: (() => void) | null = setupAuthListener();
-    
+
     // If not ready, listen for firebaseReady event and poll as fallback
     if (!unsubscribe) {
       const handleFirebaseReady = () => {
@@ -296,9 +307,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           unsubscribe = newUnsubscribe;
         }
       };
-      
+
       window.addEventListener('firebaseReady', handleFirebaseReady);
-      
+
       // Poll as fallback in case event is missed
       const pollInterval = setInterval(() => {
         if (window.firebaseAuth && window.onAuthStateChanged && !unsubscribe) {
@@ -309,12 +320,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       }, 100);
-      
+
       // Clear polling after 10 seconds
       const pollTimeout = setTimeout(() => {
         clearInterval(pollInterval);
       }, 10000);
-      
+
       return () => {
         window.removeEventListener('firebaseReady', handleFirebaseReady);
         clearInterval(pollInterval);
@@ -346,7 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('🔐 Calling signInWithEmailAndPassword...');
       const cred = await window.signInWithEmailAndPassword(window.firebaseAuth, email.trim(), password);
       console.log('✅ Sign in successful, user:', cred.user.email);
-      
+
       // Fetch user role from Firestore
       if (window.firebaseDb && window.doc && window.getDoc) {
         const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', cred.user.uid));
@@ -378,10 +389,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const cred = await window.createUserWithEmailAndPassword(window.firebaseAuth, email.trim(), password);
       await window.updateProfile(cred.user, { displayName: name });
-      
+
       const isAdminEmail = ADMIN_EMAILS.some(adminEmail => normalizeEmail(email) === normalizeEmail(adminEmail));
       const role = isAdminEmail ? 'admin' : 'student';
-      
+
       // Wait for Firestore to be ready
       let attempts = 0;
       while (!window.firebaseDb || !window.doc || !window.setDoc || !window.serverTimestamp) {
@@ -390,7 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      
+
       await window.setDoc(window.doc(window.firebaseDb, 'users', cred.user.uid), {
         uid: cred.user.uid,
         email: email.trim(),
@@ -417,7 +428,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const googleProvider = new window.GoogleAuthProvider();
       const cred = await window.signInWithPopup(window.firebaseAuth, googleProvider);
       const user = cred.user;
-      
+
       // Wait for Firestore to be ready
       let attempts = 0;
       while (!window.firebaseDb || !window.doc || !window.getDoc || !window.setDoc || !window.updateDoc || !window.serverTimestamp) {
@@ -426,7 +437,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      
+
       const userRef = window.doc(window.firebaseDb, 'users', user.uid);
       const snap = await window.getDoc(userRef);
 
@@ -446,7 +457,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       } else {
         role = snap.data().role;
-        await window.updateDoc(userRef, { 
+        await window.updateDoc(userRef, {
           lastLogin: window.serverTimestamp(),
           photoURL: user.photoURL || snap.data().photoURL || '',
         });

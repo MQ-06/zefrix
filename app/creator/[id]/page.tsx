@@ -136,14 +136,22 @@ export default function CreatorProfilePage() {
     let eventListenerAdded = false;
 
     const checkFirebaseAndFetch = () => {
-      if (typeof window === 'undefined') return;
+      console.log('🔍 checkFirebaseAndFetch called');
+      if (typeof window === 'undefined') {
+        console.log('⚠️ Window undefined in checkFirebaseAndFetch');
+        return;
+      }
       
-      if (!window.firebaseDb || !window.doc || !window.getDoc || !window.collection || !window.query || !window.where || !window.getDocs) {
+      const firebaseReady = !!(window.firebaseDb && window.doc && window.getDoc && window.collection && window.query && window.where && window.getDocs);
+      
+      if (!firebaseReady) {
+        console.log('⏳ Firebase not ready in checkFirebaseAndFetch, retrying...');
         // Retry after 200ms if not ready
         retryTimeout = setTimeout(checkFirebaseAndFetch, 200);
         return;
       }
 
+      console.log('✅ Firebase ready in checkFirebaseAndFetch, calling fetchData');
       // Clear any pending retries
       if (retryTimeout) {
         clearTimeout(retryTimeout);
@@ -154,15 +162,35 @@ export default function CreatorProfilePage() {
     };
 
     const fetchData = async () => {
-      if (!isMounted || typeof window === 'undefined') return;
+      console.log('🚀 fetchData called for creatorId:', creatorId);
+      console.log('🔍 isMounted:', isMounted, 'window:', typeof window !== 'undefined');
+      
+      if (!isMounted || typeof window === 'undefined') {
+        console.log('⚠️ Returning early - not mounted or window undefined');
+        return;
+      }
 
-      if (!window.firebaseDb || !window.doc || !window.getDoc || !window.collection || !window.query || !window.where || !window.getDocs) {
-        console.log('Firebase not ready yet, retrying...');
+      const firebaseReady = !!(window.firebaseDb && window.doc && window.getDoc && window.collection && window.query && window.where && window.getDocs);
+      console.log('🔍 Firebase ready check:', {
+        firebaseDb: !!window.firebaseDb,
+        doc: !!window.doc,
+        getDoc: !!window.getDoc,
+        collection: !!window.collection,
+        query: !!window.query,
+        where: !!window.where,
+        getDocs: !!window.getDocs,
+        allReady: firebaseReady
+      });
+
+      if (!firebaseReady) {
+        console.log('⏳ Firebase not ready yet, retrying...');
         retryTimeout = setTimeout(checkFirebaseAndFetch, 200);
         return;
       }
 
+      console.log('✅ Firebase ready, fetching data...');
       try {
+        console.log('📡 Fetching creator profile for:', creatorId);
         // Fetch creator profile and classes in parallel for faster loading
         const [userSnap, classesSnapshot] = await Promise.all([
           window.getDoc(window.doc(window.firebaseDb, 'users', creatorId)),
@@ -173,7 +201,11 @@ export default function CreatorProfilePage() {
           ))
         ]);
 
+        console.log('📦 User snapshot exists:', userSnap.exists());
+        console.log('📦 Classes snapshot size:', classesSnapshot.size);
+
         if (!userSnap.exists()) {
+          console.error('❌ Creator not found in database for ID:', creatorId);
           setError('Creator not found');
           setLoading(false);
           return;
@@ -181,7 +213,16 @@ export default function CreatorProfilePage() {
 
         // Set creator data immediately
         const userData = userSnap.data();
-        setCreator({
+        console.log('📋 User data received:', {
+          name: userData.name,
+          displayName: userData.displayName,
+          email: userData.email,
+          hasBio: !!userData.bio,
+          hasExpertise: !!(userData.expertise || userData.skills),
+          hasPhoto: !!(userData.profileImage || userData.photoURL)
+        });
+        
+        const creatorData = {
           uid: creatorId,
           name: userData.name || userData.displayName || 'Creator',
           displayName: userData.displayName || userData.name || 'Creator',
@@ -197,7 +238,10 @@ export default function CreatorProfilePage() {
             twitter: '',
             linkedin: '',
           },
-        });
+        };
+        
+        console.log('✅ Setting creator state:', creatorData);
+        setCreator(creatorData);
 
         // Process classes immediately
         const classesList: ClassData[] = [];
@@ -213,7 +257,9 @@ export default function CreatorProfilePage() {
         });
 
         // Set classes immediately (without enrollment counts first)
+        console.log('📚 Setting classes:', classesList.length, 'classes');
         setClasses(classesList);
+        console.log('✅ Setting loading to false');
         setLoading(false); // Show page immediately
 
         // Fetch enrollment counts and reviews in background (non-blocking)
@@ -412,7 +458,13 @@ export default function CreatorProfilePage() {
         // Fetch similar creators (non-blocking) - fetch even if no classes (based on expertise)
         fetchSimilarCreators();
       } catch (err) {
-        console.error('Error fetching creator profile:', err);
+        console.error('❌ Error fetching creator profile:', err);
+        console.error('Error details:', {
+          message: err instanceof Error ? err.message : 'Unknown error',
+          stack: err instanceof Error ? err.stack : undefined,
+          creatorId,
+          errorType: err?.constructor?.name
+        });
         if (isMounted) {
           setError('Failed to load creator profile');
           setLoading(false);
@@ -425,15 +477,24 @@ export default function CreatorProfilePage() {
 
     // Define event handler outside conditional so it's available for cleanup
     const handleFirebaseReady = () => {
+      console.log('📢 firebaseReady event received in creator page');
       if (isMounted) {
+        console.log('✅ Component is mounted, calling checkFirebaseAndFetch');
         checkFirebaseAndFetch();
+      } else {
+        console.log('⚠️ Component not mounted when firebaseReady event received');
       }
     };
 
     // Try to fetch immediately if Firebase is already loaded
-    if (window.firebaseDb && window.doc && window.getDoc && window.collection && window.query && window.where && window.getDocs) {
+    const firebaseAlreadyReady = !!(window.firebaseDb && window.doc && window.getDoc && window.collection && window.query && window.where && window.getDocs);
+    console.log('🔍 Initial Firebase check:', firebaseAlreadyReady);
+    
+    if (firebaseAlreadyReady) {
+      console.log('✅ Firebase already ready, calling checkFirebaseAndFetch immediately');
       checkFirebaseAndFetch();
     } else {
+      console.log('⏳ Firebase not ready, setting up event listener and polling');
       // Wait for firebaseReady event
       window.addEventListener('firebaseReady', handleFirebaseReady);
       eventListenerAdded = true;
@@ -496,6 +557,16 @@ export default function CreatorProfilePage() {
   const isYouTubeUrl = (url: string): boolean => {
     return /youtube\.com|youtu\.be/.test(url);
   };
+
+  // Debug render state
+  console.log('🎨 Render state:', {
+    loading,
+    error,
+    hasCreator: !!creator,
+    creatorName: creator?.name,
+    classesCount: classes.length,
+    mounted
+  });
 
   if (loading) {
     return (

@@ -27,7 +27,7 @@ export default function Header() {
     { href: '/', label: 'Home' },
     { href: '/courses', label: 'Courses' },
     { href: '/categories', label: 'Categories' },
-    { href: '/instructors', label: 'Instructor' },
+    { href: '/instructor', label: 'Creators' },
     { href: '/contact-us', label: 'Contact Us' },
   ];
 
