@@ -238,7 +238,7 @@ export default function CreateClassForm() {
     };
     reader.readAsDataURL(file);
 
-    // File will be uploaded to server storage after class is created (we need classId first)
+    // File will be uploaded to server storage after batch is created (we need classId first)
   };
 
   // Helper function to validate that end time is after start time
@@ -379,7 +379,7 @@ export default function CreateClassForm() {
       // Get current user
       const user = window.firebaseAuth.currentUser;
       if (!user) {
-        throw new Error('You must be logged in to create a class');
+        throw new Error('You must be logged in to create a batch');
       }
 
       // Get form data
@@ -419,7 +419,7 @@ export default function CreateClassForm() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         if (selectedDate < today) {
-          throw new Error('Class date cannot be in the past. Please select today or a future date.');
+          throw new Error('Batch date cannot be in the past. Please select today or a future date.');
         }
 
         // Validate that end time is after start time
@@ -500,7 +500,7 @@ export default function CreateClassForm() {
           console.error('Thumbnail upload error:', error);
           setSubmitMessage({ 
             type: 'error', 
-            text: `Thumbnail upload failed: ${error.message}. Continuing with class creation...` 
+            text: `Thumbnail upload failed: ${error.message}. Continuing with batch creation...` 
           });
           // Continue with form submission even if thumbnail upload fails
         } finally {
@@ -606,7 +606,7 @@ export default function CreateClassForm() {
         }),
       };
 
-      console.log('📝 Saving class to Firestore', {
+      console.log('📝 Saving batch to Firestore', {
         classId,
         originalVideoLink: videoLink,
         finalVideoLink,
@@ -620,7 +620,7 @@ export default function CreateClassForm() {
       // Write to Firestore
       await window.setDoc(window.doc(window.firebaseDb, 'classes', classId), firestoreData);
 
-      // Send email notification to admin about new class
+      // Send email notification to admin about new batch
       try {
         fetch('/api/email/class-created', {
           method: 'POST',
@@ -649,7 +649,7 @@ export default function CreateClassForm() {
       }
 
       // Show success message
-      setSubmitMessage({ type: 'success', text: 'Class submitted successfully! Waiting for admin approval.' });
+      setSubmitMessage({ type: 'success', text: 'Batch submitted successfully! Waiting for admin approval.' });
       
       // Reset form after 2 seconds
       setTimeout(() => {
@@ -664,7 +664,7 @@ export default function CreateClassForm() {
       }, 2000);
 
     } catch (error: any) {
-      console.error('Error creating class:', error);
+      console.error('Error creating batch:', error);
       setSubmitMessage({ 
         type: 'error', 
         text: error.message || 'Failed to create batch. Please try again.' 
@@ -706,7 +706,7 @@ export default function CreateClassForm() {
               id="title"
               name="title"
               className="creator-form-input"
-              placeholder="Enter class title"
+              placeholder="Enter batch title"
               required
             />
           </div>
@@ -771,7 +771,7 @@ export default function CreateClassForm() {
             name="description"
             className="creator-form-input creator-textarea"
             rows={5}
-            placeholder="Describe your class in detail..."
+            placeholder="Describe your batch in detail..."
             required
           />
         </div>
@@ -806,7 +806,7 @@ export default function CreateClassForm() {
         <h5 className="creator-form-heading">Media</h5>
         
         <div className="creator-form-group">
-          <label htmlFor="thumbnail" className="creator-field-label">Class Thumbnail / Banner</label>
+          <label htmlFor="thumbnail" className="creator-field-label">Batch Thumbnail / Banner</label>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
               <input
@@ -866,7 +866,7 @@ export default function CreateClassForm() {
             className="creator-form-input"
             placeholder="https://youtube.com/watch?v=... or direct video URL"
           />
-          <small className="creator-field-hint">Add a promotional video or intro video for your class</small>
+          <small className="creator-field-hint">Add a promotional video or intro video for your batch</small>
         </div>
       </div>
 
