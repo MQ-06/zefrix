@@ -667,7 +667,7 @@ export default function CreateClassForm() {
       console.error('Error creating class:', error);
       setSubmitMessage({ 
         type: 'error', 
-        text: error.message || 'Failed to create class. Please try again.' 
+        text: error.message || 'Failed to create batch. Please try again.' 
       });
     } finally {
       setIsSubmitting(false);

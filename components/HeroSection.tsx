@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 export default function HeroSection() {
   return (
     <section className="hero-section pt-32 pb-16 md:pt-40 md:pb-24 relative overflow-hidden">
-      {/* Background Gradient matching courses page */}
+      {/* Background Gradient matching batches page */}
       <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A2E] via-[#2D1B3D] to-[#E91E63]"></div>
       
       <div className="container relative z-10">
@@ -18,7 +18,7 @@ export default function HeroSection() {
             transition={{ duration: 0.6 }}
             className="hero-content"
           >
-            <motion.div 
+            {/* <motion.div 
               className="flex items-center gap-2 mb-8"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -35,7 +35,7 @@ export default function HeroSection() {
                 </span>
               </motion.div>
               <span className="text-primary text-xl">*</span>
-            </motion.div>
+            </motion.div> */}
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
               Join Your First Live Class on Zefrix
@@ -66,7 +66,7 @@ export default function HeroSection() {
             </h1>
 
             <p className="text-gray-300 text-base md:text-lg mb-10 leading-relaxed">
-              Join interactive live sessions with expert creators. Learn new skills, connect with mentors, and grow in a fun, casual learning environment. Discover classes in design, music, tech, wellness, and more—all in real-time.
+              Join interactive live sessions with expert creators. Learn new skills, connect with mentors, and grow in a fun, casual learning environment. Discover batches in design, music, tech, wellness, and more—all in real-time.
             </p>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
@@ -78,7 +78,7 @@ export default function HeroSection() {
                   href="/signup-login"
                   className="bg-gradient-to-r from-primary to-secondary px-10 py-5 rounded-lg text-white font-semibold text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
                 >
-                  Start Learning
+                  Explore Live Batches
                 </Link>
               </motion.div>
             </div>
@@ -134,7 +134,7 @@ export default function HeroSection() {
                         alt="File"
                         className="w-4 h-4"
                       />
-                      <span>123 Courses</span>
+                      <span>123 Batches</span>
                     </div>
                   </div>
                 </div>

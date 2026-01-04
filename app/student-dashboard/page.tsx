@@ -1060,7 +1060,7 @@ export default function StudentDashboard() {
           object-fit: cover;
         }
 
-        .course-teacher-wrap {
+        .course-creator-wrap {
           position: absolute;
           top: 1rem;
           left: 1rem;
@@ -2076,7 +2076,7 @@ export default function StudentDashboard() {
                                 (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
                               }}
                             />
-                            <div className="course-teacher-wrap">
+                            <div className="course-creator-wrap">
                               <div style={{
                                 width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'
@@ -2357,7 +2357,7 @@ export default function StudentDashboard() {
                             (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
                           }}
                         />
-                        <div className="course-teacher-wrap">
+                        <div className="course-creator-wrap">
                           <div style={{
                             width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold',
@@ -2503,7 +2503,7 @@ export default function StudentDashboard() {
             </div>
 
             {loadingClasses ? (
-              <div className="text-white text-center py-8">Loading classes...</div>
+              <div className="text-white text-center py-8">Loading batches...</div>
             ) : filteredClasses.length > 0 ? (
               <>
                 <div style={{ marginBottom: '1rem', color: 'rgba(255, 255, 255, 0.7)' }}>
@@ -2523,7 +2523,7 @@ export default function StudentDashboard() {
                               (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
                             }}
                           />
-                          <div className="course-teacher-wrap">
+                          <div className="course-creator-wrap">
                             <div style={{
                               width: '32px', height: '32px', borderRadius: '50%', background: '#D92A63',
                               display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white'

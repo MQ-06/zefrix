@@ -47,7 +47,7 @@ export default function Home() {
 
       <HeroSection />
       <CategorySection />
-      <VideoSection />
+      {/* <VideoSection /> */}
       <StatsSection />
       <CoursesSection />
       <TestimonialsSection />

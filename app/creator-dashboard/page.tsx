@@ -715,7 +715,7 @@ export default function CreatorDashboard() {
           object-fit: cover;
         }
 
-        .creator-course-teacher-wrap {
+        .creator-course-creator-wrap {
           position: absolute;
           top: 1rem;
           left: 1rem;
@@ -1829,7 +1829,7 @@ export default function CreatorDashboard() {
             height: 160px;
           }
 
-          .creator-course-teacher-wrap {
+          .creator-course-creator-wrap {
             top: 0.5rem;
             left: 0.5rem;
             padding: 0.375rem 0.75rem;
@@ -2023,7 +2023,7 @@ export default function CreatorDashboard() {
                 </div>
                 {loadingClasses ? (
                   <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
-                    Loading classes...
+                    Loading batches...
                   </div>
                 ) : approvedClasses.length > 0 ? (
                   <>
@@ -2129,7 +2129,7 @@ export default function CreatorDashboard() {
               </div>
             )}
 
-            {/* Create Class Section */}
+            {/* Create Batch Section */}
             {activeSection === 'create-class' && (
               <div id="create-class" className="creator-section">
                 <h2 className="creator-section-title">Create a New Class</h2>
@@ -2139,7 +2139,7 @@ export default function CreatorDashboard() {
               </div>
             )}
 
-            {/* Manage Classes Section */}
+            {/* Manage Batches Section */}
             {activeSection === 'manage-classes' && (
               <div id="manage-classes" className="creator-section">
                 {viewingEnrollmentsClassId ? (
@@ -2193,7 +2193,7 @@ export default function CreatorDashboard() {
               </div>
             )}
 
-            {/* Class Details Section */}
+            {/* Batch Details Section */}
             {activeSection === 'class-details' && viewingClassId && (
               <div id="class-details" className="creator-section">
                 <ClassDetails classId={viewingClassId} onBack={() => setViewingClassId(null)} />

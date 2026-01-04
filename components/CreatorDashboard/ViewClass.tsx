@@ -98,7 +98,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
             if (classSnap.exists()) {
                 setClassData({ classId: classSnap.id, ...classSnap.data() } as ClassData);
             } else {
-                showError('Class not found!');
+                showError('Batch not found!');
                 onBack();
             }
         } catch (error) {
@@ -258,7 +258,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
         return (
             <div className={styles.container}>
                 <div style={{ textAlign: 'center', padding: '3rem', color: '#fff' }}>
-                    Loading class details...
+                    Loading batch details...
                 </div>
             </div>
         );
@@ -268,7 +268,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
         return (
             <div className={styles.container}>
                 <div style={{ textAlign: 'center', padding: '3rem', color: '#fff' }}>
-                    Class not found.
+                    Batch not found.
                 </div>
             </div>
         );
@@ -279,7 +279,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
             {/* Header */}
             <div className={styles.header}>
                 <button onClick={onBack} className={styles.backButton}>
-                    ← Back to Classes
+                    ← Back to Batches
                 </button>
                 <div className={styles.headerContent}>
                     <div className={styles.titleSection}>
@@ -733,7 +733,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
             <div className={styles.actions}>
                 {onEdit && classData.status !== 'approved' && (
                     <button onClick={onEdit} className={styles.actionButton}>
-                        ✏️ Edit Class
+                        ✏️ Edit Batch
                     </button>
                 )}
                 <button onClick={onBack} className={styles.secondaryButton}>

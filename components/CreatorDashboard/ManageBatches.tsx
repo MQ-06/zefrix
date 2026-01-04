@@ -378,7 +378,7 @@ export default function ManageBatches({ classId, className, onBack }: ManageBatc
       <div className={styles.header}>
         {onBack && (
           <button onClick={onBack} className={styles.backButton}>
-            ← Back to Classes
+            ← Back to Batches
           </button>
         )}
         <h2 className={styles.title}>

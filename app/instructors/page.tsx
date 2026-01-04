@@ -277,7 +277,7 @@ function InstructorsContent() {
           <div className="cta-small glass-box bg-[#2D2D44]/50 backdrop-blur-md rounded-2xl p-8 md:p-12 relative overflow-hidden max-w-4xl mx-auto">
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
               <h5 className="no-margin text-white font-bold text-xl md:text-2xl">
-                Join over 1,000 satisfied learners today.
+                Join over 1,000 satisfied Members today.
               </h5>
               <Link
                 href="/signup-login"

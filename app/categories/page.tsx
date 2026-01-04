@@ -29,7 +29,7 @@ export default function CategoriesPage() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-gray-300 text-sm md:text-base max-w-2xl mx-auto"
             >
-              Explore interactive live sessions across diverse categories. Learn from skilled creators and connect with a community of passionate learners.
+              Explore interactive live sessions across diverse categories. Learn from skilled creators and connect with a community of passionate Members.
             </motion.p>
             
             {/* Decorative Elements */}

@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Ensure creatorId is always available - fetch from class if not provided
+        // Ensure creatorId is always available - fetch from batch if not provided
         let finalCreatorId = creatorId;
         if (!finalCreatorId && classId) {
             try {

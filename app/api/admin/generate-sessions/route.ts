@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     const classDoc = await db.collection('classes').doc(classId).get();
     if (!classDoc.exists) {
       return NextResponse.json(
-        { success: false, error: 'Class not found' },
+        { success: false, error: 'Batch not found' },
         { status: 404 }
       );
     }

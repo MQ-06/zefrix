@@ -179,7 +179,7 @@ export default function CheckoutPage() {
                 amount: orderData.amount,
                 currency: orderData.currency,
                 name: 'Zefrix',
-                description: `Payment for ${cart.length} ${cart.length === 1 ? 'course' : 'courses'}`,
+                description: `Payment for ${cart.length} ${cart.length === 1 ? 'batch' : 'batches'}`,
                 order_id: orderData.orderId,
                 prefill: {
                     name: currentUser.displayName || currentUser.email?.split('@')[0] || '',

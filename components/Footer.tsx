@@ -100,7 +100,7 @@ export default function Footer() {
               ))}
             </div>
             <p className="text-gray-400 text-sm">
-              Zefrix @ 2025 All rights reserved.
+              Zefrix @ {new Date().getFullYear()} All rights reserved.
             </p>
           </div>
 

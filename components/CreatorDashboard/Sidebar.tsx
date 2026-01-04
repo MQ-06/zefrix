@@ -41,11 +41,11 @@ export default function CreatorSidebar({ activeSection, onSectionChange, onLogou
           </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'create-class')} className={`sidebar-nav-item ${activeSection === 'create-class' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
-            <div>Create Class</div>
+            <div>Create Batch</div>
           </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'manage-classes')} className={`sidebar-nav-item ${activeSection === 'manage-classes' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
-            <div>Manage Classes</div>
+            <div>Manage Batches</div>
           </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'enrollments')} className={`sidebar-nav-item ${activeSection === 'enrollments' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />

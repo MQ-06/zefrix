@@ -194,7 +194,7 @@ export default function ProductPage({ params }: PageProps) {
             setCourse({
               id: docSnap.id,
               slug: docSnap.id,
-              title: data.title || 'Untitled Class',
+              title: data.title || 'Untitled Batch',
               subtitle: data.subtitle || '',
               price: data.price || 0,
               image: (data.videoLink && data.videoLink.trim() !== '') ? data.videoLink : DEFAULT_COURSE_IMAGE,
@@ -226,11 +226,11 @@ export default function ProductPage({ params }: PageProps) {
             setCourse(null);
           }
         } else {
-          // Class not found
+          // Batch not found
           setCourse(null);
         }
       } catch (err) {
-        console.error('Error fetching class:', err);
+        console.error('Error fetching batch:', err);
         setCourse(null);
       } finally {
         setLoading(false);
@@ -287,7 +287,7 @@ export default function ProductPage({ params }: PageProps) {
     }
   }, [cart, course]);
 
-  // Check if user is enrolled in this class
+  // Check if user is enrolled in this batch
   useEffect(() => {
     const checkEnrollment = async () => {
       if (!user || !course || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
@@ -313,7 +313,7 @@ export default function ProductPage({ params }: PageProps) {
     checkEnrollment();
   }, [user, course]);
 
-  // Fetch related courses from Firestore
+  // Fetch related batches from Firestore
   useEffect(() => {
     const fetchRelatedCourses = async () => {
       if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
@@ -334,7 +334,7 @@ export default function ProductPage({ params }: PageProps) {
             classes.push({
               id: doc.id,
               slug: doc.id,
-              title: data.title || 'Untitled Class',
+              title: data.title || 'Untitled Batch',
               price: data.price || 0,
               image: data.videoLink || DEFAULT_COURSE_IMAGE,
             instructor: data.creatorName || 'Instructor',
@@ -347,7 +347,7 @@ export default function ProductPage({ params }: PageProps) {
           }
         });
 
-        // Fetch enrollment counts for related courses
+        // Fetch enrollment counts for related batches
         if (classes.length > 0 && window.collection && window.query && window.where && window.getDocs) {
           try {
             const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
@@ -365,7 +365,7 @@ export default function ProductPage({ params }: PageProps) {
                   enrollmentCount: enrollmentsSnapshot.size
                 };
               } catch (error) {
-                console.error(`Error fetching enrollment count for related class ${classItem.id}:`, error);
+                console.error(`Error fetching enrollment count for related batch ${classItem.id}:`, error);
                 return {
                   classId: classItem.id,
                   enrollmentCount: 0
@@ -384,7 +384,7 @@ export default function ProductPage({ params }: PageProps) {
               classItem.students = enrollmentMap.get(classItem.id) || 0;
             });
           } catch (error) {
-            console.error('Error fetching enrollment counts for related courses:', error);
+            console.error('Error fetching enrollment counts for related batches:', error);
             // Continue without enrollment counts if fetch fails
           }
         }
@@ -392,7 +392,7 @@ export default function ProductPage({ params }: PageProps) {
         // Take only first 3
         setRelatedCourses(classes.slice(0, 3));
       } catch (error) {
-        console.error('Error fetching related courses:', error);
+        console.error('Error fetching related batches:', error);
       } finally {
         setLoadingRelated(false);
       }
@@ -435,7 +435,7 @@ export default function ProductPage({ params }: PageProps) {
     }
   }, [course]);
 
-  // Fetch reviews/ratings for this class
+  // Fetch reviews/ratings for this batch
   useEffect(() => {
     const fetchReviews = async () => {
       if (!course || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !window.orderBy) {
@@ -573,7 +573,7 @@ export default function ProductPage({ params }: PageProps) {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#1A1A2E] to-[#0F3460] flex items-center justify-center">
-        <div className="text-white text-xl">Loading class...</div>
+        <div className="text-white text-xl">Loading batch...</div>
       </div>
     );
   }
@@ -597,7 +597,7 @@ export default function ProductPage({ params }: PageProps) {
       return;
     }
 
-    // Check max seats if class has maxSeats set
+    // Check max seats if batch has maxSeats set
     if (course.maxSeats && window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
       try {
         const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
@@ -606,7 +606,7 @@ export default function ProductPage({ params }: PageProps) {
         const currentEnrollments = enrollmentsSnapshot.size;
         
         if (currentEnrollments >= course.maxSeats) {
-          showError(`Sorry! This class is full. Maximum ${course.maxSeats} seats are already enrolled.`);
+          showError(`Sorry! This batch is full. Maximum ${course.maxSeats} seats are already enrolled.`);
           return;
         }
       } catch (error) {
@@ -679,7 +679,7 @@ export default function ProductPage({ params }: PageProps) {
               href="/courses" 
               className="text-white font-semibold hover:text-[#FF654B] transition-colors inline-flex items-center gap-2"
             >
-              ← Back to Courses
+              ← Back to Batches
             </Link>
           </div>
         </div>
@@ -728,7 +728,7 @@ export default function ProductPage({ params }: PageProps) {
                     : 'bg-white/5 text-gray-300 hover:bg-white/10'
                     }`}
                 >
-                  Instructor
+                  Creator
                 </button>
               </div>
 
@@ -738,7 +738,7 @@ export default function ProductPage({ params }: PageProps) {
                   <div className="space-y-6">
                     {course.description && (
                       <div>
-                        <h2 className="text-2xl font-bold text-white mb-4">Course Description</h2>
+                        <h2 className="text-2xl font-bold text-white mb-4">Batch Description</h2>
                         <div className="text-gray-300 whitespace-pre-wrap">
                           {course.description}
                         </div>
@@ -843,7 +843,7 @@ export default function ProductPage({ params }: PageProps) {
                       ) : (
                         <div className="bg-white/5 rounded-lg p-6 border border-white/10">
                           <p className="text-gray-400 italic">
-                            No reviews yet. Be the first to leave a review after completing this class!
+                            No reviews yet. Be the first to leave a review after completing this batch!
                           </p>
                         </div>
                       )}
@@ -1007,7 +1007,7 @@ export default function ProductPage({ params }: PageProps) {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-400">
                         <Clock className="w-5 h-5" />
-                        <span>Class Time</span>
+                        <span>Batch Time</span>
                       </div>
                       <span className="text-white font-semibold">
                         {(() => {
@@ -1158,7 +1158,7 @@ export default function ProductPage({ params }: PageProps) {
                           Login / Sign Up to Continue
                         </Link>
                         <p className="text-center text-gray-400 text-sm">
-                          Create an account to enroll in this class
+                          Create an account to enroll in this batch
                         </p>
                       </div>
                     ) : isInCart ? (
@@ -1180,7 +1180,7 @@ export default function ProductPage({ params }: PageProps) {
                 )}
                 {isEnrolled && (
                   <div className="w-full px-8 py-4 rounded-lg text-white font-semibold bg-green-600/20 border border-green-500/50 text-center">
-                    ✓ You're enrolled in this class
+                    ✓ You're enrolled in this batch
                   </div>
                 )}
               </div>
@@ -1193,12 +1193,12 @@ export default function ProductPage({ params }: PageProps) {
       <section className="py-16 bg-gradient-to-b from-[#0F3460] to-[#1A1A2E]">
         <div className="container max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold text-white">Our related courses</h2>
+            <h2 className="text-3xl font-bold text-white">Our related batches</h2>
             <Link
               href="/courses"
               className="bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-6 py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity"
             >
-              View all courses
+              View all batches
             </Link>
           </div>
 

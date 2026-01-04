@@ -72,7 +72,7 @@ export default function ThankYouContent() {
                                     </li>
                                     <li className="flex items-start">
                                         <span className="text-green-400 mr-2">✓</span>
-                                        <span>You'll receive class details and meeting links shortly</span>
+                                        <span>You'll receive batch details and meeting links shortly</span>
                                     </li>
                                     <li className="flex items-start">
                                         <span className="text-green-400 mr-2">✓</span>

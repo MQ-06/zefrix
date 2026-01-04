@@ -139,7 +139,7 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
       const classRef = window.doc(window.firebaseDb, 'classes', classId);
       const classDoc = await window.getDoc(classRef);
       if (!classDoc.exists()) {
-        showError('Class not found');
+        showError('Batch not found');
         return;
       }
       const classData = classDoc.data();

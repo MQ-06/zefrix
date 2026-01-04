@@ -111,7 +111,7 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
       if (classSnap.exists()) {
         setClassData({ classId: classSnap.id, ...classSnap.data() } as ClassData);
       } else {
-        showError('Class not found!');
+        showError('Batch not found!');
         onBack();
       }
     } catch (error) {
@@ -357,7 +357,7 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
     return (
       <div className={styles.container}>
         <div style={{ textAlign: 'center', padding: '3rem', color: '#fff' }}>
-          Loading class details...
+          Loading batch details...
         </div>
       </div>
     );
@@ -367,7 +367,7 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
     return (
       <div className={styles.container}>
         <div style={{ textAlign: 'center', padding: '3rem', color: '#fff' }}>
-          Class not found.
+          Batch not found.
         </div>
       </div>
     );
@@ -796,7 +796,7 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
       <div className={styles.actions}>
         {onEdit && classData.status !== 'approved' && (
           <button onClick={onEdit} className={styles.actionButton}>
-            ✏️ Edit Class
+            ✏️ Edit Batch
           </button>
         )}
         <button onClick={onBack} className={styles.secondaryButton}>

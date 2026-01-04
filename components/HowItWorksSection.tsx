@@ -6,9 +6,9 @@ import { Search, DollarSign, Monitor } from 'lucide-react';
 const steps = [
   {
     icon: Search,
-    title: 'Browse and discover classes',
+    title: 'Browse and discover batches',
     description:
-      'Explore live classes and batches across categories like Design, Music, Tech, Wellness, and Business. Filter by creator, category, or skill level to find the perfect learning experience for you.',
+      'Explore live batches and sessions across categories like Design, Music, Tech, Wellness, and Business. Filter by creator, category, or skill level to find the perfect learning experience for you.',
     bgColor: 'bg-purple-200',
     borderColor: 'border-yellow-400',
   },
@@ -16,7 +16,7 @@ const steps = [
     icon: DollarSign,
     title: 'Purchase quickly and securely',
     description:
-      'Complete your enrollment with our secure Razorpay payment gateway. Choose from one-time classes or multi-session batches. Get instant confirmation with class details and Google Meet links.',
+      'Complete your enrollment with our secure Razorpay payment gateway. Choose from one-time batches or multi-session batches. Get instant confirmation with batch details and Google Meet links.',
     bgColor: 'bg-green-200',
     borderColor: 'border-pink-400',
   },
@@ -24,7 +24,7 @@ const steps = [
     icon: Monitor,
     title: 'Join live sessions and learn',
     description:
-      'Attend interactive live classes via Google Meet, participate in real-time discussions, ask questions, and connect with creators. Receive automated reminders and access recordings after sessions.',
+      'Attend interactive live sessions via Google Meet, participate in real-time discussions, ask questions, and connect with creators. Receive automated reminders and access recordings after sessions.',
     bgColor: 'bg-yellow-200',
     borderColor: 'border-pink-400',
   },

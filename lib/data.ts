@@ -199,7 +199,7 @@ export const testimonials: Testimonial[] = [
     name: 'Arjun Kumar',
     role: 'Fitness Coach',
     avatar: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b781_avatar-11.jpg',
-    content: 'The variety of categories on Zefrix is amazing! I\'ve taken classes in design, coding, and even wellness. Each creator brings their unique style, and the live format means I can ask questions immediately. Highly recommend for anyone looking to upskill.',
+    content: 'The variety of categories on Zefrix is amazing! I\'ve taken batches in design, coding, and even wellness. Each creator brings their unique style, and the live format means I can ask questions immediately. Highly recommend for anyone looking to upskill.',
     rating: 5,
   },
   {
@@ -207,7 +207,7 @@ export const testimonials: Testimonial[] = [
     name: 'Meera Desai',
     role: 'Content Creator',
     avatar: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b766_avatar-7.jpg',
-    content: 'What sets Zefrix apart is the casual, fun learning environment. It doesn\'t feel like a traditional course - it feels like learning from a friend who happens to be an expert. The batch format helped me stay consistent, and I actually completed all sessions!',
+    content: 'What sets Zefrix apart is the casual, fun learning environment. It doesn\'t feel like a traditional batch - it feels like learning from a friend who happens to be an expert. The batch format helped me stay consistent, and I actually completed all sessions!',
     rating: 5,
   },
   {
@@ -224,18 +224,18 @@ export const faqs = [
   {
     id: '1',
     question: 'What is Zefrix and how does it work?',
-    answer: 'Zefrix is a live skill-sharing platform where creators host interactive sessions and students can join instantly. Unlike traditional edtech platforms, Zefrix focuses on casual, fun, and creator led learning experiences. Students can browse classes by category, pay securely through Razorpay, and join live sessions via Google Meet. Creators can host both one-time classes and multi-session batches, with automated confirmations and reminders sent to all participants.',
+    answer: 'Zefrix is a live skill-sharing platform where creators host interactive sessions and students can join instantly. Unlike traditional edtech platforms, Zefrix focuses on casual, fun, and creator led learning experiences. Students can browse batches by category, pay securely through Razorpay, and join live sessions via Google Meet. Creators can host both one-time batches and multi-session batches, with automated confirmations and reminders sent to all participants.',
   },
   {
     id: '2',
-    question: 'How do I join a class or batch on Zefrix?',
-    answer: 'To join a class or batch, first create an account or log in. Browse available classes by category or creator, view class details including schedule, price, and instructor information. Once you find a class you like, click to enroll and complete payment through our secure Razorpay integration. After payment, you\'ll receive a confirmation email with the Google Meet link and class schedule. You can also add sessions to your Google Calendar for automatic reminders.',
+    question: 'How do I join a batch or session on Zefrix?',
+    answer: 'To join a batch or session, first create an account or log in. Browse available batches by category or creator, view batch details including schedule, price, and instructor information. Once you find a batch you like, click to enroll and complete payment through our secure Razorpay integration. After payment, you\'ll receive a confirmation email with the Google Meet link and batch schedule. You can also add sessions to your Google Calendar for automatic reminders.',
   },
   
   {
     id: '5',
     question: 'How do I become a creator on Zefrix?',
-    answer: 'To become a creator, click on "Become a Creator" from the homepage and complete the registration process. You can create your profile, add your bio, expertise areas, and social handles. You can then create classes or batches by selecting a category, adding a subcategory, setting the schedule, price, and maximum learners. All classes require admin approval before going live to ensure quality standards.',
+    answer: 'To become a creator, click on "Become a Creator" from the homepage and complete the registration process. You can create your profile, add your bio, expertise areas, and social handles. You can then create batches or sessions by selecting a category, adding a subcategory, setting the schedule, price, and maximum Members. All batches require admin approval before going live to ensure quality standards.',
   },
 
 ];

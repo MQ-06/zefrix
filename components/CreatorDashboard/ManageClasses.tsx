@@ -121,7 +121,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
     } else {
       const classItem = classes.find(c => c.classId === classId);
       if (classItem) {
-        showInfo(`Class Details: Title: ${classItem.title}, Subtitle: ${classItem.subtitle || 'N/A'}, Category: ${classItem.category}, Sub-category: ${classItem.subCategory}, Price: ₹${classItem.price}, Status: ${classItem.status}. Full details view coming soon!`);
+        showInfo(`Batch Details: Title: ${classItem.title}, Subtitle: ${classItem.subtitle || 'N/A'}, Category: ${classItem.category}, Sub-category: ${classItem.subCategory}, Price: ₹${classItem.price}, Status: ${classItem.status}. Full details view coming soon!`);
       }
     }
   };
@@ -155,7 +155,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
     // Find the class item
     const classItem = classes.find(c => c.classId === classId);
     if (!classItem) {
-      showError('Class not found.');
+      showError('Batch not found.');
       return;
     }
 
@@ -267,7 +267,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h2 className={styles.title}>Manage Classes</h2>
+        <h2 className={styles.title}>Manage Batches</h2>
         <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.875rem', marginTop: '0.5rem' }}>
           Total Classes: {classes.length} |
           Approved: {classes.filter(c => c.status === 'approved').length} |
@@ -278,7 +278,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
-          Loading classes...
+          Loading batches...
         </div>
       ) : classes.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
@@ -311,13 +311,13 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
                   disabled={classItem.status === 'approved'}
                   title={classItem.status === 'approved' ? 'Cannot edit approved classes' : 'Edit this class'}
                 >
-                  Edit Class
+                  Edit Batch
                 </button>
                 <button
                   className={styles.button}
                   onClick={() => handleViewClass(classItem.classId)}
                 >
-                  View Class
+                  View Batch
                 </button>
                 <button
                   className={styles.button}

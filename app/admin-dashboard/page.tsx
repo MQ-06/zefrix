@@ -264,7 +264,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Handle view class details
+  // Handle view batch details
   const handleViewClassDetails = async (classId: string) => {
     if (!window.firebaseDb || !window.collection || !window.doc || !window.getDoc || !window.query || !window.where || !window.getDocs) {
       showError('Firebase not initialized');
@@ -273,7 +273,7 @@ export default function AdminDashboard() {
 
     setLoadingClassDetails(true);
     try {
-      // Get class data
+      // Get batch data
       const classRef = window.doc(window.firebaseDb, 'classes', classId);
       const classSnap = await window.getDoc(classRef);
       if (classSnap.exists()) {
@@ -295,7 +295,7 @@ export default function AdminDashboard() {
       });
       setClassSessions(sessions);
 
-      // Get bank details from class creator
+      // Get bank details from batch creator
       if (classSnap.exists()) {
         const classData = classSnap.data();
         const creatorRef = window.doc(window.firebaseDb, 'users', classData.creatorId);
@@ -311,7 +311,7 @@ export default function AdminDashboard() {
         }
       }
     } catch (error: any) {
-      console.error('Error fetching class details:', error);
+      console.error('Error fetching batch details:', error);
       showError('Failed to load class details');
     } finally {
       setLoadingClassDetails(false);
@@ -341,14 +341,14 @@ export default function AdminDashboard() {
         adminBy: user.email || user.uid,
       });
 
-      // Get class data for email
+      // Get batch data for email
       const classSnap = await window.getDoc(classRef);
       if (classSnap.exists()) {
         const classData = classSnap.data();
         
         // Note: Sessions are NOT auto-generated on approval
         // Creators must manually create sessions with Google Meet links using SessionForm
-        // The schedule data in the class serves as a template for session creation
+        // The schedule data in the batch serves as a template for session creation
         
         // Send approval/rejection email to creator
         try {
@@ -361,10 +361,10 @@ export default function AdminDashboard() {
               creatorName: classData.creatorName || 'Creator',
               creatorEmail: classData.creatorEmail || '',
               creatorId: classData.creatorId, // Pass creatorId for notifications
-              className: classData.title || 'Class',
+              className: classData.title || 'Batch',
               classId: classId,
               status: action,
-              rejectionReason: action === 'rejected' ? 'Please review the class guidelines and resubmit.' : undefined,
+              rejectionReason: action === 'rejected' ? 'Please review the batch guidelines and resubmit.' : undefined,
             }),
           }).catch(() => {
             // Email failure shouldn't block the action
@@ -1101,7 +1101,7 @@ export default function AdminDashboard() {
 
         <div style={{ marginTop: '3rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <button onClick={() => handleNavClick('approve-classes')} className="button-dark">
-            Review Pending Classes ({stats.pendingClasses})
+            Review Pending Batches ({stats.pendingClasses})
           </button>
           <button onClick={() => handleNavClick('enrollments')} className="button-2">
             View All Enrollments
@@ -1463,7 +1463,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Class Details Modal */}
+      {/* Batch Details Modal */}
       {selectedClassDetails && (
         <div style={{
           position: 'fixed',

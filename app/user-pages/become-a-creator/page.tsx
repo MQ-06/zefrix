@@ -1209,7 +1209,7 @@ export default function BecomeACreatorPage() {
         <div className="creator-container">
           <div className="creator-header">
             <h1>Become a Creator</h1>
-            <p>Join Zefrix and start sharing your skills with eager learners</p>
+            <p>Join Zefrix and start sharing your skills with eager Members</p>
           </div>
 
           <div className="social-auth">

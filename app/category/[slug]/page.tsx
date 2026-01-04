@@ -173,7 +173,7 @@ export default function CategoryPage({ params }: PageProps) {
 
         {loading ? (
           <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">Loading classes...</p>
+            <p className="text-gray-400 text-lg">Loading batches...</p>
           </div>
         ) : approvedClasses.length > 0 ? (
           <>
@@ -216,7 +216,7 @@ export default function CategoryPage({ params }: PageProps) {
               href="/courses"
               className="inline-block bg-primary px-6 py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity duration-200"
             >
-              Browse All Courses
+              Browse All Batches
             </Link>
           </div>
         )}

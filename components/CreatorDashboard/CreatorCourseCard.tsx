@@ -86,7 +86,7 @@ export default function CreatorCourseCard({ classData, onViewClass }: CreatorCou
           className="creator-course-image"
           onError={handleImageError}
         />
-        <div className="creator-course-teacher-wrap">
+        <div className="creator-course-creator-wrap">
           <div style={{
             width: '32px',
             height: '32px',

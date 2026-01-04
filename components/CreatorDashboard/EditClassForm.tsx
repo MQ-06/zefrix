@@ -61,7 +61,7 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                     setThumbnailPreview(data.videoLink);
                 }
             } else {
-                throw new Error('Class not found');
+                throw new Error('Batch not found');
             }
         } catch (err: any) {
             setError(err.message || 'Failed to load class data');
@@ -151,7 +151,7 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
     if (loading) {
         return (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>
-                Loading class data...
+                Loading batch data...
             </div>
         );
     }
@@ -171,7 +171,7 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
     return (
         <div style={{ background: 'rgba(255,255,255,0.05)', padding: '2rem', borderRadius: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <h2 style={{ color: '#fff', fontSize: '1.5rem' }}>Edit Class</h2>
+                <h2 style={{ color: '#fff', fontSize: '1.5rem' }}>Edit Batch</h2>
                 <button
                     onClick={onCancel}
                     style={{

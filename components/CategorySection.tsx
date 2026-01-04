@@ -10,7 +10,7 @@ export default function CategorySection() {
       <div className="container">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            Explore course categories
+            Explore Live Batches
           </h2>
         </div>
 
@@ -34,10 +34,10 @@ export default function CategorySection() {
             >
               <Link
                 href={`/category/${category.slug}`}
-                className="block p-8 rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl"
-                style={{ backgroundColor: category.backgroundColor }}
+                className="block p-8 rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl h-full flex flex-col"
+                style={{ backgroundColor: category.backgroundColor, minHeight: '200px' }}
               >
-                <div className="flex flex-col items-center text-center">
+                <div className="flex flex-col items-center text-center justify-center flex-1">
                   <div className="w-20 h-20 rounded-full bg-white/30 flex items-center justify-center mb-6 shadow-inner">
                     <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-md">
                       <img

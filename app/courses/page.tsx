@@ -335,7 +335,7 @@ function CoursesContent() {
               transition={{ duration: 0.6 }}
               className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6"
             >
-              Browse our courses
+              Browse our batches
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -407,7 +407,7 @@ function CoursesContent() {
                 No approved classes available yet.
               </p>
               <p className="text-gray-500 text-sm mb-6">
-                Join over 1,000 satisfied learners today.
+                Join over 1,000 satisfied Members today.
               </p>
               <Link
                 href="/signup-login"

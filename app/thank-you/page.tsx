@@ -109,7 +109,7 @@ function ThankYouContent() {
                 </h3>
                 <ul className="space-y-2 text-gray-300 text-sm">
                   <li>✓ Confirmation email sent</li>
-                  <li>✓ Class details arriving shortly</li>
+                  <li>✓ Batch details arriving shortly</li>
                   <li>✓ Check your student dashboard</li>
                 </ul>
               </div>

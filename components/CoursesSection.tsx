@@ -182,7 +182,7 @@ export default function CoursesSection() {
       <div className="container">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 mb-8 sm:mb-16">
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
-            Browse our courses
+            Browse our batches
           </h2>
           <motion.div
             whileHover={{ scale: 1.05 }}
@@ -193,14 +193,14 @@ export default function CoursesSection() {
               href="/courses"
               className="inline-block w-full sm:w-auto text-center bg-gradient-to-r from-primary to-secondary px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-white font-semibold text-base sm:text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
             >
-              View all courses
+              View all batches
             </Link>
           </motion.div>
         </div>
 
         {loading ? (
           <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">Loading courses...</p>
+            <p className="text-gray-400 text-lg">Loading batches...</p>
           </div>
         ) : featuredCourses.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -214,7 +214,7 @@ export default function CoursesSection() {
               No classes available yet.
             </div>
             <p className="text-gray-500 text-sm mb-6">
-              Check back soon for new courses!
+              Check back soon for new batches!
             </p>
             <Link
               href="/signup-login"

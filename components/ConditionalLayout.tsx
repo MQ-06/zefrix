@@ -18,7 +18,7 @@ export default function ConditionalLayout({
   const noLayoutPaths = ['/signup-login', '/student-dashboard', '/admin-dashboard', '/creator-dashboard', '/user-pages/become-a-creator', '/product', '/checkout', '/thank-you'];
   const shouldHideLayout = noLayoutPaths.some(path => pathname.startsWith(path));
 
-  // Special handling for courses page:
+  // Special handling for batches page:
   // - If authenticated: hide header/footer
   // - If not authenticated: show header/footer
   const isCoursesPage = pathname === '/courses' || pathname.startsWith('/courses/');
