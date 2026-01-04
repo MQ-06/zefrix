@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   title: 'Zefrix — Live Skill Sharing',
   description:
     'Zefrix is a live skill-sharing platform connecting students and creators through interactive, real-time classes. Join, learn, and grow with expert-led sessions designed to make learning simple and engaging.',
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({
@@ -19,9 +24,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="icon" href="/favicon.ico" />
-      </head>
       <body>
         <LoadingScreen />
         <NotificationProvider>

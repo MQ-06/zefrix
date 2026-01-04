@@ -235,7 +235,7 @@ function InstructorsContent() {
           ) : (creators || []).length === 0 ? (
             <div className="text-center py-16">
               <div className="text-white text-xl mb-4">No creators found</div>
-              <p className="text-gray-400">Check back soon for amazing instructors!</p>
+              <p className="text-gray-400">Check back soon for amazing creators!</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">

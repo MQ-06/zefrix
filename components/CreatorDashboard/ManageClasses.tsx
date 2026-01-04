@@ -131,7 +131,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
     if (classItem.status === 'approved') {
       return {
         canDelete: false,
-        reason: 'Approved classes cannot be deleted. They are live on the platform and students may have enrolled or made purchases. Please contact admin if you need to remove an approved class.'
+        reason: 'Approved batches cannot be deleted. They are live on the platform and members may have enrolled or made purchases. Please contact admin if you need to remove an approved batch.'
       };
     }
 
@@ -139,7 +139,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
     if (classItem.status !== 'pending' && classItem.status !== 'rejected') {
       return {
         canDelete: false,
-        reason: `Classes with status "${classItem.status}" cannot be deleted.`
+        reason: `Batches with status "${classItem.status}" cannot be deleted.`
       };
     }
 
@@ -175,7 +175,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
 
       if (!enrollmentsSnapshot.empty) {
         setDeletingClassId(null);
-        showError(`Cannot delete "${className}". This class has ${enrollmentsSnapshot.size} student enrollment(s). Students have paid and enrolled in this class, so deletion would affect their access and purchases.`);
+        showError(`Cannot delete "${className}". This batch has ${enrollmentsSnapshot.size} member enrollment(s). Members have paid and enrolled in this batch, so deletion would affect their access and purchases.`);
         return;
       }
 
@@ -186,7 +186,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
 
       if (!sessionsSnapshot.empty) {
         setDeletingClassId(null);
-        showError(`Cannot delete "${className}". This class has ${sessionsSnapshot.size} session(s) scheduled or completed. Sessions have been created for this class, so deletion is not allowed to preserve data integrity.`);
+        showError(`Cannot delete "${className}". This batch has ${sessionsSnapshot.size} session(s) scheduled or completed. Sessions have been created for this batch, so deletion is not allowed to preserve data integrity.`);
         return;
       }
 
@@ -208,7 +208,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
       // Remove from local state
       setClasses(prev => prev.filter(c => c.classId !== classId));
 
-      showSuccess('Class deleted successfully!');
+      showSuccess('Batch deleted successfully!');
     } catch (error: any) {
       console.error('Error deleting class:', error);
       
@@ -218,10 +218,10 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
         if (!deletionCheck.canDelete) {
           showError(deletionCheck.reason);
         } else {
-          showError(`Permission denied. You cannot delete this class. ${deletionCheck.reason || 'Please ensure you have the necessary permissions.'}`);
+          showError(`Permission denied. You cannot delete this batch. ${deletionCheck.reason || 'Please ensure you have the necessary permissions.'}`);
         }
       } else {
-        showError('Failed to delete class. Please try again.');
+        showError('Failed to delete batch. Please try again.');
       }
     } finally {
       setDeletingClassId(null);
@@ -259,7 +259,7 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
     return {
       disabled: !deletionCheck.canDelete || deletingClassId === classItem.classId,
       title: deletionCheck.canDelete 
-        ? 'Delete this class (only if no enrollments or sessions exist)'
+        ? 'Delete this batch (only if no enrollments or sessions exist)'
         : deletionCheck.reason
     };
   };

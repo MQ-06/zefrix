@@ -43,14 +43,32 @@ interface Creator {
   uid: string;
   name: string;
   email: string;
+  phoneNumber?: string;
   photoURL?: string;
+  profileImage?: string;
   role: string;
   createdAt: any;
+  lastLogin?: any;
+  bio?: string;
+  expertise?: string;
+  skills?: string;
+  creatorCategory?: string;
+  subCategory?: string;
+  introVideo?: string;
+  socialHandles?: {
+    instagram?: string;
+    youtube?: string;
+    twitter?: string;
+    linkedin?: string;
+  };
+  isCreatorApproved?: boolean;
+  isProfileComplete?: boolean;
   totalClasses?: number;
   approvedClasses?: number;
   pendingClasses?: number;
   totalEnrollments?: number;
   totalEarnings?: number;
+  [key: string]: any; // Allow any additional fields
 }
 
 interface Stats {
@@ -62,7 +80,7 @@ interface Stats {
   pendingClasses: number;
 }
 
-type AdminPage = 'dashboard' | 'creators' | 'approve-classes' | 'contact-messages' | 'payouts' | 'enrollments' | 'notifications';
+type AdminPage = 'dashboard' | 'creators' | 'students' | 'approve-batches' | 'contact-messages' | 'payouts' | 'enrollments' | 'notifications';
 
 export default function AdminDashboard() {
   const { showSuccess, showError, showInfo } = useNotification();
@@ -90,6 +108,12 @@ export default function AdminDashboard() {
 
   // Search functionality
   const [creatorSearchQuery, setCreatorSearchQuery] = useState('');
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+
+  // Students
+  const [students, setStudents] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
 
   // Contact messages
   const [contactMessages, setContactMessages] = useState<any[]>([]);
@@ -219,7 +243,7 @@ export default function AdminDashboard() {
     };
   }, [activePage]);
 
-  // Set up real-time listener for pending classes
+  // Set up real-time listener for pending batches
   const setupPendingClassesListener = () => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
       return () => {};
@@ -245,20 +269,20 @@ export default function AdminDashboard() {
         setPendingClasses(classes);
         setLoadingClasses(false);
         
-        console.log('📥 Pending classes fetched (admin)', classes.map(c => ({
+        console.log('📥 Pending batches fetched (admin)', classes.map(c => ({
           classId: c.classId,
           status: c.status,
           videoLink: c.videoLink,
         })));
       }, (error: any) => {
-        console.error('Error in pending classes listener:', error);
-        showError('Failed to load pending classes. Please refresh the page.');
+        console.error('Error in pending batches listener:', error);
+        showError('Failed to load pending batches. Please refresh the page.');
         setLoadingClasses(false);
       });
 
       return unsubscribe;
     } catch (error) {
-      console.error('Error setting up pending classes listener:', error);
+      console.error('Error setting up pending batches listener:', error);
       setLoadingClasses(false);
       return () => {};
     }
@@ -312,7 +336,7 @@ export default function AdminDashboard() {
       }
     } catch (error: any) {
       console.error('Error fetching batch details:', error);
-      showError('Failed to load class details');
+      showError('Failed to load batch details');
     } finally {
       setLoadingClassDetails(false);
     }
@@ -380,15 +404,15 @@ export default function AdminDashboard() {
       // Refresh stats
       calculateStats();
     } catch (error: any) {
-      console.error('Error processing class action:', error);
-      showError(`Failed to ${action} class: ${error.message}`);
+      console.error('Error processing batch action:', error);
+      showError(`Failed to ${action} batch: ${error.message}`);
     } finally {
       setProcessingClass(null);
     }
   };
 
-  // Fetch approved classes
-  // Set up real-time listener for approved classes
+  // Fetch approved batches
+  // Set up real-time listener for approved batches
   const setupApprovedClassesListener = () => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
       return () => {};
@@ -414,19 +438,19 @@ export default function AdminDashboard() {
         setApprovedClasses(classes);
         setLoadingApproved(false);
         
-        console.log('✅ Approved classes fetched (admin)', classes.map(c => ({
+        console.log('✅ Approved batches fetched (admin)', classes.map(c => ({
           classId: c.classId,
           status: c.status,
           videoLink: c.videoLink,
         })));
       }, (error: any) => {
-        console.error('Error in approved classes listener:', error);
+        console.error('Error in approved batches listener:', error);
         setLoadingApproved(false);
       });
 
       return unsubscribe;
     } catch (error) {
-      console.error('Error setting up approved classes listener:', error);
+      console.error('Error setting up approved batches listener:', error);
       setLoadingApproved(false);
       return () => {};
     }
@@ -451,26 +475,44 @@ export default function AdminDashboard() {
         window.getDocs(window.query(enrollmentsRef))
       ]);
 
-      // Initialize creators array
+      // Initialize creators array with ALL profile data
       const creatorsData: Creator[] = [];
       creatorsSnapshot.forEach((doc: any) => {
         const data = doc.data();
         creatorsData.push({
           uid: doc.id,
-          name: data.name || data.email?.split('@')[0] || 'Creator',
+          name: data.name || data.displayName || data.email?.split('@')[0] || 'Creator',
           email: data.email || '',
-          photoURL: data.photoURL || '',
+          phoneNumber: data.phoneNumber || '',
+          photoURL: data.photoURL || data.profileImage || '',
+          profileImage: data.profileImage || data.photoURL || '',
           role: data.role,
           createdAt: data.createdAt,
+          lastLogin: data.lastLogin,
+          bio: data.bio || '',
+          expertise: data.expertise || data.skills || '',
+          skills: data.skills || data.expertise || '',
+          creatorCategory: data.creatorCategory || '',
+          subCategory: data.subCategory || '',
+          introVideo: data.introVideo || '',
+          socialHandles: data.socialHandles || {
+            instagram: '',
+            youtube: '',
+            twitter: '',
+            linkedin: ''
+          },
+          isCreatorApproved: data.isCreatorApproved || false,
+          isProfileComplete: data.isProfileComplete || false,
           totalClasses: 0,
           approvedClasses: 0,
           pendingClasses: 0,
           totalEnrollments: 0,
-          totalEarnings: 0
+          totalEarnings: 0,
+          ...data // Include any other fields
         });
       });
 
-      // Build creator stats and class-to-creator mapping in single pass
+      // Build creator stats and batch-to-creator mapping in single pass
       const creatorStats: { [key: string]: { total: number; approved: number; pending: number } } = {};
       const classToCreator: { [key: string]: string } = {};
 
@@ -532,6 +574,52 @@ export default function AdminDashboard() {
     }
   };
 
+  // Fetch all students with complete information
+  const fetchStudents = async () => {
+    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+      return;
+    }
+
+    setLoadingStudents(true);
+    try {
+      const usersRef = window.collection(window.firebaseDb, 'users');
+      const studentsSnapshot = await window.getDocs(
+        window.query(usersRef, window.where('role', '==', 'student'))
+      );
+
+      const studentsData: any[] = [];
+      studentsSnapshot.forEach((doc: any) => {
+        const data = doc.data();
+        studentsData.push({
+          uid: doc.id,
+          name: data.name || data.displayName || data.email?.split('@')[0] || 'Student',
+          email: data.email || '',
+          phoneNumber: data.phoneNumber || '',
+          photoURL: data.photoURL || data.profileImage || '',
+          profileImage: data.profileImage || data.photoURL || '',
+          role: data.role,
+          createdAt: data.createdAt,
+          lastLogin: data.lastLogin,
+          isProfileComplete: data.isProfileComplete || false,
+          ...data // Include any other fields
+        });
+      });
+
+      // Sort by creation date (newest first)
+      studentsData.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis?.() || 0;
+        const bTime = b.createdAt?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
+
+      setStudents(studentsData);
+    } catch (error) {
+      console.error('Error fetching students:', error);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
   // Calculate real statistics (optimized with parallel queries)
   const calculateStats = async () => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
@@ -574,7 +662,7 @@ export default function AdminDashboard() {
         const classData = doc.data();
         // Calculate revenue based on actual enrollments, not maxSeats
         if (classData.price) {
-          // This is just an estimate - for accurate revenue, count enrollments per class
+          // This is just an estimate - for accurate revenue, count enrollments per batch
           totalRevenue += classData.price;
         }
       });
@@ -633,9 +721,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // Fetch enrollments (optimized - removed unnecessary retry delays)
+  // Fetch enrollments with complete student information
   const fetchEnrollments = async () => {
-    if (!window.firebaseDb || !window.collection || !window.getDocs) {
+    if (!window.firebaseDb || !window.collection || !window.getDocs || !window.doc || !window.getDoc) {
       return;
     }
 
@@ -645,9 +733,42 @@ export default function AdminDashboard() {
       const querySnapshot = await window.getDocs(enrollmentsRef);
 
       const enrollmentsData: any[] = [];
-      querySnapshot.forEach((doc: any) => {
-        enrollmentsData.push({ id: doc.id, ...doc.data() });
+      
+      // Fetch all enrollments and enrich with student data
+      const enrollmentPromises = Array.from(querySnapshot.docs).map(async (doc: any) => {
+        const enrollmentData = doc.data();
+        const enrichedEnrollment = { id: doc.id, ...enrollmentData };
+        
+        // Fetch complete student information
+        if (enrollmentData.studentId) {
+          try {
+            const studentRef = window.doc(window.firebaseDb, 'users', enrollmentData.studentId);
+            const studentSnap = await window.getDoc(studentRef);
+            if (studentSnap.exists()) {
+              const studentData = studentSnap.data();
+              enrichedEnrollment.studentDetails = {
+                uid: studentSnap.id,
+                name: studentData.name || enrollmentData.studentName || '',
+                email: studentData.email || enrollmentData.studentEmail || '',
+                phoneNumber: studentData.phoneNumber || '',
+                photoURL: studentData.photoURL || studentData.profileImage || '',
+                role: studentData.role || 'student',
+                createdAt: studentData.createdAt,
+                lastLogin: studentData.lastLogin,
+                isProfileComplete: studentData.isProfileComplete || false,
+                ...studentData // Include any other fields
+              };
+            }
+          } catch (error) {
+            console.error('Error fetching student details:', error);
+          }
+        }
+        
+        return enrichedEnrollment;
       });
+      
+      const enrichedEnrollments = await Promise.all(enrollmentPromises);
+      enrollmentsData.push(...enrichedEnrollments);
 
       enrollmentsData.sort((a, b) => {
         const aTime = a.enrolledAt?.toMillis?.() || a.enrolledAt?.getTime?.() || 0;
@@ -842,7 +963,7 @@ export default function AdminDashboard() {
         calculateStats();
       } else if (activePage === 'creators') {
         fetchRealCreators();
-      } else if (activePage === 'approve-classes') {
+      } else if (activePage === 'approve-batches') {
         // Clean up previous listeners if any
         if (pendingUnsubscribe) pendingUnsubscribe();
         if (approvedUnsubscribe) approvedUnsubscribe();
@@ -851,6 +972,8 @@ export default function AdminDashboard() {
         calculateStats();
       } else if (activePage === 'contact-messages') {
         fetchContactMessages();
+      } else if (activePage === 'students') {
+        fetchStudents();
       } else if (activePage === 'enrollments') {
         fetchEnrollments();
       } else if (activePage === 'payouts') {
@@ -965,7 +1088,7 @@ export default function AdminDashboard() {
 
               <div className="stat-card-with-chart">
                 <div className="stat-card-header">
-                  <h2>Active Classes</h2>
+                  <h2>Active Batches</h2>
                   <div className="stat-number">{stats.activeClasses}</div>
                 </div>
                 <div className="stat-chart-container">
@@ -976,12 +1099,12 @@ export default function AdminDashboard() {
                     ></div>
                   </div>
                 </div>
-                <div className="stat-footer">Approved classes</div>
+                <div className="stat-footer">Approved batches</div>
               </div>
 
               <div className="stat-card-with-chart">
                 <div className="stat-card-header">
-                  <h2>Total Students</h2>
+                  <h2>Total Members</h2>
                   <div className="stat-number">{stats.totalStudents}</div>
                 </div>
                 <div className="stat-chart-container">
@@ -992,7 +1115,7 @@ export default function AdminDashboard() {
                     ></div>
                   </div>
                 </div>
-                <div className="stat-footer">Registered students</div>
+                <div className="stat-footer">Registered Members</div>
               </div>
 
               <div className="stat-card-with-chart">
@@ -1008,7 +1131,7 @@ export default function AdminDashboard() {
                     ></div>
                   </div>
                 </div>
-                <div className="stat-footer">Classes awaiting review</div>
+                <div className="stat-footer">Batches awaiting review</div>
               </div>
 
               <div className="stat-card-with-chart revenue-card">
@@ -1058,11 +1181,11 @@ export default function AdminDashboard() {
                     </div>
                     <div className="legend-item">
                       <div className="legend-color" style={{ background: '#9C27B0' }}></div>
-                      <span>Classes ({stats.activeClasses})</span>
+                      <span>Batches ({stats.activeClasses})</span>
                     </div>
                     <div className="legend-item">
                       <div className="legend-color" style={{ background: '#FF9800' }}></div>
-                      <span>Students ({stats.totalStudents})</span>
+                      <span>Members ({stats.totalStudents})</span>
                     </div>
                   </div>
                 </div>
@@ -1100,7 +1223,7 @@ export default function AdminDashboard() {
         )}
 
         <div style={{ marginTop: '3rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <button onClick={() => handleNavClick('approve-classes')} className="button-dark">
+          <button onClick={() => handleNavClick('approve-batches')} className="button-dark">
             Review Pending Batches ({stats.pendingClasses})
           </button>
           <button onClick={() => handleNavClick('enrollments')} className="button-2">
@@ -1253,6 +1376,7 @@ export default function AdminDashboard() {
                         className="creator-view-btn"
                         onClick={() => {
                           setSelectedCreator(creator);
+                          setSelectedStudent(null);
                           setIsModalOpen(true);
                         }}
                       >
@@ -1270,24 +1394,184 @@ export default function AdminDashboard() {
     </div>
   );
 
-  // Render Approve Classes Page
+  // Render Members Page
+  const renderStudents = () => {
+    const filteredStudents = students.filter(student => {
+      const query = studentSearchQuery.toLowerCase().trim();
+      if (!query) return true;
+      return (
+        student.name.toLowerCase().includes(query) ||
+        student.email.toLowerCase().includes(query) ||
+        (student.phoneNumber && student.phoneNumber.toLowerCase().includes(query))
+      );
+    });
+
+    return (
+      <div>
+        <div className="dashboard-header">
+          <div className="welcome-section">
+            <h2>All Members</h2>
+            <p>View and manage all member accounts</p>
+          </div>
+        </div>
+
+        <div className="search-wrapper">
+          <div className="search-box">
+            <input
+              type="text"
+              className="search-query"
+              placeholder="Search by name, email, or phone..."
+              value={studentSearchQuery}
+              onChange={(e) => setStudentSearchQuery(e.target.value)}
+            />
+            {studentSearchQuery && (
+              <button
+                onClick={() => setStudentSearchQuery('')}
+                className="button-2"
+                style={{ padding: '0.75rem 1.5rem' }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {loadingStudents ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+            Loading members...
+          </div>
+        ) : students.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+            No members found. Members will appear here once they sign up.
+          </div>
+        ) : filteredStudents.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
+            <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>No members match your search</div>
+            <button
+              onClick={() => setStudentSearchQuery('')}
+              className="button-dark"
+              style={{ marginTop: '1rem' }}
+            >
+              Clear Search
+            </button>
+          </div>
+        ) : (
+          <div className="creator-table-wrapper">
+            <table className="creator-table">
+              <thead>
+                <tr>
+                  <th>Member</th>
+                  <th>Contact</th>
+                  <th>Profile Status</th>
+                  <th>Joined</th>
+                  <th>Last Login</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStudents.map((student) => {
+                  const joinDate = student.createdAt?.toDate ? student.createdAt.toDate() : (student.createdAt ? new Date(student.createdAt) : null);
+                  const formattedDate = joinDate ? joinDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
+                  const lastLoginDate = student.lastLogin?.toDate ? student.lastLogin.toDate() : (student.lastLogin ? new Date(student.lastLogin) : null);
+                  const formattedLastLogin = lastLoginDate ? lastLoginDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
+                  
+                  return (
+                    <tr key={student.uid} className="creator-table-row">
+                      <td>
+                        <div className="creator-info-cell">
+                          <div className="creator-avatar-small">
+                            {student.photoURL ? (
+                              <img src={student.photoURL} alt={student.name} />
+                            ) : (
+                              <div className="creator-initial-small">
+                                {student.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="creator-details">
+                            <div className="creator-name-row">{student.name}</div>
+                            <div className="creator-email-row">{student.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="creator-stat-cell">
+                          {student.phoneNumber ? (
+                            <div className="stat-item-row">
+                              <span className="stat-number" style={{ fontSize: '0.875rem' }}>
+                                <a href={`tel:${student.phoneNumber}`} style={{ color: '#D92A63', textDecoration: 'none' }}>
+                                  📞 {student.phoneNumber}
+                                </a>
+                              </span>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.875rem' }}>No phone</span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="creator-status-cell">
+                          <div className={`status-badge ${student.isProfileComplete ? 'approved' : 'pending'}`}>
+                            {student.isProfileComplete ? <CheckCircle size={14} /> : <Clock size={14} />}
+                            <span>{student.isProfileComplete ? 'Complete' : 'Incomplete'}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="creator-date-cell">
+                          <Calendar size={16} className="cell-icon" />
+                          <span>{formattedDate}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="creator-date-cell">
+                          <Calendar size={16} className="cell-icon" />
+                          <span>{formattedLastLogin}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <button 
+                          className="creator-view-btn"
+                          onClick={() => {
+                            setSelectedStudent(student);
+                            setSelectedCreator(null);
+                            setIsModalOpen(true);
+                          }}
+                        >
+                          <Eye size={16} />
+                          <span>View</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render Approve Batches Page
   const renderApproveClasses = () => (
     <div>
       <div className="dashboard-header">
         <div className="welcome-section">
-          <h2>Approve Classes</h2>
-          <p>Review and approve pending class submissions</p>
+          <h2>Approve Batches</h2>
+          <p>Review and approve pending batch submissions</p>
         </div>
       </div>
 
       <h2 className="section-title">Pending Approval ({pendingClasses.length})</h2>
       {loadingClasses ? (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
-          Loading pending classes...
+          Loading pending batches...
         </div>
       ) : pendingClasses.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
-          No pending classes to approve.
+          No pending batches to approve.
         </div>
       ) : (
         <div className="pending-grid">
@@ -1377,10 +1661,10 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <h2 className="section-title" style={{ marginTop: '3rem' }}>Approved Classes ({approvedClasses.length})</h2>
+      <h2 className="section-title" style={{ marginTop: '3rem' }}>Approved Batches ({approvedClasses.length})</h2>
       {loadingApproved ? (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
-          Loading approved classes...
+          Loading approved batches...
         </div>
       ) : approvedClasses.length > 0 ? (
         <div className="pending-grid">
@@ -1459,7 +1743,7 @@ export default function AdminDashboard() {
         </div>
       ) : (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
-          No approved classes yet.
+          No approved batches yet.
         </div>
       )}
 
@@ -1890,7 +2174,7 @@ export default function AdminDashboard() {
         </>
       ) : (
         <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
-          No payouts to process. Enrollments will appear here once students purchase classes.
+          No payouts to process. Enrollments will appear here once members purchase batches.
         </div>
       )}
     </div>
@@ -1905,7 +2189,7 @@ export default function AdminDashboard() {
         <div className="dashboard-header">
           <div className="welcome-section">
             <h2>All Enrollments</h2>
-            <p>Track student enrollments and payments</p>
+            <p>Track member enrollments and payments</p>
           </div>
           {enrollments.length > 0 && (
             <div className="enrollments-summary">
@@ -1938,11 +2222,11 @@ export default function AdminDashboard() {
                 <tr>
                   <th>
                     <User size={16} className="table-header-icon" />
-                    Student
+                    Member
                   </th>
                   <th>
                     <BookOpen size={16} className="table-header-icon" />
-                    Class
+                    Batch
                   </th>
                   <th>
                     <CreditCard size={16} className="table-header-icon" />
@@ -1973,11 +2257,20 @@ export default function AdminDashboard() {
                       <td>
                         <div className="enrollment-student-cell">
                           <div className="student-avatar-small">
-                            {(enrollment.studentName || 'N')[0].toUpperCase()}
+                            {enrollment.studentDetails?.photoURL ? (
+                              <img src={enrollment.studentDetails.photoURL} alt={enrollment.studentName || 'Member'} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                            ) : (
+                              (enrollment.studentName || enrollment.studentDetails?.name || 'N')[0].toUpperCase()
+                            )}
                           </div>
                           <div className="student-info">
-                            <div className="student-name">{enrollment.studentName || 'N/A'}</div>
-                            <div className="student-email">{enrollment.studentEmail || 'N/A'}</div>
+                            <div className="student-name">{enrollment.studentName || enrollment.studentDetails?.name || 'N/A'}</div>
+                            <div className="student-email">{enrollment.studentEmail || enrollment.studentDetails?.email || 'N/A'}</div>
+                            {enrollment.studentDetails?.phoneNumber && (
+                              <div className="student-phone" style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.25rem' }}>
+                                📞 {enrollment.studentDetails.phoneNumber}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -2015,7 +2308,7 @@ export default function AdminDashboard() {
           <div className="empty-state">
             <FileText size={48} className="empty-icon" />
             <h3>No enrollments found</h3>
-            <p>Enrollments will appear here once students purchase classes.</p>
+            <p>Enrollments will appear here once students purchase batches.</p>
           </div>
         )}
       </div>
@@ -2031,7 +2324,9 @@ export default function AdminDashboard() {
         return user?.uid ? <NotificationList userId={user.uid} userRole="admin" /> : <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading notifications...</div>;
       case 'creators':
         return renderCreators();
-      case 'approve-classes':
+      case 'students':
+        return renderStudents();
+      case 'approve-batches':
         return renderApproveClasses();
       case 'contact-messages':
         return renderContactMessages();
@@ -2044,11 +2339,14 @@ export default function AdminDashboard() {
     }
   };
 
-  // Render Creator Details Modal
+  // Render Creator/Student Details Modal
   const renderCreatorModal = () => {
-    if (!selectedCreator || !isModalOpen) return null;
+    const person = selectedCreator || selectedStudent;
+    if (!person || !isModalOpen) return null;
+    
+    const isCreator = !!selectedCreator;
 
-    const joinDate = selectedCreator.createdAt?.toDate ? selectedCreator.createdAt.toDate() : (selectedCreator.createdAt ? new Date(selectedCreator.createdAt) : null);
+    const joinDate = person.createdAt?.toDate ? person.createdAt.toDate() : (person.createdAt ? new Date(person.createdAt) : null);
     const formattedDate = joinDate ? joinDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A';
 
     return (
@@ -2057,20 +2355,24 @@ export default function AdminDashboard() {
           <div className="modal-header">
             <div className="modal-title-section">
               <div className="modal-avatar-large">
-                {selectedCreator.photoURL ? (
-                  <img src={selectedCreator.photoURL} alt={selectedCreator.name} />
+                {person.photoURL ? (
+                  <img src={person.photoURL} alt={person.name} />
                 ) : (
                   <div className="modal-initial-large">
-                    {selectedCreator.name.charAt(0).toUpperCase()}
+                    {person.name.charAt(0).toUpperCase()}
                   </div>
                 )}
               </div>
               <div>
-                <h2 className="modal-title">{selectedCreator.name}</h2>
-                <div className="modal-subtitle">{selectedCreator.email}</div>
+                <h2 className="modal-title">{person.name}</h2>
+                <div className="modal-subtitle">{person.email}</div>
               </div>
             </div>
-            <button className="modal-close-btn" onClick={() => setIsModalOpen(false)}>
+            <button className="modal-close-btn" onClick={() => {
+              setIsModalOpen(false);
+              setSelectedCreator(null);
+              setSelectedStudent(null);
+            }}>
               <X size={20} />
             </button>
           </div>
@@ -2080,65 +2382,215 @@ export default function AdminDashboard() {
               <h3 className="modal-section-title">Account Information</h3>
               <div className="modal-info-grid">
                 <div className="modal-info-item">
-                  <span className="modal-info-label">Creator ID</span>
-                  <span className="modal-info-value">{selectedCreator.uid}</span>
+                  <span className="modal-info-label">{isCreator ? 'Creator' : 'Member'} ID</span>
+                  <span className="modal-info-value">{person.uid}</span>
+                </div>
+                <div className="modal-info-item">
+                  <span className="modal-info-label">Email</span>
+                  <span className="modal-info-value">
+                    <a href={`mailto:${person.email}`} style={{ color: '#D92A63', textDecoration: 'none' }}>
+                      {person.email}
+                    </a>
+                  </span>
+                </div>
+                <div className="modal-info-item">
+                  <span className="modal-info-label">Phone Number</span>
+                  <span className="modal-info-value">
+                    {person.phoneNumber ? (
+                      <a href={`tel:${person.phoneNumber}`} style={{ color: '#D92A63', textDecoration: 'none' }}>
+                        {person.phoneNumber}
+                      </a>
+                    ) : 'Not provided'}
+                  </span>
                 </div>
                 <div className="modal-info-item">
                   <span className="modal-info-label">Role</span>
-                  <span className="modal-info-value">{selectedCreator.role}</span>
+                  <span className="modal-info-value">{person.role}</span>
                 </div>
                 <div className="modal-info-item">
                   <span className="modal-info-label">Joined Date</span>
                   <span className="modal-info-value">{formattedDate}</span>
                 </div>
+                {person.lastLogin && (
+                  <div className="modal-info-item">
+                    <span className="modal-info-label">Last Login</span>
+                    <span className="modal-info-value">
+                      {person.lastLogin?.toDate ? 
+                        person.lastLogin.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 
+                        'N/A'}
+                    </span>
+                  </div>
+                )}
+                <div className="modal-info-item">
+                  <span className="modal-info-label">Profile Status</span>
+                  <span className="modal-info-value">
+                    <span style={{ 
+                      color: person.isProfileComplete ? '#4CAF50' : '#FF9800',
+                      fontWeight: '600'
+                    }}>
+                      {person.isProfileComplete ? '✓ Complete' : '⚠ Incomplete'}
+                    </span>
+                  </span>
+                </div>
+                {isCreator && (
+                  <div className="modal-info-item">
+                    <span className="modal-info-label">Approval Status</span>
+                    <span className="modal-info-value">
+                      <span style={{ 
+                        color: person.isCreatorApproved ? '#4CAF50' : '#FF9800',
+                        fontWeight: '600'
+                      }}>
+                        {person.isCreatorApproved ? '✓ Approved' : '⚠ Pending'}
+                      </span>
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="modal-section">
-              <h3 className="modal-section-title">Class Statistics</h3>
-              <div className="modal-stats-grid">
-                <div className="modal-stat-card">
-                  <BookOpen size={24} className="modal-stat-icon" />
-                  <div className="modal-stat-content">
-                    <div className="modal-stat-number">{selectedCreator.totalClasses || 0}</div>
-                    <div className="modal-stat-label">Total Classes</div>
-                  </div>
-                </div>
-                <div className="modal-stat-card approved">
-                  <CheckCircle size={24} className="modal-stat-icon" />
-                  <div className="modal-stat-content">
-                    <div className="modal-stat-number">{selectedCreator.approvedClasses || 0}</div>
-                    <div className="modal-stat-label">Approved</div>
-                  </div>
-                </div>
-                <div className="modal-stat-card pending">
-                  <Clock size={24} className="modal-stat-icon" />
-                  <div className="modal-stat-content">
-                    <div className="modal-stat-number">{selectedCreator.pendingClasses || 0}</div>
-                    <div className="modal-stat-label">Pending</div>
-                  </div>
+            {(person.bio || person.expertise || (isCreator && person.creatorCategory)) && (
+              <div className="modal-section">
+                <h3 className="modal-section-title">Profile Details</h3>
+                <div className="modal-info-grid">
+                  {isCreator && person.creatorCategory && (
+                    <div className="modal-info-item">
+                      <span className="modal-info-label">Category</span>
+                      <span className="modal-info-value">{person.creatorCategory}</span>
+                    </div>
+                  )}
+                  {isCreator && person.subCategory && (
+                    <div className="modal-info-item">
+                      <span className="modal-info-label">Sub Category</span>
+                      <span className="modal-info-value">{person.subCategory}</span>
+                    </div>
+                  )}
+                  {person.expertise && (
+                    <div className="modal-info-item full-width">
+                      <span className="modal-info-label">Expertise/Skills</span>
+                      <span className="modal-info-value" style={{ wordBreak: 'break-word' }}>{person.expertise}</span>
+                    </div>
+                  )}
+                  {person.bio && (
+                    <div className="modal-info-item full-width">
+                      <span className="modal-info-label">Bio</span>
+                      <span className="modal-info-value" style={{ wordBreak: 'break-word', lineHeight: '1.6' }}>{person.bio}</span>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="modal-section">
-              <h3 className="modal-section-title">Performance Metrics</h3>
-              <div className="modal-metrics-list">
-                <div className="modal-metric-item">
-                  <div className="modal-metric-label">
-                    <Users size={20} className="modal-metric-icon" />
-                    <span>Total Enrollments</span>
-                  </div>
-                  <div className="modal-metric-value">{selectedCreator.totalEnrollments || 0}</div>
-                </div>
-                <div className="modal-metric-item">
-                  <div className="modal-metric-label">
-                    <span>Total Earnings</span>
-                  </div>
-                  <div className="modal-metric-value earnings">₹{(selectedCreator.totalEarnings || 0).toFixed(2)}</div>
+            {isCreator && person.socialHandles && (person.socialHandles.instagram || person.socialHandles.youtube || person.socialHandles.twitter || person.socialHandles.linkedin) && (
+              <div className="modal-section">
+                <h3 className="modal-section-title">Social Media Links</h3>
+                <div className="modal-info-grid">
+                  {person.socialHandles.instagram && (
+                    <div className="modal-info-item">
+                      <span className="modal-info-label">Instagram</span>
+                      <span className="modal-info-value">
+                        <a href={person.socialHandles.instagram} target="_blank" rel="noopener noreferrer" style={{ color: '#D92A63', textDecoration: 'none' }}>
+                          {person.socialHandles.instagram}
+                        </a>
+                      </span>
+                    </div>
+                  )}
+                  {person.socialHandles.youtube && (
+                    <div className="modal-info-item">
+                      <span className="modal-info-label">YouTube</span>
+                      <span className="modal-info-value">
+                        <a href={person.socialHandles.youtube} target="_blank" rel="noopener noreferrer" style={{ color: '#D92A63', textDecoration: 'none' }}>
+                          {person.socialHandles.youtube}
+                        </a>
+                      </span>
+                    </div>
+                  )}
+                  {person.socialHandles.twitter && (
+                    <div className="modal-info-item">
+                      <span className="modal-info-label">Twitter</span>
+                      <span className="modal-info-value">
+                        <a href={person.socialHandles.twitter} target="_blank" rel="noopener noreferrer" style={{ color: '#D92A63', textDecoration: 'none' }}>
+                          {person.socialHandles.twitter}
+                        </a>
+                      </span>
+                    </div>
+                  )}
+                  {person.socialHandles.linkedin && (
+                    <div className="modal-info-item">
+                      <span className="modal-info-label">LinkedIn</span>
+                      <span className="modal-info-value">
+                        <a href={person.socialHandles.linkedin} target="_blank" rel="noopener noreferrer" style={{ color: '#D92A63', textDecoration: 'none' }}>
+                          {person.socialHandles.linkedin}
+                        </a>
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
+
+            {isCreator && person.introVideo && (
+              <div className="modal-section">
+                <h3 className="modal-section-title">Intro Video</h3>
+                <div className="modal-info-item full-width">
+                  <span className="modal-info-label">Video Link</span>
+                  <span className="modal-info-value">
+                    <a href={person.introVideo} target="_blank" rel="noopener noreferrer" style={{ color: '#D92A63', textDecoration: 'none', wordBreak: 'break-all' }}>
+                      {person.introVideo}
+                    </a>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {isCreator && (
+              <>
+                <div className="modal-section">
+                  <h3 className="modal-section-title">Class Statistics</h3>
+                  <div className="modal-stats-grid">
+                    <div className="modal-stat-card">
+                      <BookOpen size={24} className="modal-stat-icon" />
+                      <div className="modal-stat-content">
+                        <div className="modal-stat-number">{person.totalClasses || 0}</div>
+                        <div className="modal-stat-label">Total Classes</div>
+                      </div>
+                    </div>
+                    <div className="modal-stat-card approved">
+                      <CheckCircle size={24} className="modal-stat-icon" />
+                      <div className="modal-stat-content">
+                        <div className="modal-stat-number">{person.approvedClasses || 0}</div>
+                        <div className="modal-stat-label">Approved</div>
+                      </div>
+                    </div>
+                    <div className="modal-stat-card pending">
+                      <Clock size={24} className="modal-stat-icon" />
+                      <div className="modal-stat-content">
+                        <div className="modal-stat-number">{person.pendingClasses || 0}</div>
+                        <div className="modal-stat-label">Pending</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="modal-section">
+                  <h3 className="modal-section-title">Performance Metrics</h3>
+                  <div className="modal-metrics-list">
+                    <div className="modal-metric-item">
+                      <div className="modal-metric-label">
+                        <Users size={20} className="modal-metric-icon" />
+                        <span>Total Enrollments</span>
+                      </div>
+                      <div className="modal-metric-value">{person.totalEnrollments || 0}</div>
+                    </div>
+                    <div className="modal-metric-item">
+                      <div className="modal-metric-label">
+                        <span>Total Earnings</span>
+                      </div>
+                      <div className="modal-metric-value earnings">₹{(person.totalEarnings || 0).toFixed(2)}</div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -2680,15 +3132,25 @@ export default function AdminDashboard() {
         }
 
         .modal-info-grid {
-          display: flex;
-          flex-direction: column;
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
           gap: 1rem;
+        }
+
+        @media (max-width: 768px) {
+          .modal-info-grid {
+            grid-template-columns: 1fr;
+          }
         }
 
         .modal-info-item {
           display: flex;
           flex-direction: column;
           gap: 0.25rem;
+        }
+
+        .modal-info-item.full-width {
+          grid-column: 1 / -1;
         }
 
         .modal-info-label {
@@ -4824,9 +5286,13 @@ export default function AdminDashboard() {
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Creators</div>
             </a>
-            <a onClick={() => handleNavClick('approve-classes')} className={`sidebar-nav-item ${activePage === 'approve-classes' ? 'active' : ''}`}>
+            <a onClick={() => handleNavClick('students')} className={`sidebar-nav-item ${activePage === 'students' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
-              <div>Approve Classes</div>
+              <div>Members</div>
+            </a>
+            <a onClick={() => handleNavClick('approve-batches')} className={`sidebar-nav-item ${activePage === 'approve-batches' ? 'active' : ''}`}>
+              <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+              <div>Approve Batches</div>
             </a>
             <a onClick={() => handleNavClick('contact-messages')} className={`sidebar-nav-item ${activePage === 'contact-messages' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />

@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNotification } from '@/contexts/NotificationContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import SafePhoneInput from '@/components/SafePhoneInput';
 
 export default function SignupLoginPage() {
   const [isActive, setIsActive] = useState(false);
@@ -37,6 +38,32 @@ export default function SignupLoginPage() {
     }
   }, [user, loading, router]);
 
+  // Phone number validation function
+  const validatePhoneNumber = (phone: string): { valid: boolean; error?: string } => {
+    if (!phone || !phone.trim()) {
+      return { valid: false, error: 'Phone number is required' };
+    }
+
+    // Remove all non-digit characters for validation
+    const digitsOnly = phone.replace(/\D/g, '');
+    
+    // Check if it's a valid length (10-15 digits is standard for international numbers)
+    if (digitsOnly.length < 10) {
+      return { valid: false, error: 'Phone number must be at least 10 digits' };
+    }
+    
+    if (digitsOnly.length > 15) {
+      return { valid: false, error: 'Phone number is too long (maximum 15 digits)' };
+    }
+
+    // Check for common invalid patterns
+    if (/^0+$/.test(digitsOnly)) {
+      return { valid: false, error: 'Phone number cannot be all zeros' };
+    }
+
+    return { valid: true };
+  };
+
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
@@ -47,9 +74,10 @@ export default function SignupLoginPage() {
     const name = (form.querySelector('#signup-name') as HTMLInputElement)?.value.trim();
     const email = (form.querySelector('#signup-email') as HTMLInputElement)?.value.trim();
     const password = (form.querySelector('#signup-password') as HTMLInputElement)?.value;
+    const phoneNumber = (form.querySelector('#signup-phone') as HTMLInputElement)?.value.trim();
 
     // Validation
-    if (!name || !email || !password) {
+    if (!name || !email || !password || !phoneNumber) {
       showError('Please fill in all fields');
       setIsSubmitting(false);
       return;
@@ -68,8 +96,16 @@ export default function SignupLoginPage() {
       return;
     }
 
+    // Validate phone number
+    const phoneValidation = validatePhoneNumber(phoneNumber);
+    if (!phoneValidation.valid) {
+      showError(phoneValidation.error || 'Invalid phone number');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      await signUp(email, password, name);
+      await signUp(email, password, name, phoneNumber);
       showSuccess('Account created successfully! Redirecting...');
       // Delay redirect to show notification
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -658,6 +694,15 @@ export default function SignupLoginPage() {
               <span style={{ color: '#666' }}>or use your email for registration</span>
               <input type="text" id="signup-name" placeholder="Name" required autoComplete="name" />
               <input type="email" id="signup-email" placeholder="Email" required autoComplete="email" />
+              <input 
+                type="tel" 
+                id="signup-phone" 
+                placeholder="Phone Number (e.g., +91 9876543210)" 
+                required 
+                autoComplete="tel"
+                pattern="[+]?[0-9\s\-()]{10,15}"
+                title="Please enter a valid phone number (10-15 digits)"
+              />
               <div className="password-input-wrapper">
                 <input 
                   type={showSignupPassword ? "text" : "password"} 

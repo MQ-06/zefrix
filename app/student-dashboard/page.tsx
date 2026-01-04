@@ -224,7 +224,7 @@ export default function StudentDashboard() {
                 classesData[enrollment.classId] = classSnap.data();
               }
             } catch (error) {
-              console.error(`Error fetching class ${enrollment.classId}:`, error);
+              console.error(`Error fetching batch ${enrollment.classId}:`, error);
             }
           });
 
@@ -353,7 +353,7 @@ export default function StudentDashboard() {
     };
   }, []);
 
-  // Fetch upcoming sessions for enrolled classes
+  // Fetch upcoming sessions for enrolled batches
   useEffect(() => {
     const fetchUpcomingSessions = async () => {
       if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
@@ -403,7 +403,7 @@ export default function StudentDashboard() {
           const isRecent = (now.getTime() - sessionDate.getTime()) < 3600000; // Last hour
           
           if (isFuture || isRecent) {
-            // Check if student is enrolled in this class
+            // Check if student is enrolled in this batch
             const enrollmentIds = enrollments.map(e => e.classId);
             const isEnrolled = enrollmentIds.includes(session.classId);
             
@@ -418,7 +418,7 @@ export default function StudentDashboard() {
             if (isEnrolled) {
               sessions.push({
                 ...session,
-                className: session.className || 'Class',
+                className: session.className || 'Batch',
                 sessionDate: sessionDate,
                 sessionTime: session.sessionTime || session.startTime || '',
                 meetingLink: session.meetingLink || session.meetLink,
@@ -443,12 +443,12 @@ export default function StudentDashboard() {
           
           // Only include future sessions
           if (batchDate > now && batch.status === 'scheduled') {
-            // Check if student is enrolled in this class
+            // Check if student is enrolled in this batch
             const isEnrolled = enrollments.some(e => e.classId === batch.classId);
             if (isEnrolled) {
               sessions.push({
                 ...batch,
-                className: batch.className || 'Class',
+                className: batch.className || 'Batch',
                 sessionDate: batchDate,
                 sessionTime: batch.batchTime,
                 meetingLink: batch.meetingLink
@@ -464,7 +464,7 @@ export default function StudentDashboard() {
           return aTime - bTime;
         });
 
-        console.log(`✅ Found ${sessions.length} upcoming sessions for enrolled classes`);
+        console.log(`✅ Found ${sessions.length} upcoming sessions for enrolled batches`);
         setUpcomingSessions(sessions.slice(0, 10)); // Limit to 10 upcoming
       } catch (error) {
         console.error('❌ Error fetching upcoming sessions:', error);
@@ -476,7 +476,7 @@ export default function StudentDashboard() {
     }
   }, [user, enrollments]);
 
-  // Fetch enrollment counts for all classes
+  // Fetch enrollment counts for all batches
   useEffect(() => {
     const fetchEnrollmentCounts = async () => {
       if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || approvedClasses.length === 0) {
@@ -513,7 +513,7 @@ export default function StudentDashboard() {
     fetchEnrollmentCounts();
   }, [approvedClasses]);
 
-  // Fetch ratings for all classes
+  // Fetch ratings for all batches
   useEffect(() => {
     const fetchRatings = async () => {
       if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || approvedClasses.length === 0) {
@@ -556,7 +556,7 @@ export default function StudentDashboard() {
     fetchRatings();
   }, [approvedClasses]);
 
-  // Calculate recommended classes
+  // Calculate recommended batches
   useEffect(() => {
     const calculateRecommended = async () => {
       if (!user || approvedClasses.length === 0 || Object.keys(classEnrollmentCounts).length === 0) {
@@ -629,7 +629,7 @@ export default function StudentDashboard() {
     calculateRecommended();
   }, [user, approvedClasses, enrollments, enrollmentClasses, profileInterests, classEnrollmentCounts, classRatings]);
 
-  // Calculate trending classes
+  // Calculate trending batches
   useEffect(() => {
     const calculateTrending = async () => {
       if (approvedClasses.length === 0 || Object.keys(classEnrollmentCounts).length === 0) {
@@ -705,10 +705,10 @@ export default function StudentDashboard() {
         return;
       }
 
-      // 1. Validate: Check if student is enrolled in this class
+      // 1. Validate: Check if student is enrolled in this batch
       const enrollment = enrollments.find(e => e.classId === classId);
       if (!enrollment) {
-        showError('You must be enrolled in this class to submit a rating.');
+        showError('You must be enrolled in this batch to submit a rating.');
         return;
       }
 
@@ -782,7 +782,7 @@ export default function StudentDashboard() {
               classesData[enrollment.classId] = classSnap.data();
             }
           } catch (error) {
-            console.error(`Error fetching class ${enrollment.classId}:`, error);
+            console.error(`Error fetching batch ${enrollment.classId}:`, error);
           }
         });
         await Promise.all(classPromises);
@@ -1820,7 +1820,7 @@ export default function StudentDashboard() {
             </a>
             <a href="#" onClick={(e) => handleNavClick(e, 'browse-classes')} className={`sidebar-nav-item ${activeView === 'browse-classes' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
-              <div>Browse Classes</div>
+              <div>Browse Batches</div>
             </a>
             <a href="#" onClick={(e) => handleNavClick(e, 'profile')} className={`sidebar-nav-item ${activeView === 'profile' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
@@ -1875,7 +1875,7 @@ export default function StudentDashboard() {
                     {enrollments.length}
                   </div>
                   <div className="stat-label">
-                    Enrolled Classes
+                    Enrolled Batches
                   </div>
                 </div>
                 <div className="stat-card">
@@ -1899,7 +1899,7 @@ export default function StudentDashboard() {
                     {approvedClasses.length}
                   </div>
                   <div className="stat-label">
-                    Available Classes
+                    Available Batches
                   </div>
                 </div>
               </div>
@@ -1918,7 +1918,7 @@ export default function StudentDashboard() {
                   onClick={(e) => handleNavClick(e, 'browse-classes')}
                   className="quick-action-button"
                 >
-                  Browse All Classes
+                  Browse All Batches
                 </a>
                 <a
                   href="#"
@@ -2010,7 +2010,7 @@ export default function StudentDashboard() {
                     <div className="widget-list">
                       {enrollments.slice(0, 3).map((enrollment) => {
                         const classData = enrollmentClasses[enrollment.classId] || {};
-                        const className = enrollment.className || classData.title || 'Class';
+                        const className = enrollment.className || classData.title || 'Batch';
                         const enrollmentDate = enrollment.enrolledAt?.toDate ? enrollment.enrolledAt.toDate() : (enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null);
                         
                         return (
@@ -2033,7 +2033,7 @@ export default function StudentDashboard() {
                       })}
                     </div>
                   ) : (
-                    <p className="widget-empty-text">No enrollments yet. <a href="#" onClick={(e) => handleNavClick(e, 'browse-classes')} style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse classes</a> to get started!</p>
+                    <p className="widget-empty-text">No enrollments yet. <a href="#" onClick={(e) => handleNavClick(e, 'browse-classes')} style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse batches</a> to get started!</p>
                   )}
                   <a
                     href="#"
@@ -2045,7 +2045,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
-              {/* Recommended Classes Section */}
+              {/* Recommended Batches Section */}
               <div className="section" style={{ marginTop: '3rem' }}>
                 <div className="section-title-inline">
                   <h2 className="section-title" style={{ marginBottom: 0 }}>Recommended for You</h2>
@@ -2083,7 +2083,7 @@ export default function StudentDashboard() {
                               }}>
                                 {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
                               </div>
-                              <div>{course.creatorName || 'Instructor'}</div>
+                              <div>{course.creatorName || 'Creator'}</div>
                             </div>
                             <div style={{
                               position: 'absolute',
@@ -2131,7 +2131,7 @@ export default function StudentDashboard() {
                             </div>
                             {enrollmentCount > 0 && (
                               <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
-                                {enrollmentCount} {enrollmentCount === 1 ? 'student' : 'students'}
+                                {enrollmentCount} {enrollmentCount === 1 ? 'Member' : 'Members'}
                               </div>
                             )}
                           </div>
@@ -2149,7 +2149,7 @@ export default function StudentDashboard() {
                   }}>
                     {enrollments.length === 0 ? (
                       <>
-                        Complete your profile and enroll in classes to get personalized recommendations!
+                        Complete your profile and enroll in batches to get personalized recommendations!
                         <br />
                         <a
                           href="#"
@@ -2274,7 +2274,7 @@ export default function StudentDashboard() {
                                   background: isLive ? '#D92A63' : 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)'
                                 }}
                               >
-                                {isLive ? 'Join Live Class' : 'Join Session'}
+                                {isLive ? 'Join Live Batch' : 'Join Session'}
                               </a>
                             ) : (
                               <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem' }}>
@@ -2313,7 +2313,7 @@ export default function StudentDashboard() {
                     textAlign: 'center',
                     color: 'rgba(255, 255, 255, 0.7)'
                   }}>
-                    No upcoming sessions scheduled. Check your email for class schedules.
+                    No upcoming sessions scheduled. Check your email for batch schedules.
                   </div>
                 )}
               </div>
@@ -2351,7 +2351,7 @@ export default function StudentDashboard() {
                       <div className="course-image-wrap">
                         <img
                           src={classImage}
-                          alt={enrollment.className || classData.title || 'Class'}
+                          alt={enrollment.className || classData.title || 'Batch'}
                           className="course-image"
                           onError={(e) => {
                             (e.target as HTMLImageElement).src = "https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg";
@@ -2387,7 +2387,7 @@ export default function StudentDashboard() {
                         )}
                       </div>
                       <div className="course-info">
-                        <h3 className="course-title">{enrollment.className || classData.title || 'Class'}</h3>
+                        <h3 className="course-title">{enrollment.className || classData.title || 'Batch'}</h3>
                         <div className="course-meta" style={{ marginBottom: '0.75rem' }}>
                           <div className="course-meta-item">
                             <img src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b857_book.svg" alt="" className="course-meta-icon" />
@@ -2448,7 +2448,7 @@ export default function StudentDashboard() {
               </div>
             ) : (
               <div className="text-gray-400 py-8">
-                You haven't enrolled in any classes yet. <Link href="#browse-classes" style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse classes</Link> to get started!
+                You haven't enrolled in any batches yet. <Link href="#browse-classes" style={{ color: '#D92A63', textDecoration: 'underline' }}>Browse batches</Link> to get started!
               </div>
             )}
               </div>
@@ -2457,9 +2457,9 @@ export default function StudentDashboard() {
 
           {activeView === 'browse-classes' && (
             <>
-              {/* Browse Classes with Search/Filter */}
+              {/* Browse Batches with Search/Filter */}
               <div className="section" style={{ marginTop: '2rem' }}>
-            <h2 className="section-title">Browse Classes</h2>
+            <h2 className="section-title">Browse Batches</h2>
             
             {/* Search and Filter */}
             <div style={{
@@ -2507,7 +2507,7 @@ export default function StudentDashboard() {
             ) : filteredClasses.length > 0 ? (
               <>
                 <div style={{ marginBottom: '1rem', color: 'rgba(255, 255, 255, 0.7)' }}>
-                  Showing {filteredClasses.length} of {approvedClasses.length} classes
+                  Showing {filteredClasses.length} of {approvedClasses.length} batches
                 </div>
                 <div className="course-grid">
                   {filteredClasses.map((course) => {
@@ -2530,7 +2530,7 @@ export default function StudentDashboard() {
                             }}>
                               {course.creatorName ? course.creatorName.charAt(0).toUpperCase() : 'Z'}
                             </div>
-                            <div>{course.creatorName || 'Instructor'}</div>
+                            <div>{course.creatorName || 'Creator'}</div>
                           </div>
                           {isTrending && (
                             <div style={{
@@ -2579,7 +2579,7 @@ export default function StudentDashboard() {
               <div className="text-gray-400 py-8 text-center" style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '2rem' }}>
                 {searchQuery || selectedCategory ? (
                   <>
-                    No classes found matching your filters.
+                    No batches found matching your filters.
                     <br />
                     <button
                       onClick={() => {
@@ -2593,7 +2593,7 @@ export default function StudentDashboard() {
                     </button>
                   </>
                 ) : (
-                  'No classes available at the moment.'
+                  'No batches available at the moment.'
                 )}
               </div>
             )}
@@ -3012,7 +3012,7 @@ export default function StudentDashboard() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1rem' }}>
-                  Rate & Review: {selectedClassForRating.className || 'Class'}
+                  Rate & Review: {selectedClassForRating.className || 'Batch'}
                 </h2>
                 
                 <div style={{ marginBottom: '1.5rem' }}>
@@ -3064,7 +3064,7 @@ export default function StudentDashboard() {
                     value={feedback}
                     onChange={(e) => setFeedback(e.target.value)}
                     className="form-input"
-                    placeholder="Share your experience with this class..."
+                    placeholder="Share your experience with this batch..."
                     rows={4}
                     style={{ resize: 'vertical', fontFamily: 'inherit' }}
                   />

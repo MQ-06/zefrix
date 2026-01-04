@@ -38,7 +38,7 @@ export default function HeroSection() {
             </motion.div> */}
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              Join Your First Live Class on Zefrix
+              Join Your First Live Batch on Zefrix
               <motion.div 
                 className="inline-flex items-center gap-2 ml-3"
                 initial={{ opacity: 0, x: -20 }}
@@ -93,32 +93,15 @@ export default function HeroSection() {
           >
             <div className="relative">
               <img
-                src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b746_hero-image.jpg"
+                src="/hero_page.png"
                 alt="Hero Image"
                 className="w-full h-auto rounded-2xl"
               />
               
-              {/* Decorative Elements */}
-              <img
-                src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b74b_Decoration.svg"
-                alt="Decoration"
-                className="absolute top-0 left-0 w-32 h-32 -z-10"
-              />
-              
-              <img
-                src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b74c_hero-image-3.jpg"
-                alt="Hero Image 3"
-                className="absolute top-4 right-4 w-24 h-24 rounded-lg border-2 border-white shadow-lg"
-              />
-              
-              <img
-                src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b74d_hero-image-2.jpg"
-                alt="Hero Image 2"
-                className="absolute bottom-4 left-4 w-32 h-32 rounded-lg border-2 border-white shadow-lg"
-              />
+             
 
               {/* Floating Card */}
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white/95 backdrop-blur-sm rounded-xl p-4 shadow-2xl min-w-[200px]">
+              <div className="absolute top-1/2 left-4 transform -translate-y-1/2 bg-white/95 backdrop-blur-sm rounded-xl p-4 shadow-2xl min-w-[200px]">
                 <h3 className="text-dark font-semibold mb-3">UI Design Pattern</h3>
                 <div className="flex items-center gap-3">
                   <img
@@ -127,7 +110,7 @@ export default function HeroSection() {
                     className="w-10 h-10 rounded-full"
                   />
                   <div>
-                    <div className="font-medium text-dark">Dennis Barrett</div>
+                    <div className="font-medium text-dark">Annat Mishra</div>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <img
                         src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b74e_file.svg"

@@ -48,6 +48,7 @@ const STEPS = [
 const INITIAL_FORM_DATA = {
   fullname: '',
   email: '',
+  phoneNumber: '',
   category: '',
   subCategory: '',
   bio: '',
@@ -64,6 +65,7 @@ const INITIAL_FORM_DATA = {
 interface FormData {
   fullname: string;
   email: string;
+  phoneNumber: string;
   category: string;
   subCategory: string;
   bio: string;
@@ -203,8 +205,8 @@ export default function BecomeACreatorPage() {
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        // Only require fullname and email
-        return !!(formData.fullname && formData.email);
+        // Require fullname, email, and phone number
+        return !!(formData.fullname && formData.email && formData.phoneNumber);
       case 2:
         return !!formData.category;
       case 3:
@@ -227,7 +229,7 @@ export default function BecomeACreatorPage() {
     // Validate the current step
     switch (currentStep) {
       case 1:
-        return !!(formData.fullname && formData.email);
+        return !!(formData.fullname && formData.email && formData.phoneNumber);
       case 2:
         return !!formData.category;
       case 3:
@@ -239,7 +241,7 @@ export default function BecomeACreatorPage() {
       default:
         return false;
     }
-  }, [mounted, currentStep, formData.fullname, formData.email, formData.category, formData.bio, formData.expertise, formData.password]);
+  }, [mounted, currentStep, formData.fullname, formData.email, formData.phoneNumber, formData.category, formData.bio, formData.expertise, formData.password]);
 
   // Navigation handlers
   const nextStep = () => {
@@ -292,6 +294,31 @@ export default function BecomeACreatorPage() {
       return;
     }
 
+    // Validate phone number
+    const validatePhoneNumber = (phone: string): { valid: boolean; error?: string } => {
+      if (!phone || !phone.trim()) {
+        return { valid: false, error: 'Phone number is required' };
+      }
+      const digitsOnly = phone.replace(/\D/g, '');
+      if (digitsOnly.length < 10) {
+        return { valid: false, error: 'Phone number must be at least 10 digits' };
+      }
+      if (digitsOnly.length > 15) {
+        return { valid: false, error: 'Phone number is too long (maximum 15 digits)' };
+      }
+      if (/^0+$/.test(digitsOnly)) {
+        return { valid: false, error: 'Phone number cannot be all zeros' };
+      }
+      return { valid: true };
+    };
+
+    const phoneValidation = validatePhoneNumber(formData.phoneNumber);
+    if (!phoneValidation.valid) {
+      showError(phoneValidation.error || 'Invalid phone number');
+      setIsSubmitting(false);
+      return;
+    }
+
     const isGoogleUser = window.firebaseAuth?.currentUser?.providerData?.some(
       (provider: any) => provider.providerId === 'google.com'
     );
@@ -306,7 +333,7 @@ export default function BecomeACreatorPage() {
       let currentUser = window.firebaseAuth?.currentUser;
       
       if (!currentUser) {
-        await signUp(formData.email.trim(), formData.password, formData.fullname.trim());
+        await signUp(formData.email.trim(), formData.password, formData.fullname.trim(), formData.phoneNumber.trim());
         
         if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
           showError('User creation successful, but could not update profile. Please try logging in.');
@@ -323,6 +350,7 @@ export default function BecomeACreatorPage() {
         uid: currentUser.uid,
         email: formData.email.trim(),
         name: formData.fullname.trim(),
+        phoneNumber: formData.phoneNumber.trim(),
         creatorCategory: formData.category,
         subCategory: formData.subCategory?.trim() || '',
         role: 'creator',
@@ -460,6 +488,19 @@ export default function BecomeACreatorPage() {
                 onChange={handleInputChange}
                 placeholder="john@example.com"
                 required
+              />
+            </div>
+            <div className="form-group">
+              <label>Phone Number *</label>
+              <input
+                type="tel"
+                name="phoneNumber"
+                value={formData.phoneNumber}
+                onChange={handleInputChange}
+                placeholder="+91 9876543210"
+                required
+                pattern="[+]?[0-9\s\-()]{10,15}"
+                title="Please enter a valid phone number (10-15 digits)"
               />
             </div>
           </div>

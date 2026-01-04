@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { BookOpen, Users, Calendar } from 'lucide-react';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 
 declare global {
   interface Window {
@@ -570,50 +568,41 @@ export default function CreatorProfilePage() {
 
   if (loading) {
     return (
-      <>
-        <Header />
-        <div style={{ 
-          minHeight: '80vh', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-          color: '#fff'
-        }}>
-          <div>Loading creator profile...</div>
-        </div>
-        <Footer />
-      </>
+      <div style={{ 
+        minHeight: '80vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+        color: '#fff'
+      }}>
+        <div>Loading creator profile...</div>
+      </div>
     );
   }
 
   if (error || !creator) {
     return (
-      <>
-        <Header />
-        <div style={{ 
-          minHeight: '80vh', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-          color: '#fff',
-          flexDirection: 'column',
-          gap: '1rem'
-        }}>
-          <div>{error || 'Creator not found'}</div>
-          <Link href="/" style={{ color: '#D92A63', textDecoration: 'underline' }}>
-            Go to Home
-          </Link>
-        </div>
-        <Footer />
-      </>
+      <div style={{ 
+        minHeight: '80vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+        color: '#fff',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <div>{error || 'Creator not found'}</div>
+        <Link href="/" style={{ color: '#D92A63', textDecoration: 'underline' }}>
+          Go to Home
+        </Link>
+      </div>
     );
   }
 
   return (
     <>
-      <Header />
       <div style={{
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
@@ -867,7 +856,7 @@ export default function CreatorProfilePage() {
             </div>
           )}
 
-          {/* Upcoming Classes */}
+          {/* Upcoming Batches/Sessions */}
           <div style={{ 
             marginBottom: '3rem',
             marginTop: '2rem' // Add top margin to separate from previous section
@@ -894,7 +883,7 @@ export default function CreatorProfilePage() {
                   backgroundClip: 'text',
                   lineHeight: '1.2'
                 }}>
-                  {classes.length > 0 ? `My Classes & Courses (${classes.length})` : 'My Classes & Courses'}
+                  {classes.length > 0 ? `My Batches/Sessions (${classes.length})` : 'My Batches/Sessions'}
                 </h2>
                 <p style={{ 
                   color: 'rgba(255, 255, 255, 0.6)', 
@@ -904,8 +893,8 @@ export default function CreatorProfilePage() {
                   lineHeight: '1.5'
                 }}>
                   {classes.length > 0 
-                    ? 'Explore all available classes and batches' 
-                    : 'No classes available yet'}
+                    ? 'Explore all available batches and sessions' 
+                    : 'No batches available yet'}
                 </p>
               </div>
               {classes.length > 0 && (
@@ -920,7 +909,7 @@ export default function CreatorProfilePage() {
                   whiteSpace: 'nowrap',
                   alignSelf: 'center'
                 }}>
-                  {classes.length} {classes.length === 1 ? 'Class' : 'Classes'} Available
+                  {classes.length} {classes.length === 1 ? 'Batch' : 'Batches'} Available
                 </div>
               )}
             </div>
@@ -945,13 +934,13 @@ export default function CreatorProfilePage() {
                   fontWeight: '600',
                   marginBottom: '0.5rem'
                 }}>
-                  No Classes Available Yet
+                  No Batches Available Yet
                 </div>
                 <div style={{
                   color: 'rgba(255, 255, 255, 0.6)',
                   fontSize: '0.9375rem'
                 }}>
-                  This creator hasn't published any classes yet. Check back soon!
+                  This creator hasn't published any batches yet. Check back soon!
                 </div>
               </div>
             ) : (
@@ -1093,7 +1082,7 @@ export default function CreatorProfilePage() {
                   color: 'rgba(255, 255, 255, 0.6)', 
                   fontSize: '0.9375rem'
                 }}>
-                  What students are saying about {creator.name}'s classes
+                  What students are saying about {creator.name}'s batches
                 </p>
               </div>
               <div style={{
@@ -1347,7 +1336,7 @@ export default function CreatorProfilePage() {
                                 color: 'rgba(255, 255, 255, 0.5)',
                                 fontSize: '0.75rem'
                               }}>
-                                {similarCreator.classCount} {similarCreator.classCount === 1 ? 'class' : 'classes'}
+                                {similarCreator.classCount} {similarCreator.classCount === 1 ? 'batch' : 'batches'}
                               </span>
                             )}
                             {similarCreator.category && (
@@ -1381,7 +1370,6 @@ export default function CreatorProfilePage() {
           </div>
         </div>
       </div>
-      <Footer />
     </>
   );
 }

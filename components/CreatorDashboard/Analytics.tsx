@@ -138,7 +138,7 @@ export default function Analytics() {
         if (!enrollmentsByClassMap[classId]) {
           const classData = classes.find(c => c.classId === classId);
           enrollmentsByClassMap[classId] = {
-            className: enrollment.className || classData?.title || 'Unknown Class',
+            className: enrollment.className || classData?.title || 'Unknown Batch',
             count: 0,
             attended: 0,
             revenue: 0,
@@ -238,7 +238,7 @@ export default function Analytics() {
           border: '1px solid rgba(255, 255, 255, 0.1)'
         }}>
           <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-            Total Classes
+            Total Batches
           </div>
           <div style={{ color: '#fff', fontSize: '2rem', fontWeight: '700' }}>
             {analytics.totalClasses}
@@ -252,7 +252,7 @@ export default function Analytics() {
           border: '1px solid rgba(255, 255, 255, 0.1)'
         }}>
           <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-            Approved Classes
+            Approved Batches
           </div>
           <div style={{ color: '#4CAF50', fontSize: '2rem', fontWeight: '700' }}>
             {analytics.approvedClasses}
@@ -327,7 +327,7 @@ export default function Analytics() {
       {/* Enrollments by Class */}
       <div style={{ marginTop: '2rem' }}>
         <h3 style={{ color: '#fff', fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>
-          Enrollments by Class
+          Enrollments by Batch
         </h3>
 
         {analytics.enrollmentsByClass.length === 0 ? (
@@ -338,7 +338,7 @@ export default function Analytics() {
             textAlign: 'center',
             color: 'rgba(255, 255, 255, 0.7)'
           }}>
-            No enrollments yet. Once students enroll in your classes, you'll see the data here.
+            No enrollments yet. Once members enroll in your batches, you'll see the data here.
           </div>
         ) : (
           <div style={{
@@ -352,7 +352,7 @@ export default function Analytics() {
                   background: 'rgba(255, 255, 255, 0.1)',
                   borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
                 }}>
-                  <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Class Name</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Batch Name</th>
                   <th style={{ padding: '1rem', textAlign: 'right', color: '#fff', fontWeight: '600' }}>Enrollments</th>
                   <th style={{ padding: '1rem', textAlign: 'right', color: '#fff', fontWeight: '600' }}>Attended</th>
                   <th style={{ padding: '1rem', textAlign: 'right', color: '#fff', fontWeight: '600' }}>Rating</th>

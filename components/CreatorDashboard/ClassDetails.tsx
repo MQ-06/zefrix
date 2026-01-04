@@ -404,7 +404,7 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
           className={`${styles.tab} ${activeTab === 'students' ? styles.activeTab : ''}`}
           onClick={() => setActiveTab('students')}
         >
-          Students ({totalEnrollments})
+          Members ({totalEnrollments})
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'sessions' ? styles.activeTab : ''}`}
@@ -498,7 +498,7 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
                   <>
                     <div className={styles.divider}></div>
                     <div className={styles.infoRow}>
-                      <span className={styles.infoLabel}>Class Date:</span>
+                      <span className={styles.infoLabel}>Batch Date:</span>
                       <span className={styles.infoValue}>
                         {(() => {
                           try {
@@ -522,7 +522,7 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
                     <div className={styles.divider}></div>
                     <div className={styles.infoRow}>
                       <span className={styles.infoLabel}>Max Capacity:</span>
-                      <span className={styles.infoValue}>{classData.maxStudents} students</span>
+                      <span className={styles.infoValue}>{classData.maxStudents} Members</span>
                     </div>
                   </>
                 )}
@@ -573,7 +573,7 @@ export default function ClassDetails({ classId, onBack, onStartClass, onEdit }: 
                         onClick={() => handleStartClass(batch.id)}
                         className={styles.startButton}
                       >
-                        Start Class
+                        Start Batch
                       </button>
                     </div>
                   ))}

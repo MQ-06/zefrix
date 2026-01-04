@@ -722,8 +722,8 @@ export default function ProductPage({ params }: PageProps) {
                   Overview
                 </button>
                 <button
-                  onClick={() => setActiveTab('instructor')}
-                  className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'instructor'
+                  onClick={() => setActiveTab('creator')}
+                  className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'creator'
                     ? 'bg-gradient-to-r from-[#D92A63] to-[#FF654B] text-white'
                     : 'bg-white/5 text-gray-300 hover:bg-white/10'
                     }`}
@@ -851,7 +851,7 @@ export default function ProductPage({ params }: PageProps) {
                   </div>
                 )}
 
-                {activeTab === 'instructor' && (
+                {activeTab === 'creator' && (
                   <div>
                     <div className="flex gap-6 items-start">
                       <img
@@ -952,7 +952,7 @@ export default function ProductPage({ params }: PageProps) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-gray-400">
                       <BookOpen className="w-5 h-5" />
-                      <span>Instructor</span>
+                      <span>Creator</span>
                     </div>
                     <span className="text-white font-semibold">{course.instructor}</span>
                   </div>

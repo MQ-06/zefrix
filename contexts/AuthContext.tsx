@@ -17,7 +17,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string, phoneNumber?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -379,7 +379,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = async (email: string, password: string, name: string, phoneNumber?: string) => {
     await waitForFirebase();
 
     if (!window.createUserWithEmailAndPassword || !window.updateProfile) {
@@ -402,16 +402,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      await window.setDoc(window.doc(window.firebaseDb, 'users', cred.user.uid), {
+      // Determine if profile is complete based on required fields
+      // For students: name, email, and phoneNumber are required
+      // For creators: profile completion is handled separately in become-a-creator page
+      const hasRequiredFields = name.trim() && email.trim() && 
+        (role === 'student' ? (phoneNumber && phoneNumber.trim()) : true);
+
+      const userData: any = {
         uid: cred.user.uid,
         email: email.trim(),
         name: name.trim(),
         photoURL: '',
         role,
-        isProfileComplete: false,
+        isProfileComplete: hasRequiredFields,
         createdAt: window.serverTimestamp(),
         lastLogin: window.serverTimestamp(),
-      });
+      };
+
+      // Add phone number if provided
+      if (phoneNumber && phoneNumber.trim()) {
+        userData.phoneNumber = phoneNumber.trim();
+      }
+
+      await window.setDoc(window.doc(window.firebaseDb, 'users', cred.user.uid), userData);
     } catch (error: any) {
       throw error;
     }
@@ -445,13 +458,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!snap.exists()) {
         const isAdminEmailForGoogle = ADMIN_EMAILS.some(adminEmail => normalizeEmail(user.email) === normalizeEmail(adminEmail));
         role = isAdminEmailForGoogle ? 'admin' : 'student';
+        // For Google signup, profile is considered complete if we have name and email
+        // Phone number can be added later, so students will need to complete it
+        const hasNameAndEmail = (user.displayName || user.email?.split('@')[0]) && user.email;
+        
         await window.setDoc(userRef, {
           uid: user.uid,
           email: user.email,
           name: user.displayName || user.email?.split('@')[0],
           photoURL: user.photoURL || '',
           role,
-          isProfileComplete: false,
+          isProfileComplete: hasNameAndEmail && role !== 'student', // Students need phone number too
           createdAt: window.serverTimestamp(),
           lastLogin: window.serverTimestamp(),
         });

@@ -73,12 +73,13 @@ function InstructorContent() {
       const script = document.createElement('script');
       script.type = 'module';
       script.setAttribute('data-firebase-instructor-init', 'true');
+      const firebaseConfigStr = JSON.stringify(FIREBASE_CONFIG);
       script.textContent = `
         try {
           import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
           import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
           
-          const firebaseConfig = ${JSON.stringify(FIREBASE_CONFIG)};
+          const firebaseConfig = ` + firebaseConfigStr + `;
           
           const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
           window.firebaseDb = getFirestore(app);
@@ -394,7 +395,7 @@ function InstructorContent() {
               return (
                 <div className="text-center py-16">
                   <div className="text-white text-xl mb-4">No creators found</div>
-                  <p className="text-gray-400">Check back soon for amazing instructors!</p>
+                  <p className="text-gray-400">Check back soon for amazing creators!</p>
                 </div>
               );
             }

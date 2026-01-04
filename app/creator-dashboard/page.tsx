@@ -47,7 +47,7 @@ declare global {
   }
 }
 
-// Mock course data - replace with Firebase data
+// Mock batch data - replace with Firebase data
 const mockCourses = [
   {
     id: '1',
@@ -104,7 +104,7 @@ const mockCourses = [
   {
     id: '5',
     slug: 'figma-to-webflow-full-course-webflow',
-    title: 'Figma to Webflow: Full course',
+    title: 'Figma to Webflow: Full batch',
     instructor: 'Judy Nguyen',
     instructorImage: 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b850_avatar-2.jpg',
     image: 'https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b85d_course-08.jpg',
@@ -324,7 +324,7 @@ export default function CreatorDashboard() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeSection]);
 
-  // Fetch approved classes for dashboard with real-time updates
+  // Fetch approved batches for dashboard with real-time updates
   useEffect(() => {
     if (activeSection !== 'dashboard') {
       return; // Only set up listener when on dashboard
@@ -344,7 +344,7 @@ export default function CreatorDashboard() {
 
       setLoadingClasses(true);
       try {
-        console.log('📦 Setting up real-time listener for approved classes:', currentUser.uid);
+        console.log('📦 Setting up real-time listener for approved batches:', currentUser.uid);
         const classesRef = window.collection(window.firebaseDb, 'classes');
         const q = window.query(
           classesRef,
@@ -358,7 +358,7 @@ export default function CreatorDashboard() {
             classes.push({ classId: doc.id, ...doc.data() });
           });
 
-          console.log(`✅ Real-time update: Found ${classes.length} approved classes for creator`);
+          console.log(`✅ Real-time update: Found ${classes.length} approved batches for creator`);
 
           // Sort by creation date (newest first)
           classes.sort((a, b) => {
@@ -2014,10 +2014,10 @@ export default function CreatorDashboard() {
             {activeSection === 'dashboard' && (
               <div id="dashboard" className="creator-section">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                  <h2 className="creator-section-title" style={{ margin: 0 }}>My Approved Classes</h2>
+                  <h2 className="creator-section-title" style={{ margin: 0 }}>My Approved Batches</h2>
                   {approvedClasses.length > 0 && (
                     <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
-                      {approvedClasses.length} {approvedClasses.length === 1 ? 'class' : 'classes'}
+                      {approvedClasses.length} {approvedClasses.length === 1 ? 'batch' : 'batches'}
                     </div>
                   )}
                 </div>
@@ -2098,7 +2098,7 @@ export default function CreatorDashboard() {
                   </>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
-                    No approved classes yet. Create a class and wait for admin approval.
+                    No approved batches yet. Create a batch and wait for admin approval.
                   </div>
                 )}
               </div>
@@ -2132,7 +2132,7 @@ export default function CreatorDashboard() {
             {/* Create Batch Section */}
             {activeSection === 'create-class' && (
               <div id="create-class" className="creator-section">
-                <h2 className="creator-section-title">Create a New Class</h2>
+                <h2 className="creator-section-title">Create a New Batch</h2>
                 <div className="creator-form-container">
                   <CreateClassForm />
                 </div>
@@ -2171,7 +2171,7 @@ export default function CreatorDashboard() {
                     onCancel={() => setEditingClassId(null)}
                     onSuccess={() => {
                       setEditingClassId(null);
-                      // Optionally refresh the class list
+                      // Optionally refresh the batch list
                     }}
                   />
                 ) : (
@@ -2220,7 +2220,7 @@ export default function CreatorDashboard() {
                       marginBottom: '1rem'
                     }}
                   >
-                    ← Back to Class
+                    ← Back to Batch
                   </button>
                 </div>
                 <LiveClass

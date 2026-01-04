@@ -343,7 +343,7 @@ function CoursesContent() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-gray-300 text-sm md:text-base max-w-2xl mx-auto"
             >
-              Discover live, interactive classes taught by expert creators. Learn new skills, connect with mentors, and grow in real-time.
+              Discover live, interactive live batch taught by expert creators. Learn new skills, connect with mentors, and grow in real-time.
             </motion.p>
             
             {/* Decorative Elements */}
