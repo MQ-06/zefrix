@@ -130,20 +130,6 @@ export default function BecomeACreatorPage() {
     document.head.appendChild(initScript);
   }, [mounted]);
 
-  // Sync profileImage URL with preview
-  useEffect(() => {
-    const trimmedImage = formData.profileImage?.trim() || '';
-    if (trimmedImage && trimmedImage.startsWith('http')) {
-      if (profileImagePreview !== trimmedImage) {
-        setProfileImagePreview(trimmedImage);
-        setProfileImageError(false);
-      }
-    } else if (!trimmedImage && profileImagePreview) {
-      setProfileImagePreview('');
-      setProfileImageError(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.profileImage]);
 
 
   // Handle general input changes
@@ -592,8 +578,8 @@ export default function BecomeACreatorPage() {
             </div>
             <div className="form-group">
               <label>Profile Image (optional)</label>
-              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexDirection: 'column' }}>
-                <div style={{ width: '100%' }}>
+              <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexDirection: 'row' }}>
+                <div style={{ flex: 1 }}>
                   <input
                     type="file"
                     id="profile-image-upload"
@@ -664,28 +650,6 @@ export default function BecomeACreatorPage() {
                       <i className="fa-solid fa-user"></i>
                     </div>
                   )}
-                </div>
-                <div style={{ width: '100%', marginTop: '0.5rem' }}>
-                  <label style={{ fontSize: '12px', color: '#666', marginBottom: '0.25rem', display: 'block' }}>
-                    Or enter image URL:
-                  </label>
-                  <input
-                    type="url"
-                    name="profileImage"
-                    value={formData.profileImage}
-                    onChange={handleInputChange}
-                    placeholder="https://example.com/profile.jpg"
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontFamily: 'Poppins, sans-serif',
-                      background: '#eee',
-                      color: '#000'
-                    }}
-                  />
                 </div>
               </div>
             </div>
