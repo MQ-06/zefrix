@@ -213,7 +213,7 @@ export default function CategoryPage({ params }: PageProps) {
               No approved classes available in this category yet.
             </p>
             <Link
-              href="/courses"
+              href="/batches"
               className="inline-block bg-primary px-6 py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity duration-200"
             >
               Browse All Batches

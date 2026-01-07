@@ -190,7 +190,7 @@ export default function CoursesSection() {
             className="w-full sm:w-auto"
           >
             <Link
-              href="/courses"
+              href="/batches"
               className="inline-block w-full sm:w-auto text-center bg-gradient-to-r from-primary to-secondary px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-white font-semibold text-base sm:text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
             >
               View all batches

@@ -19,7 +19,7 @@ export function NavigationGuard() {
   
   useEffect(() => {
     // Prefetch critical pages for faster navigation
-    const prefetchPages = ['/courses', '/instructor', '/instructors', '/user-pages/become-a-creator'];
+    const prefetchPages = ['/batches', '/creators', '/instructors', '/user-pages/become-a-creator'];
     prefetchPages.forEach(page => {
       try {
         router.prefetch(page);

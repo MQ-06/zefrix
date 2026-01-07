@@ -536,10 +536,10 @@ export default function CheckoutPage() {
                             Please check out all the available courses and buy some courses that fulfill your needs.
                         </p>
                         <Link
-                            href="/courses"
+                            href="/batches"
                             className="inline-block bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-8 py-4 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity"
                         >
-                            View Courses
+                            View Batches
                         </Link>
                     </div>
                 </div>
@@ -659,7 +659,7 @@ export default function CheckoutPage() {
                                 </button>
 
                                 <Link
-                                    href="/courses"
+                                    href="/batches"
                                     className="block w-full text-center border-2 border-white/20 px-8 py-4 rounded-lg text-white font-medium hover:bg-white/5 transition-colors"
                                 >
                                     Continue Shopping

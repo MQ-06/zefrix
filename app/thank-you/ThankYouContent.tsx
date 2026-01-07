@@ -89,7 +89,7 @@ export default function ThankYouContent() {
                                     Go to Dashboard
                                 </Link>
                                 <Link
-                                    href="/courses"
+                                    href="/batches"
                                     className="border-2 border-white/20 px-8 py-4 rounded-lg text-white font-medium hover:bg-white/5 transition-colors inline-block"
                                 >
                                     Browse More Classes

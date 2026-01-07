@@ -21,10 +21,10 @@ export default function ConditionalLayout({
   // Special handling for batches page:
   // - If authenticated: hide header/footer
   // - If not authenticated: show header/footer
-  const isCoursesPage = pathname === '/courses' || pathname.startsWith('/courses/');
-  const shouldHideForCourses = isCoursesPage && isAuthenticated;
+  const isBatchesPage = pathname === '/batches' || pathname.startsWith('/batches/');
+  const shouldHideForBatches = isBatchesPage && isAuthenticated;
 
-  if (shouldHideLayout || shouldHideForCourses) {
+  if (shouldHideLayout || shouldHideForBatches) {
     return <>{children}</>;
   }
 

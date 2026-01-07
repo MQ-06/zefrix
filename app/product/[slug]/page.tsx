@@ -676,7 +676,7 @@ export default function ProductPage({ params }: PageProps) {
         <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-[#1A1A2E] to-[#2D1B3D] border-b border-white/10 shadow-lg">
           <div className="container max-w-7xl mx-auto px-4 py-3">
             <Link 
-              href="/courses" 
+              href="/batches" 
               className="text-white font-semibold hover:text-[#FF654B] transition-colors inline-flex items-center gap-2"
             >
               ← Back to Batches
@@ -1195,7 +1195,7 @@ export default function ProductPage({ params }: PageProps) {
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl font-bold text-white">Our related batches</h2>
             <Link
-              href="/courses"
+              href="/batches"
               className="bg-gradient-to-r from-[#D92A63] to-[#FF654B] px-6 py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity"
             >
               View all batches
