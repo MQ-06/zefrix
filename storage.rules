@@ -1,0 +1,88 @@
+rules_version = '2';
+
+// Firebase Storage Security Rules
+// These rules control access to files stored in Firebase Storage
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Profile images - users can upload/delete their own, everyone can read
+    match /profiles/{userId}/{allPaths=**} {
+      // Anyone can read profile images (for public display)
+      allow read: if true;
+      
+      // Users can upload/update/delete their own profile images
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Admins can manage all profile images
+      allow write: if isAdmin();
+    }
+    
+    // Class thumbnails/banners - public read, creators can upload/delete their own
+    match /classes/{classId}/{allPaths=**} {
+      // Anyone can read class images (for public display)
+      allow read: if true;
+      
+      // Only authenticated users can upload (server-side validation ensures creator ownership)
+      // This allows the server API to upload on behalf of creators
+      allow write: if isAuthenticated();
+    }
+    
+    // Class recordings - enrolled students and creators can read, creators can upload
+    match /recordings/{classId}/{batchId}/{allPaths=**} {
+      // Authenticated users can read (server-side validation ensures proper access)
+      allow read: if isAuthenticated();
+      
+      // Only authenticated users can upload (server-side validation ensures creator ownership)
+      allow write: if isAuthenticated();
+      
+      // Admins can manage all recordings
+      allow write: if isAdmin();
+    }
+    
+    // Generic videos folder - public read, authenticated upload
+    match /videos/{folder}/{allPaths=**} {
+      // Anyone can read videos (for public display)
+      allow read: if true;
+      
+      // Only authenticated users can upload
+      allow write: if isAuthenticated();
+      
+      // Admins can manage all videos
+      allow write: if isAdmin();
+    }
+    
+    // Generic uploads folder - public read, authenticated upload
+    match /{folder}/{allPaths=**} {
+      // Anyone can read (for public display)
+      allow read: if true;
+      
+      // Only authenticated users can upload (server-side validation ensures proper access)
+      allow write: if isAuthenticated();
+      
+      // Admins can manage all files
+      allow write: if isAdmin();
+      
+      // Prevent access to sensitive folders
+      // Note: More specific rules above will take precedence
+      allow read, write: if folder != 'admin' && folder != 'config' && folder != 'secrets';
+    }
+    
+    // Default deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

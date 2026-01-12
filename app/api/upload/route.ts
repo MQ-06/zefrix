@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
-import path from 'path';
-
-// Maximum file sizes
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
-
-// Allowed file types
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+import {
+  uploadFileFromFormData,
+  validateFile,
+  getProfileImagePath,
+  getClassThumbnailPath,
+  getClassRecordingPath,
+  deleteFile as deleteStorageFile,
+} from '@/lib/utils/firebaseStorageServer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +14,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const folder = formData.get('folder') as string || 'uploads'; // e.g., 'classes', 'profiles', 'recordings'
     const subfolder = formData.get('subfolder') as string || ''; // e.g., classId, userId, batchId
+    const uploadType = formData.get('uploadType') as string || 'generic'; // 'profile', 'class', 'recording', 'generic'
 
     if (!file) {
       return NextResponse.json(
@@ -25,9 +23,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file type
-    const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
-    const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+    // Determine file type (image or video)
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
 
     if (!isImage && !isVideo) {
       return NextResponse.json(
@@ -36,108 +34,86 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file size
-    if (isImage && file.size > MAX_IMAGE_SIZE) {
+    // Validate file
+    const validation = validateFile(
+      { size: file.size, mimetype: file.type },
+      isImage ? 'image' : 'video'
+    );
+
+    if (!validation.valid) {
       return NextResponse.json(
-        { success: false, error: `Image size exceeds ${MAX_IMAGE_SIZE / 1024 / 1024}MB limit.` },
+        { success: false, error: validation.error },
         { status: 400 }
       );
     }
 
-    if (isVideo && file.size > MAX_VIDEO_SIZE) {
-      return NextResponse.json(
-        { success: false, error: `Video size exceeds ${MAX_VIDEO_SIZE / 1024 / 1024}MB limit.` },
-        { status: 400 }
-      );
+    // Generate storage path based on folder type or explicit uploadType
+    let storagePath: string;
+    
+    // Auto-detect upload type from folder if uploadType not explicitly provided
+    const detectedType = uploadType !== 'generic' ? uploadType : 
+                         (folder === 'profiles' ? 'profile' :
+                          folder === 'classes' ? 'class' :
+                          folder === 'recordings' ? 'recording' : 'generic');
+    
+    if (detectedType === 'profile' && subfolder) {
+      // Profile image upload - use the path helper or reconstruct from folder/subfolder
+      storagePath = getProfileImagePath(subfolder, file.name);
+    } else if (detectedType === 'class' && subfolder) {
+      // Class thumbnail upload
+      storagePath = getClassThumbnailPath(subfolder, file.name);
+    } else if (detectedType === 'recording' && subfolder && folder) {
+      // Recording upload (folder = classId, subfolder = batchId)
+      // Note: For recordings, the path structure might be different
+      // If folder is actually the classId from the path structure
+      const pathParts = subfolder.split('/');
+      if (pathParts.length >= 2) {
+        // Structure: recordings/classId/batchId/filename
+        storagePath = getClassRecordingPath(pathParts[0], pathParts[1], file.name);
+      } else {
+        storagePath = getClassRecordingPath(folder, subfolder, file.name);
+      }
+    } else {
+      // Generic upload - preserve the original path structure from client
+      // The client sends paths like "profiles/user123/profile_timestamp.jpg"
+      // which gets parsed into folder="profiles", subfolder="user123"
+      // We need to reconstruct the full path with the filename
+      const timestamp = Date.now();
+      const extension = file.name.split('.').pop()?.toLowerCase() || (isImage ? 'jpg' : 'mp4');
+      const baseFileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
+      const sanitizedName = baseFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+      storagePath = `${folder}${subfolder ? `/${subfolder}` : ''}/${sanitizedName}_${timestamp}.${extension}`;
     }
 
-    // Create upload directory structure
-    // For Hostinger: Use public/uploads for public access
-    // Alternative: Use storage/uploads (outside public) for better security
-    const usePublicDir = process.env.UPLOAD_TO_PUBLIC !== 'false'; // Default to true for Hostinger
-    const baseDir = usePublicDir 
-      ? path.join(process.cwd(), 'public', 'uploads', folder, subfolder)
-      : path.join(process.cwd(), 'storage', 'uploads', folder, subfolder);
-    
-    const uploadDir = baseDir;
-    
-    // Ensure directory exists
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true });
-    }
-
-    // Generate unique filename
-    const timestamp = Date.now();
-    const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_'); // Sanitize filename
-    const extension = path.extname(originalName);
-    const baseName = path.basename(originalName, extension);
-    const uniqueFileName = `${baseName}_${timestamp}${extension}`;
-
-    // Save file
-    const filePath = path.join(uploadDir, uniqueFileName);
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    
-    // Debug logging (will be visible in server logs)
-    console.log('📁 [UPLOAD API] File upload details:', {
-      uploadDir,
-      filePath,
-      fileName: uniqueFileName,
+    console.log('📁 [UPLOAD API] Uploading to Firebase Storage:', {
+      storagePath,
+      fileName: file.name,
       fileSize: file.size,
-      bufferSize: buffer.length,
+      fileType: file.type,
       folder,
       subfolder,
-      cwd: process.cwd(),
+      uploadType,
     });
-    
-    await writeFile(filePath, buffer);
-    
-    // Verify file exists after write
-    const fileExistsAfterWrite = existsSync(filePath);
-    console.log('✅ [UPLOAD API] File write result:', { fileExistsAfterWrite, filePath });
 
-    // Generate public URL
-    // Detect base URL from request (works for both localhost and production)
-    let baseUrl: string;
-    
-    try {
-      // Use request.nextUrl to get the origin (works in both dev and production)
-      const origin = request.nextUrl.origin;
-      baseUrl = origin;
-    } catch (error) {
-      // Fallback: try to get from headers or use environment variable
-      const host = request.headers.get('host');
-      if (host) {
-        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-        baseUrl = `${protocol}://${host}`;
-      } else {
-        // Final fallback
-        baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-      }
-    }
-    
-    const relativePath = `uploads/${folder}${subfolder ? `/${subfolder}` : ''}/${uniqueFileName}`;
-    const publicUrl = `${baseUrl}/${relativePath}`;
-    
-    console.log('🌐 [UPLOAD API] Generated URL:', {
-      baseUrl,
-      relativePath,
+    // Upload to Firebase Storage
+    const publicUrl = await uploadFileFromFormData(file, storagePath);
+
+    console.log('✅ [UPLOAD API] File uploaded successfully:', {
+      storagePath,
       publicUrl,
-      envBaseUrl: process.env.NEXT_PUBLIC_BASE_URL,
-      requestOrigin: baseUrl,
     });
 
     return NextResponse.json({
       success: true,
       url: publicUrl,
-      path: relativePath,
-      filename: uniqueFileName,
+      path: storagePath,
+      filename: file.name,
       size: file.size,
       type: file.type,
     });
 
   } catch (error: any) {
-    console.error('Upload error:', error);
+    console.error('❌ Upload error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to upload file' },
       { status: 500 }
@@ -145,7 +121,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Handle file deletion
+// Handle file deletion from Firebase Storage
 export async function DELETE(request: NextRequest) {
   try {
     // Try to get path from query params or request body
@@ -169,30 +145,24 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Security: Only allow deletion of files in uploads directory
-    if (!filePath.startsWith('uploads/')) {
+    // Security: Validate path format (should be Firebase Storage path, not filesystem path)
+    // Remove any leading slashes and validate it's a valid storage path
+    filePath = filePath.replace(/^\/+/, '');
+    
+    // Validate path doesn't contain dangerous patterns
+    if (filePath.includes('..') || filePath.includes('//')) {
       return NextResponse.json(
         { success: false, error: 'Invalid file path' },
         { status: 400 }
       );
     }
 
-    // Support both public/uploads and storage/uploads
-    const usePublicDir = process.env.UPLOAD_TO_PUBLIC !== 'false';
-    const baseDir = usePublicDir ? 'public' : 'storage';
-    const fullPath = path.join(process.cwd(), baseDir, filePath);
-    
-    // Check if file exists
-    if (!existsSync(fullPath)) {
-      return NextResponse.json(
-        { success: false, error: 'File not found' },
-        { status: 404 }
-      );
-    }
+    console.log('🗑️ [DELETE API] Deleting from Firebase Storage:', { filePath });
 
-    // Delete file
-    const { unlink } = await import('fs/promises');
-    await unlink(fullPath);
+    // Delete from Firebase Storage
+    await deleteStorageFile(filePath);
+
+    console.log('✅ [DELETE API] File deleted successfully:', { filePath });
 
     return NextResponse.json({
       success: true,
@@ -200,7 +170,7 @@ export async function DELETE(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Delete error:', error);
+    console.error('❌ Delete error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to delete file' },
       { status: 500 }
