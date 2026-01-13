@@ -10,11 +10,37 @@
  * - Other media files
  */
 
-import admin from '@/lib/firebase-admin';
+import admin, { STORAGE_BUCKET } from '@/lib/firebase-admin';
 import { Readable } from 'stream';
 
-const storage = admin.storage();
-const bucket = storage.bucket(); // Uses default bucket from Firebase config
+// Lazy bucket access - get bucket only when needed (not at module load time)
+// This prevents build-time errors when Firebase Admin isn't fully initialized
+function getBucket() {
+  // Ensure Firebase Admin is initialized
+  if (!admin.apps.length) {
+    // Re-import to trigger initialization (shouldn't happen, but safety check)
+    throw new Error('Firebase Admin is not initialized. Please check your Firebase configuration.');
+  }
+  
+  const storage = admin.storage();
+  const bucketName = STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || 'zefrix-custom.firebasestorage.app';
+  
+  if (!bucketName) {
+    throw new Error('FIREBASE_STORAGE_BUCKET environment variable is not set');
+  }
+  
+  try {
+    return storage.bucket(bucketName);
+  } catch (error: any) {
+    // If bucket() fails, try to get default bucket from initialized app
+    const app = admin.app();
+    const defaultBucket = app.options.storageBucket;
+    if (defaultBucket) {
+      return storage.bucket(defaultBucket);
+    }
+    throw new Error(`Failed to get storage bucket: ${error.message}`);
+  }
+}
 
 // File validation constants
 export const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -60,6 +86,7 @@ export async function uploadFile(
   mimetype: string
 ): Promise<string> {
   try {
+    const bucket = getBucket();
     const file = bucket.file(path);
     
     // Create a write stream
@@ -127,6 +154,7 @@ export async function uploadFileFromFormData(
  */
 export async function deleteFile(path: string): Promise<void> {
   try {
+    const bucket = getBucket();
     const file = bucket.file(path);
     
     // Check if file exists
@@ -151,6 +179,7 @@ export async function deleteFile(path: string): Promise<void> {
  */
 export async function getDownloadURL(path: string, expiresIn: number = 3600): Promise<string> {
   try {
+    const bucket = getBucket();
     const file = bucket.file(path);
     
     // Check if file exists
@@ -164,7 +193,7 @@ export async function getDownloadURL(path: string, expiresIn: number = 3600): Pr
       const publicUrl = `https://storage.googleapis.com/${bucket.name}/${path}`;
       // Verify it's accessible by checking metadata
       const [metadata] = await file.getMetadata();
-      if (metadata.metadata?.public === 'true' || metadata.iamConfiguration?.publicAccessPrevention !== 'enforced') {
+      if (metadata.metadata?.public === 'true' || (metadata as any).iamConfiguration?.publicAccessPrevention !== 'enforced') {
         return publicUrl;
       }
     } catch {

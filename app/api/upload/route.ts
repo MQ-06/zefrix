@@ -8,6 +8,10 @@ import {
   deleteFile as deleteStorageFile,
 } from '@/lib/utils/firebaseStorageServer';
 
+// Mark route as dynamic to prevent build-time analysis
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
