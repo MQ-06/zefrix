@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, Clock, Users } from 'lucide-react';
+import { BookOpen, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { DEFAULT_COURSE_IMAGE, getAvatarUrl } from '@/lib/constants';
@@ -99,13 +99,6 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
               <span className="text-base">
                 <span className="font-bold text-white text-lg">{course.duration}</span>{' '}
                 <span className="text-gray-400">Days</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-gray-400" />
-              <span className="text-base">
-                <span className="font-bold text-white text-lg">{course.students}</span>{' '}
-                <span className="text-gray-400">Students</span>
               </span>
             </div>
           </div>

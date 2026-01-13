@@ -152,24 +152,6 @@ export default function CreatorCourseCard({ classData, onViewClass }: CreatorCou
               {classData.numberSessions || 0} {classData.numberSessions === 1 ? 'Session' : 'Sessions'}
             </span>
           </div>
-          <div className="creator-course-meta-item" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            fontSize: '0.875rem',
-            color: 'rgba(255, 255, 255, 0.8)'
-          }}>
-            <img
-              alt=""
-              loading="lazy"
-              src="https://cdn.prod.website-files.com/691111ab3e1733ebffd9b739/691111ab3e1733ebffd9b7a2_icon-7.svg"
-              className="creator-course-meta-icon"
-              style={{ width: '18px', height: '18px', flexShrink: 0 }}
-            />
-            <span style={{ fontWeight: '500' }}>
-              {loadingStats ? '...' : enrollmentCount} {enrollmentCount === 1 ? 'Student' : 'Students'}
-            </span>
-          </div>
           {classData.scheduleType && (
             <div className="creator-course-meta-item" style={{
               display: 'flex',

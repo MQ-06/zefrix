@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { notFound, useRouter } from 'next/navigation';
-import { BookOpen, Clock, Users, Globe, Calendar, Tag } from 'lucide-react';
+import { BookOpen, Clock, Globe, Calendar, Tag } from 'lucide-react';
 import Link from 'next/link';
 import Footer from '@/components/Footer';
 import { useCart } from '@/contexts/CartContext';
@@ -176,6 +176,12 @@ export default function ProductPage({ params }: PageProps) {
 
         if (docSnap.exists()) {
           const data = docSnap.data();
+          // Debug: Log subcategory field
+          console.log('📋 [Product Page] Subcategory data:', {
+            subCategory: data.subCategory,
+            subcategory: data.subcategory,
+            allData: data
+          });
           // Only show approved classes
           if (data.status === 'approved') {
             // Fetch enrollment count
@@ -957,14 +963,6 @@ export default function ProductPage({ params }: PageProps) {
                     <span className="text-white font-semibold">{course.instructor}</span>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <Users className="w-5 h-5" />
-                      <span>Students</span>
-                    </div>
-                    <span className="text-white font-semibold">{course.enrollmentCount || 0} Students</span>
-                  </div>
-
                   {course.startISO && (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-400">
@@ -1054,16 +1052,6 @@ export default function ProductPage({ params }: PageProps) {
                     </div>
                   )}
 
-                  {course.maxSeats && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-gray-400">
-                        <Users className="w-5 h-5" />
-                        <span>Max Students</span>
-                      </div>
-                      <span className="text-white font-semibold">{course.maxSeats} Students</span>
-                    </div>
-                  )}
-
                   {course.days && course.days.length > 0 && (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-400">
@@ -1093,12 +1081,12 @@ export default function ProductPage({ params }: PageProps) {
                   )}
 
                   {course.subCategory && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-gray-400">
+                    <div className="flex items-start gap-4">
+                      <div className="flex items-center gap-2 text-gray-400 flex-shrink-0">
                         <Tag className="w-5 h-5" />
                         <span>Sub Category</span>
                       </div>
-                      <span className="text-white font-semibold">{course.subCategory}</span>
+                      <span className="text-white font-semibold flex-1 break-words">{course.subCategory}</span>
                     </div>
                   )}
 
@@ -1133,15 +1121,6 @@ export default function ProductPage({ params }: PageProps) {
                     </div>
                   ) : null}
 
-                  {course.maxSeats && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-gray-400">
-                        <Users className="w-5 h-5" />
-                        <span>Max Seats</span>
-                      </div>
-                      <span className="text-white font-semibold">{course.maxSeats}</span>
-                    </div>
-                  )}
                 </div>
 
                 {!isEnrolled && (
@@ -1240,10 +1219,6 @@ export default function ProductPage({ params }: PageProps) {
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
                       <span>{relatedCourse.duration} Days</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Users className="w-4 h-4" />
-                      <span>{relatedCourse.students} {relatedCourse.students === 1 ? 'Student' : 'Students'}</span>
                     </div>
                   </div>
 
