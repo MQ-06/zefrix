@@ -38,25 +38,14 @@ export default function HeroSection() {
             </motion.div> */}
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              Join Your First Live Batch on Zefrix
+              Learn Live from Real Creators
               <motion.div 
                 className="inline-flex items-center gap-2 ml-3"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.8 }}
               >
-                <motion.img
-                  src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b748_avatar-2.jpg"
-                  alt="Avatar"
-                  className="w-12 h-12 rounded-full border-2 border-white"
-                  whileHover={{ scale: 1.1 }}
-                />
-                <motion.img
-                  src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b747_avatar-1.jpg"
-                  alt="Avatar"
-                  className="w-12 h-12 rounded-full border-2 border-white -ml-4"
-                  whileHover={{ scale: 1.1 }}
-                />
+             
                 <img
                   src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b749_arrow-right.svg"
                   alt="Arrow"
@@ -65,9 +54,62 @@ export default function HeroSection() {
               </motion.div>
             </h1>
 
-            <p className="text-gray-300 text-base md:text-lg mb-10 leading-relaxed">
-              Join interactive live sessions with expert creators. Learn new skills, connect with mentors, and grow in a fun, casual learning environment. Discover batches in design, music, tech, wellness, and more—all in real-time.
-            </p>
+            <div className="space-y-3 mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-primary rounded-full"></div>
+                <p className="text-gray-300 text-base md:text-lg">Live Q&A with experts</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-primary rounded-full"></div>
+                <p className="text-gray-300 text-base md:text-lg">Small batch sizes</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-primary rounded-full"></div>
+                <p className="text-gray-300 text-base md:text-lg">Real-time feedback</p>
+              </div>
+            </div>
+
+            {/* Trust Elements - Added social proof near hero */}
+            <div className="flex items-center gap-6 mb-10 flex-wrap">
+              <div className="flex items-center gap-2">
+                <div className="flex -space-x-2">
+                  <img
+                    src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b748_avatar-2.jpg"
+                    alt="Student"
+                    className="w-8 h-8 rounded-full border-2 border-[#1A1A2E]"
+                  />
+                  <img
+                    src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b747_avatar-1.jpg"
+                    alt="Student"
+                    className="w-8 h-8 rounded-full border-2 border-[#1A1A2E]"
+                  />
+                  <img
+                    src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b74f_avatar-3.jpg"
+                    alt="Student"
+                    className="w-8 h-8 rounded-full border-2 border-[#1A1A2E]"
+                  />
+                </div>
+                <span className="text-white text-sm font-semibold">1,000+ students learning</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                </svg>
+                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                </svg>
+                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                </svg>
+                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                </svg>
+                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                </svg>
+                <span className="text-white text-sm font-semibold ml-1">4.8/5 rating</span>
+              </div>
+            </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
               <motion.div

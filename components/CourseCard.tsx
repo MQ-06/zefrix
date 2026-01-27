@@ -87,8 +87,15 @@ export default function CourseCard({ course }: CourseCardProps) {
             }}
           />
           
-          {/* Instructor Badge - Top Right */}
-          <div className="absolute top-4 right-4 flex items-center gap-2 bg-white/95 backdrop-blur-sm px-3 py-2 rounded-full shadow-lg">
+          {/* Discount Badge - Top Left */}
+          {course.originalPrice > course.price && (
+            <div className="absolute top-4 left-4 bg-red-500 text-white px-3 py-1.5 rounded-full shadow-lg font-bold text-sm">
+              {Math.round(((course.originalPrice - course.price) / course.originalPrice) * 100)}% OFF
+            </div>
+          )}
+          
+          {/* Instructor Badge - Bottom Right */}
+          <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-white/95 backdrop-blur-sm px-3 py-2 rounded-full shadow-lg">
             <img
               src={instructorImageSrc}
               alt={course.instructor}
@@ -107,33 +114,47 @@ export default function CourseCard({ course }: CourseCardProps) {
             {course.title}
           </h3>
 
-          <div className="flex items-center gap-4 md:gap-6 text-gray-400 mb-5 flex-wrap">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-gray-400" />
+          <div className="flex items-center gap-6 text-gray-400 mb-5 flex-wrap">
+            <div className="flex items-center gap-3">
+              <BookOpen className="w-6 h-6 text-primary" />
               <span className="text-base">
-                <span className="font-bold text-white text-lg">{course.sections}</span>{' '}
-                <span className="text-gray-400">Sections</span>
+                <span className="font-bold text-white text-xl">{course.sections}</span>{' '}
+                <span className="text-gray-400">Sessions</span>
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-gray-400" />
+            <div className="flex items-center gap-3">
+              <Clock className="w-6 h-6 text-primary" />
               <span className="text-base">
-                <span className="font-bold text-white text-lg">{course.duration}</span>{' '}
+                <span className="font-bold text-white text-xl">{course.duration}</span>{' '}
                 <span className="text-gray-400">Days</span>
               </span>
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-5 border-t border-gray-700">
+          <div className="flex items-center justify-between pt-5 border-t border-gray-700 mb-4">
             <div>
-              <h4 className="text-yellow-400 font-bold text-2xl mb-1">
-                ₹{course.price.toFixed(2)}
-              </h4>
-              <div className="text-gray-500 text-base line-through">
-                ₹{course.originalPrice.toFixed(2)}
+              <div className="flex items-baseline gap-3 mb-1">
+                <h4 className="text-yellow-400 font-bold text-3xl">
+                  ₹{course.price.toFixed(2)}
+                </h4>
+                <div className="text-gray-500 text-lg line-through">
+                  ₹{course.originalPrice.toFixed(2)}
+                </div>
               </div>
+              <p className="text-green-400 text-sm font-semibold">Save ₹{(course.originalPrice - course.price).toFixed(2)}</p>
             </div>
           </div>
+
+          {/* Strong CTA Button */}
+          <button 
+            onClick={(e) => {
+              e.preventDefault();
+              window.location.href = `/product/${course.slug}`;
+            }}
+            className="w-full bg-gradient-to-r from-primary to-secondary text-white font-bold py-3.5 px-6 rounded-lg hover:opacity-90 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+          >
+            Reserve Your Seat Now →
+          </button>
         </div>
       </Link>
     </motion.div>

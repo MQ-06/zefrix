@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Shield, CheckCircle } from 'lucide-react';
 
 export default function Footer() {
   const marqueeItems = Array(13).fill('Join for Free');
@@ -8,21 +9,22 @@ export default function Footer() {
   const quickLinks = [
     { href: '/', label: 'Home' },
     { href: '/batches', label: 'Live Batches' },
-    { href: '/categories', label: 'Categories' },
+    { href: '/categories', label: 'Browse Categories' },
     { href: '/creators', label: 'Expert Creators' },
     { href: '/contact-us', label: 'Contact Us' },
   ];
 
-  const otherLinks = [
-    { href: '/signup-login', label: 'Sign Up / Login' },
-    { href: '/user-pages/become-a-creator', label: 'Become a Creator' },
-  ];
-
-  const seoLinks = [
+  const learnLinks = [
     { href: '/batches', label: 'Online Workshops' },
     { href: '/batches', label: 'Live Skill Classes' },
-    { href: '/creators', label: 'Learn from Creators' },
-    { href: '/batches', label: 'Interactive Online Classes' },
+    { href: '/batches', label: 'Interactive Learning' },
+    { href: '/creators', label: 'Learn from Experts' },
+  ];
+
+  const accountLinks = [
+    { href: '/signup-login', label: 'Sign Up / Login' },
+    { href: '/user-pages/become-a-creator', label: 'Become a Creator' },
+    { href: '/user-pages/dashboard', label: 'My Dashboard' },
   ];
 
   const socialLinks = [
@@ -77,17 +79,20 @@ export default function Footer() {
 
       {/* Main Footer Content */}
       <div className="container py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-8">
           {/* Logo and Social */}
-          <div>
+          <div className="lg:col-span-2">
             <Link href="/" className="inline-block mb-6">
               <img
                 src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/69111edc833f0aade04d058d_6907f6cf8f1c1a9c8e68ea5c_logo.png"
-                alt="Zefrix Logo"
+                alt="Zefrix - Live Skill Sharing Platform"
                 className="h-10 w-auto"
               />
             </Link>
-            <div className="flex items-center space-x-4 mb-6">
+            <p className="text-gray-400 text-sm mb-6 leading-relaxed max-w-sm">
+              Join live interactive classes with expert creators. Learn skills in real-time through workshops and online courses.
+            </p>
+            <div className="flex items-center space-x-4">
               {socialLinks.map((social) => (
                 <a
                   key={social.name}
@@ -106,9 +111,6 @@ export default function Footer() {
                 </a>
               ))}
             </div>
-            <p className="text-gray-400 text-sm">
-              Zefrix @ {new Date().getFullYear()} All rights reserved.
-            </p>
           </div>
 
           {/* Quick Links */}
@@ -119,7 +121,7 @@ export default function Footer() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-gray-400 hover:text-[#FF6B9D] transition-colors duration-200"
+                    className="text-gray-400 hover:text-[#FF6B9D] transition-colors duration-200 text-sm"
                   >
                     {link.label}
                   </Link>
@@ -128,15 +130,32 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Other Links */}
+          {/* Learn (SEO-friendly keyword-rich links) */}
           <div>
-            <h3 className="text-white font-bold text-lg mb-6">Other Links</h3>
+            <h3 className="text-white font-bold text-lg mb-6">Learn</h3>
             <ul className="space-y-3">
-              {otherLinks.map((link, index) => (
-                <li key={`${link.href}-${link.label}-${index}`}>
+              {learnLinks.map((link, index) => (
+                <li key={`${link.href}-${index}`}>
                   <Link
                     href={link.href}
-                    className="text-gray-400 hover:text-[#FF6B9D] transition-colors duration-200"
+                    className="text-gray-400 hover:text-[#FF6B9D] transition-colors duration-200 text-sm"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Account */}
+          <div>
+            <h3 className="text-white font-bold text-lg mb-6">Account</h3>
+            <ul className="space-y-3">
+              {accountLinks.map((link, index) => (
+                <li key={`${link.href}-${index}`}>
+                  <Link
+                    href={link.href}
+                    className="text-gray-400 hover:text-[#FF6B9D] transition-colors duration-200 text-sm"
                   >
                     {link.label}
                   </Link>
@@ -146,31 +165,34 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* SEO Links Section */}
+        {/* Bottom Bar - Copyright & Legal */}
         <div className="mt-12 pt-8 border-t border-gray-800">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {seoLinks.map((link, index) => (
-              <Link
-                key={`seo-${index}`}
-                href={link.href}
-                className="text-gray-500 hover:text-[#FF6B9D] transition-colors duration-200 text-sm"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* Trust & Privacy Section */}
-        <div className="mt-8 pt-8 border-t border-gray-800">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-500">
-            <div>
-              <p>© {new Date().getFullYear()} Zefrix. All rights reserved.</p>
-              <p className="mt-2">Privacy Policy | Terms of Service</p>
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
+              <p className="text-gray-400 text-sm">
+                © {new Date().getFullYear()} Zefrix. All rights reserved.
+              </p>
+              
+              {/* Trust Badges */}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-green-400" />
+                  <span className="text-gray-400 text-xs">Secure Platform</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-blue-400" />
+                  <span className="text-gray-400 text-xs">Trusted by 1000+</span>
+                </div>
+              </div>
             </div>
-            <div className="text-center md:text-right">
-              <p>Trusted by 1,000+ students worldwide</p>
-              <p className="mt-1">Secure payment processing</p>
+
+            <div className="flex items-center gap-6 text-sm">
+              <Link href="/privacy-policy" className="text-gray-400 hover:text-[#FF6B9D] transition-colors">
+                Privacy Policy
+              </Link>
+              <Link href="/terms-of-service" className="text-gray-400 hover:text-[#FF6B9D] transition-colors">
+                Terms of Service
+              </Link>
             </div>
           </div>
         </div>
