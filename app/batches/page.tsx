@@ -282,25 +282,43 @@ function BatchesContent() {
   }, []);
 
   // Convert approved classes to course format (only real classes, no dummy data)
-  const allBatches = approvedClasses.map((classItem) => ({
-    id: classItem.classId,
-    slug: classItem.classId,
-    title: classItem.title,
-    subtitle: classItem.subtitle || '',
-    category: classItem.category,
-    categorySlug: '',
-    subCategory: classItem.subCategory,
-    instructor: classItem.creatorName || 'Creator',
-    instructorId: '',
-    instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
-    image: (classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : DEFAULT_COURSE_IMAGE,
-    price: classItem.price,
-    originalPrice: classItem.price * 1.2,
-    sections: classItem.numberSessions, // This is actually sessions, but kept as 'sections' for component compatibility
-    duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
-    students: (classItem as any).enrollmentCount || 0, // Use actual enrollment count
-    level: 'Beginner' as const,
-  }));
+  const allBatches = approvedClasses.map((classItem) => {
+    // Fix image URL - ensure it uses correct protocol
+    let imageUrl = DEFAULT_COURSE_IMAGE;
+    
+    if (classItem.videoLink && classItem.videoLink.trim() !== '') {
+      const videoLink = classItem.videoLink.trim();
+      // If it's a relative path starting with /uploads, convert to http://localhost:3000
+      if (videoLink.startsWith('/uploads')) {
+        imageUrl = `http://localhost:3000${videoLink}`;
+      } else if (videoLink.startsWith('http://') || videoLink.startsWith('https://')) {
+        imageUrl = videoLink;
+      } else {
+        imageUrl = videoLink;
+      }
+    }
+
+    return {
+      id: classItem.classId,
+      slug: classItem.classId,
+      title: classItem.title,
+      subtitle: classItem.subtitle || '',
+      category: classItem.category,
+      categorySlug: '',
+      subCategory: classItem.subCategory,
+      instructor: classItem.creatorName || 'Creator',
+      instructorId: '',
+      instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
+      image: imageUrl,
+      price: classItem.price,
+      originalPrice: classItem.price * 1.2,
+      comparePrice: classItem.price * 1.2, // Add comparePrice for "Save" display
+      sections: classItem.numberSessions, // This is actually sessions, but kept as 'sections' for component compatibility
+      duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
+      students: (classItem as any).enrollmentCount || 0, // Use actual enrollment count
+      level: 'Beginner' as const,
+    };
+  });
   const totalPages = Math.ceil(allBatches.length / BATCHES_PER_PAGE);
   const startIndex = (currentPage - 1) * BATCHES_PER_PAGE;
   const endIndex = startIndex + BATCHES_PER_PAGE;

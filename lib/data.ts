@@ -27,9 +27,12 @@ export interface Testimonial {
   id: string;
   name: string;
   role: string;
+  company: string;
   avatar: string;
   content: string;
   rating: number;
+  verified: boolean;
+  courseTaken?: string;
 }
 
 export const categories: Category[] = [
@@ -173,50 +176,68 @@ export const testimonials: Testimonial[] = [
   {
     id: '1',
     name: 'Priya Sharma',
-    role: 'Graphic Designer',
+    role: 'Senior Graphic Designer',
+    company: 'Ogilvy India',
     avatar: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b748_avatar-2.jpg',
-    content: 'Zefrix has completely changed how I learn new skills! The live interactive sessions with creators are so engaging. I joined a design batch and learned more in 4 sessions than I did in months of self-study. The real-time feedback and Q&A make all the difference.',
+    content: 'After completing the Advanced Figma batch, my design workflow improved by 60%. The instructor\'s real-world experience at Adobe was invaluable. I implemented the prototyping techniques in my client project the very next day and received amazing feedback.',
     rating: 5,
+    verified: true,
+    courseTaken: 'Advanced Figma Design',
   },
   {
     id: '2',
     name: 'Rahul Mehta',
-    role: 'Software Developer',
+    role: 'Full Stack Developer',
+    company: 'Infosys',
     avatar: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b74f_avatar-3.jpg',
-    content: 'I love how easy it is to find and join classes on Zefrix. The payment process is smooth, and I always get reminders before my sessions. The creators are knowledgeable and make learning fun. Best investment I\'ve made in my career development!',
+    content: 'The DevOps batch helped me land a promotion! The live sessions with a Google Cloud engineer gave me practical insights I couldn\'t find anywhere else. Completed 12 sessions and implemented CI/CD pipelines at work within 2 weeks.',
     rating: 5,
+    verified: true,
+    courseTaken: 'DevOps Fundamentals',
   },
   {
     id: '3',
     name: 'Sneha Patel',
-    role: 'Music Enthusiast',
+    role: 'Product Manager',
+    company: 'Swiggy',
     avatar: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b76a_avatar-9.jpg',
-    content: 'As someone who wanted to learn guitar but couldn\'t commit to long courses, Zefrix batches are perfect! I can join live sessions when it fits my schedule, and the creators are so patient and encouraging. The Google Meet integration works flawlessly.',
+    content: 'Took the UI/UX Design Thinking batch and it transformed how I work with my design team. The instructor from Razorpay shared real case studies. The live Q&A sessions were incredibly valuable - got answers to specific challenges I was facing.',
     rating: 5,
+    verified: true,
+    courseTaken: 'UI/UX Design Thinking',
   },
   {
     id: '4',
     name: 'Arjun Kumar',
-    role: 'Fitness Coach',
+    role: 'Marketing Specialist',
+    company: 'Zomato',
     avatar: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b781_avatar-11.jpg',
-    content: 'The variety of categories on Zefrix is amazing! I\'ve taken batches in design, coding, and even wellness. Each creator brings their unique style, and the live format means I can ask questions immediately. Highly recommend for anyone looking to upskill.',
+    content: 'The Digital Marketing Strategy batch was worth every penny. Learned growth hacking techniques from a senior marketer at CRED. Applied these strategies and saw a 40% increase in our campaign engagement rates. Best professional development investment!',
     rating: 5,
+    verified: true,
+    courseTaken: 'Digital Marketing Strategy',
   },
   {
     id: '5',
     name: 'Meera Desai',
-    role: 'Content Creator',
+    role: 'Content Strategist',
+    company: 'Times Internet',
     avatar: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b766_avatar-7.jpg',
-    content: 'What sets Zefrix apart is the casual, fun learning environment. It doesn\'t feel like a traditional batch - it feels like learning from a friend who happens to be an expert. The batch format helped me stay consistent, and I actually completed all sessions!',
+    content: 'Completed the Content Writing & SEO batch with an ex-Googler. The practical SEO techniques helped me rank 3 articles on page 1 within a month. The small batch size (only 8 students) meant personalized feedback on every piece I wrote.',
     rating: 5,
+    verified: true,
+    courseTaken: 'Content Writing & SEO',
   },
   {
     id: '6',
     name: 'Vikram Singh',
-    role: 'Business Owner',
+    role: 'Startup Founder',
+    company: 'TechVenture Labs',
     avatar: 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b767_avatar-5.jpg',
-    content: 'I\'ve tried many online learning platforms, but Zefrix\'s live sessions are unmatched. The ability to interact with creators in real-time, get instant answers, and learn alongside other students creates an amazing learning experience. Worth every rupee!',
+    content: 'As a founder, time is precious. The Python for Data Analysis batch fit perfectly into my schedule - 5 sessions over 1 week. The instructor from Microsoft broke down complex concepts beautifully. Now I can analyze our metrics independently!',
     rating: 5,
+    verified: true,
+    courseTaken: 'Python for Data Analysis',
   },
 ];
 

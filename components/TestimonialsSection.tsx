@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, BadgeCheck } from 'lucide-react';
 import { testimonials } from '@/lib/data';
 
 export default function TestimonialsSection() {
@@ -21,10 +21,10 @@ export default function TestimonialsSection() {
       <div className="container">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-            What students say about our platform
+            Real Results from Real Professionals
           </h2>
           <p className="text-gray-400 text-xl md:text-2xl max-w-3xl mx-auto leading-relaxed">
-            Hear from students who have transformed their skills through live interactive classes with expert creators on Zefrix.
+            Verified students from top companies share their success stories after completing live batches on Zefrix.
           </p>
         </div>
 
@@ -48,9 +48,17 @@ export default function TestimonialsSection() {
                   ))}
                 </div>
 
-                <p className="text-gray-300 text-xl md:text-2xl mb-10 leading-relaxed">
+                <p className="text-gray-300 text-lg md:text-xl mb-8 leading-relaxed">
                   "{testimonials[currentIndex].content}"
                 </p>
+
+                {testimonials[currentIndex].courseTaken && (
+                  <div className="mb-8 inline-block px-4 py-2 bg-primary/20 border border-primary/30 rounded-full">
+                    <p className="text-primary text-sm font-semibold">
+                      Completed: {testimonials[currentIndex].courseTaken}
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-center gap-5">
                   <motion.img
@@ -61,11 +69,19 @@ export default function TestimonialsSection() {
                     transition={{ duration: 0.2 }}
                   />
                   <div className="text-left">
-                    <h3 className="text-white font-bold text-xl md:text-2xl mb-1">
-                      {testimonials[currentIndex].name}
-                    </h3>
-                    <p className="text-gray-400 text-base">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-white font-bold text-xl md:text-2xl">
+                        {testimonials[currentIndex].name}
+                      </h3>
+                      {testimonials[currentIndex].verified && (
+                        <BadgeCheck className="w-6 h-6 text-blue-400 fill-blue-400" />
+                      )}
+                    </div>
+                    <p className="text-gray-300 text-base font-medium">
                       {testimonials[currentIndex].role}
+                    </p>
+                    <p className="text-gray-400 text-sm">
+                      {testimonials[currentIndex].company}
                     </p>
                   </div>
                 </div>
