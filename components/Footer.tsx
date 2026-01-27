@@ -7,15 +7,22 @@ export default function Footer() {
 
   const quickLinks = [
     { href: '/', label: 'Home' },
-    { href: '/batches', label: 'Batches' },
+    { href: '/batches', label: 'Live Batches' },
     { href: '/categories', label: 'Categories' },
-    { href: '/creators', label: 'Creators' },
+    { href: '/creators', label: 'Expert Creators' },
     { href: '/contact-us', label: 'Contact Us' },
   ];
 
   const otherLinks = [
     { href: '/signup-login', label: 'Sign Up / Login' },
     { href: '/user-pages/become-a-creator', label: 'Become a Creator' },
+  ];
+
+  const seoLinks = [
+    { href: '/batches', label: 'Online Workshops' },
+    { href: '/batches', label: 'Live Skill Classes' },
+    { href: '/creators', label: 'Learn from Creators' },
+    { href: '/batches', label: 'Interactive Online Classes' },
   ];
 
   const socialLinks = [
@@ -136,6 +143,35 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
+          </div>
+        </div>
+
+        {/* SEO Links Section */}
+        <div className="mt-12 pt-8 border-t border-gray-800">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {seoLinks.map((link, index) => (
+              <Link
+                key={`seo-${index}`}
+                href={link.href}
+                className="text-gray-500 hover:text-[#FF6B9D] transition-colors duration-200 text-sm"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Trust & Privacy Section */}
+        <div className="mt-8 pt-8 border-t border-gray-800">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-500">
+            <div>
+              <p>© {new Date().getFullYear()} Zefrix. All rights reserved.</p>
+              <p className="mt-2">Privacy Policy | Terms of Service</p>
+            </div>
+            <div className="text-center md:text-right">
+              <p>Trusted by 1,000+ students worldwide</p>
+              <p className="mt-1">Secure payment processing</p>
+            </div>
           </div>
         </div>
       </div>

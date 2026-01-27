@@ -28,8 +28,54 @@ export default function Home() {
     router.push(getDashboardPath());
   };
 
+  // Structured Data for SEO
+  const structuredData = {
+    '@context': 'https://schema.org',
+    '@type': 'EducationalOrganization',
+    name: 'Zefrix',
+    url: 'https://zefrix.com',
+    description: 'Live skill-sharing platform connecting students and creators through interactive, real-time classes',
+    founder: {
+      '@type': 'Organization',
+      name: 'Zefrix Team',
+    },
+    sameAs: [
+      'https://www.facebook.com/profile.php?id=61581972350122',
+      'https://www.instagram.com/zefrix_app/',
+      'https://in.linkedin.com/company/zefrix',
+      'https://x.com/Zefrix_app',
+    ],
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'INR',
+      availability: 'https://schema.org/InStock',
+    },
+  };
+
+  const websiteStructuredData = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Zefrix',
+    url: 'https://zefrix.com',
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: 'https://zefrix.com/batches?search={search_term_string}',
+      'query-input': 'required name=search_term_string',
+    },
+  };
+
   return (
     <>
+      {/* Structured Data for SEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteStructuredData) }}
+      />
+
       {/* Dashboard Button - Show if logged in */}
       {!loading && user && (
         <div className="fixed top-4 right-4 z-50">

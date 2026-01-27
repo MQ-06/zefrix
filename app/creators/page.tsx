@@ -401,9 +401,21 @@ function CreatorsContent() {
             }
             
             console.log('📊 Rendering: Creators grid with', creators.length, 'creators');
+            // Filter out creators with 0 Active Classes for better trust
+            const activeCreators = creators.filter(creator => (creator.totalClasses || 0) > 0);
+            
+            if (activeCreators.length === 0) {
+              return (
+                <div className="text-center py-16">
+                  <div className="text-white text-xl mb-4">No active creators found</div>
+                  <p className="text-gray-400">Check back soon for amazing creators!</p>
+                </div>
+              );
+            }
+            
             return (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
-              {creators.map((creator, index) => (
+              {activeCreators.map((creator, index) => (
                 <InstructorCard
                   key={creator.id}
                   instructor={{

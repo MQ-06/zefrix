@@ -163,11 +163,13 @@ export default function CategoryPage({ params }: PageProps) {
           style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #4e54c8 50%, #d81b60 100%)' }}
         >
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            {category.title}
+            {category.title} - Live Online Classes & Workshops
           </h1>
-          <p className="text-white/80 text-lg">
-            Explore our {category.title.toLowerCase()} classes and enhance your
-            skills.
+          <p className="text-white/80 text-lg mb-2">
+            Explore our {category.title.toLowerCase()} classes and enhance your skills through interactive live sessions with expert creators.
+          </p>
+          <p className="text-white/70 text-base">
+            Join real-time learning sessions, connect with mentors, and grow your expertise in {category.title.toLowerCase()}.
           </p>
         </div>
 

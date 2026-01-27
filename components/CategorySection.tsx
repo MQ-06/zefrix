@@ -10,8 +10,11 @@ export default function CategorySection() {
       <div className="container">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            Explore Live Batches
+            Explore Live Batches by Category
           </h2>
+          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+            Discover online workshops and live skill classes in design, music, tech, wellness, and more. Learn from expert creators in real-time.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">

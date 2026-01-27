@@ -181,9 +181,14 @@ export default function CoursesSection() {
     <section className="section-spacing-bottom">
       <div className="container">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 mb-8 sm:mb-16">
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
-            Browse our batches
-          </h2>
+          <div>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-2">
+              Browse Live Batches 
+            </h2>
+            <p className="text-gray-400 text-lg">
+              Discover interactive live skill classes with expert creators
+            </p>
+          </div>
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}

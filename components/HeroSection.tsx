@@ -75,10 +75,21 @@ export default function HeroSection() {
                 whileTap={{ scale: 0.95 }}
               >
                 <Link
-                  href="/signup-login"
+                  href="/batches"
                   className="bg-gradient-to-r from-primary to-secondary px-10 py-5 rounded-lg text-white font-semibold text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
                 >
                   Explore Live Batches
+                </Link>
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Link
+                  href="/signup-login"
+                  className="bg-transparent border-2 border-white/30 px-10 py-5 rounded-lg text-white font-semibold text-lg hover:border-white/50 hover:bg-white/5 transition-all duration-200"
+                >
+                  Join Free
                 </Link>
               </motion.div>
             </div>
