@@ -312,11 +312,14 @@ function BatchesContent() {
       image: imageUrl,
       price: classItem.price,
       originalPrice: classItem.price * 1.2,
-      comparePrice: classItem.price * 1.2, // Add comparePrice for "Save" display
-      sections: classItem.numberSessions, // This is actually sessions, but kept as 'sections' for component compatibility
+      comparePrice: classItem.price * 1.2,
+      sections: classItem.numberSessions,
       duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
-      students: (classItem as any).enrollmentCount || 0, // Use actual enrollment count
+      students: (classItem as any).enrollmentCount || 0,
       level: 'Beginner' as const,
+      maxSeats: classItem.maxSeats,
+      startDate: classItem.startISO || classItem.startDate || classItem.date,
+      enrollmentCount: (classItem as any).enrollmentCount || 0,
     };
   });
   const totalPages = Math.ceil(allBatches.length / BATCHES_PER_PAGE);

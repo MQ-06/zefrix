@@ -19,6 +19,9 @@ interface Course {
   sections: number;
   duration: number;
   students: number;
+  maxSeats?: number;
+  startDate?: string;
+  enrollmentCount?: number;
 }
 
 interface CoursesPageCardProps {
@@ -45,6 +48,38 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
     }
   };
 
+  // Calculate urgency indicators
+  const getUrgencyInfo = () => {
+    const seatsLeft = course.maxSeats && course.enrollmentCount !== undefined 
+      ? course.maxSeats - course.enrollmentCount 
+      : null;
+    
+    let daysUntilStart = null;
+    if (course.startDate) {
+      try {
+        const startDate = new Date(course.startDate);
+        const today = new Date();
+        const diffTime = startDate.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays > 0 && diffDays <= 30) {
+          daysUntilStart = diffDays;
+        }
+      } catch (e) {
+        // Invalid date
+      }
+    }
+
+    // Prioritize: show seats if low (<=15), otherwise show days if soon (<=7)
+    if (seatsLeft !== null && seatsLeft > 0 && seatsLeft <= 15) {
+      return { type: 'seats', value: seatsLeft, text: `Only ${seatsLeft} Seat${seatsLeft === 1 ? '' : 's'} Left` };
+    } else if (daysUntilStart !== null && daysUntilStart <= 7) {
+      return { type: 'days', value: daysUntilStart, text: `Batch Starts in ${daysUntilStart} Day${daysUntilStart === 1 ? '' : 's'}` };
+    }
+    return null;
+  };
+
+  const urgencyInfo = getUrgencyInfo();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -66,10 +101,10 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
             onError={handleImageError}
           />
           
-          {/* Discount Badge - Top Left */}
-          {course.comparePrice && course.comparePrice > course.price && (
-            <div className="absolute top-4 left-4 bg-red-500 text-white px-3 py-1.5 rounded-full shadow-lg font-bold text-sm">
-              {Math.round(((course.comparePrice - course.price) / course.comparePrice) * 100)}% OFF
+          {/* Urgency Badge - Top Left */}
+          {urgencyInfo && (
+            <div className={`absolute top-4 left-4 ${urgencyInfo.type === 'seats' ? 'bg-red-600' : 'bg-orange-600'} text-white px-4 py-2 rounded-full shadow-lg font-bold text-sm animate-pulse`}>
+              🔥 {urgencyInfo.text}
             </div>
           )}
           
@@ -112,19 +147,9 @@ export default function CoursesPageCard({ course }: CoursesPageCardProps) {
 
           <div className="flex items-center justify-between pt-5 border-t border-gray-700 mt-auto mb-4">
             <div>
-              <div className="flex items-baseline gap-3 mb-1">
-                <h3 className="text-yellow-400 font-bold text-3xl">
-                  ₹{course.price.toFixed(2)}
-                </h3>
-                {course.comparePrice && course.comparePrice > course.price && (
-                  <div className="text-gray-500 text-lg line-through">
-                    ₹{course.comparePrice.toFixed(2)}
-                  </div>
-                )}
-              </div>
-              {course.comparePrice && course.comparePrice > course.price && (
-                <p className="text-green-400 text-sm font-semibold">Save ₹{(course.comparePrice - course.price).toFixed(2)}</p>
-              )}
+              <h3 className="text-yellow-400 font-bold text-3xl">
+                ₹{course.price.toFixed(2)}
+              </h3>
             </div>
           </div>
 

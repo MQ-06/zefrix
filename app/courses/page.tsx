@@ -296,10 +296,13 @@ function CoursesContent() {
     image: (classItem.videoLink && classItem.videoLink.trim() !== '') ? classItem.videoLink : DEFAULT_COURSE_IMAGE,
     price: classItem.price,
     originalPrice: classItem.price * 1.2,
-    sections: classItem.numberSessions, // This is actually sessions, but kept as 'sections' for component compatibility
+    sections: classItem.numberSessions,
     duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
-    students: (classItem as any).enrollmentCount || 0, // Use actual enrollment count
+    students: (classItem as any).enrollmentCount || 0,
     level: 'Beginner' as const,
+    maxSeats: classItem.maxSeats,
+    startDate: classItem.startISO || classItem.startDate || classItem.date,
+    enrollmentCount: (classItem as any).enrollmentCount || 0,
   }));
   const totalPages = Math.ceil(allCourses.length / COURSES_PER_PAGE);
   const startIndex = (currentPage - 1) * COURSES_PER_PAGE;

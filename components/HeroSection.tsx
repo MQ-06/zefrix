@@ -38,7 +38,7 @@ export default function HeroSection() {
             </motion.div> */}
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              Learn Live from Real Creators
+              Learn Live. Build Skills. Grow Faster.
               <motion.div 
                 className="inline-flex items-center gap-2 ml-3"
                 initial={{ opacity: 0, x: -20 }}
@@ -111,14 +111,15 @@ export default function HeroSection() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mt-4">
               <motion.div
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                className="my-2"
               >
                 <Link
                   href="/batches"
-                  className="bg-gradient-to-r from-primary to-secondary px-10 py-5 rounded-lg text-white font-semibold text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
+                  className="inline-block bg-gradient-to-r from-primary to-secondary px-12 py-6 rounded-lg text-white font-semibold text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
                 >
                   Explore Live Batches
                 </Link>
@@ -146,7 +147,7 @@ export default function HeroSection() {
           >
             <div className="relative">
               <img
-                src="/hero_page.png"
+                src="/pic.png"
                 alt="Hero Image"
                 className="w-full h-auto rounded-2xl"
               />

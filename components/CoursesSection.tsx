@@ -29,6 +29,11 @@ interface ApprovedClass {
   numberSessions: number;
   videoLink?: string;
   createdAt: any;
+  enrollmentCount?: number;
+  maxSeats?: number;
+  startDate?: string;
+  startISO?: string;
+  date?: string;
   [key: string]: any;
 }
 
@@ -86,13 +91,50 @@ export default function CoursesSection() {
         const q = window.query(classesRef, window.where('status', '==', 'approved'));
         
         // Set up real-time listener
-        const unsub = window.onSnapshot(q, (snapshot: any) => {
+        const unsub = window.onSnapshot(q, async (snapshot: any) => {
           const classes: ApprovedClass[] = [];
           snapshot.forEach((doc: any) => {
             classes.push({ classId: doc.id, ...doc.data() });
           });
           
           console.log(`✅ Real-time update: Found ${classes.length} approved classes`);
+          
+          // Fetch enrollment counts for all classes
+          if (classes.length > 0 && window.collection && window.query && window.where && window.getDocs) {
+            try {
+              const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+              
+              const enrollmentPromises = classes.map(async (classItem) => {
+                try {
+                  const enrollmentsQuery = window.query(
+                    enrollmentsRef,
+                    window.where('classId', '==', classItem.classId)
+                  );
+                  const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+                  return {
+                    classId: classItem.classId,
+                    enrollmentCount: enrollmentsSnapshot.size
+                  };
+                } catch (error) {
+                  return {
+                    classId: classItem.classId,
+                    enrollmentCount: 0
+                  };
+                }
+              });
+
+              const enrollmentCounts = await Promise.all(enrollmentPromises);
+              const enrollmentMap = new Map(
+                enrollmentCounts.map(ec => [ec.classId, ec.enrollmentCount])
+              );
+              
+              classes.forEach(classItem => {
+                classItem.enrollmentCount = enrollmentMap.get(classItem.classId) || 0;
+              });
+            } catch (error) {
+              console.error('Error fetching enrollment counts:', error);
+            }
+          }
           
           // Sort by creation date (newest first) and take first 6
           classes.sort((a, b) => {
@@ -173,8 +215,11 @@ export default function CoursesSection() {
     originalPrice: classItem.price * 1.2,
     sections: classItem.numberSessions,
     duration: classItem.scheduleType === 'one-time' ? 1 : Math.ceil(classItem.numberSessions / 7),
-    students: 0,
+    students: classItem.enrollmentCount || 0,
     level: 'Beginner' as const,
+    maxSeats: classItem.maxSeats,
+    startDate: classItem.startISO || classItem.startDate || classItem.date,
+    enrollmentCount: classItem.enrollmentCount || 0,
   }));
 
   return (
