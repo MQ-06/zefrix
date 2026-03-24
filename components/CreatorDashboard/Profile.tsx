@@ -40,6 +40,26 @@ export default function CreatorProfile() {
   const [profileImagePreview, setProfileImagePreview] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  const normalizeUrl = (value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed;
+    }
+
+    // For common URL-like inputs, auto-prepend https:// so browser url inputs remain valid.
+    if (trimmed.startsWith('www.') || (trimmed.includes('.') && !trimmed.includes(' '))) {
+      return `https://${trimmed}`;
+    }
+
+    return trimmed;
+  };
+
+  const isUrlField = (name: string) => {
+    return name === 'introVideo' || name === 'instagram' || name === 'youtube' || name === 'twitter' || name === 'linkedin';
+  };
+
   // Wait for Firebase and load user data
   useEffect(() => {
     const checkFirebase = () => {
@@ -122,11 +142,11 @@ export default function CreatorProfile() {
           bio: data.bio || '',
           expertise: data.expertise || data.skills || '',
           profileImage: data.profileImage || data.photoURL || '',
-          introVideo: data.introVideo || '',
-          instagram: data.socialHandles?.instagram || '',
-          youtube: data.socialHandles?.youtube || '',
-          twitter: data.socialHandles?.twitter || '',
-          linkedin: data.socialHandles?.linkedin || '',
+          introVideo: normalizeUrl(data.introVideo || ''),
+          instagram: normalizeUrl(data.socialHandles?.instagram || ''),
+          youtube: normalizeUrl(data.socialHandles?.youtube || ''),
+          twitter: normalizeUrl(data.socialHandles?.twitter || ''),
+          linkedin: normalizeUrl(data.socialHandles?.linkedin || ''),
         });
       } else {
         // Set defaults from Firebase Auth
@@ -152,6 +172,19 @@ export default function CreatorProfile() {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleUrlBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    if (!isUrlField(name)) return;
+
+    const normalized = normalizeUrl(value);
+    if (normalized !== value) {
+      setFormData(prev => ({
+        ...prev,
+        [name]: normalized,
+      }));
+    }
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -219,12 +252,12 @@ export default function CreatorProfile() {
         expertise: formData.expertise.trim(),
         profileImage: formData.profileImage.trim(),
         photoURL: formData.profileImage.trim(),
-        introVideo: formData.introVideo.trim(),
+        introVideo: normalizeUrl(formData.introVideo),
         socialHandles: {
-          instagram: formData.instagram.trim(),
-          youtube: formData.youtube.trim(),
-          twitter: formData.twitter.trim(),
-          linkedin: formData.linkedin.trim(),
+          instagram: normalizeUrl(formData.instagram),
+          youtube: normalizeUrl(formData.youtube),
+          twitter: normalizeUrl(formData.twitter),
+          linkedin: normalizeUrl(formData.linkedin),
         },
         role: 'creator',
         updatedAt: window.serverTimestamp(),
@@ -361,6 +394,7 @@ export default function CreatorProfile() {
             className="creator-form-input"
             value={formData.introVideo}
             onChange={handleInputChange}
+            onBlur={handleUrlBlur}
             placeholder="https://youtube.com/watch?v=... or https://example.com/video.mp4"
           />
           <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.6)' }}>
@@ -381,6 +415,7 @@ export default function CreatorProfile() {
             className="creator-form-input"
             value={formData.instagram}
             onChange={handleInputChange}
+            onBlur={handleUrlBlur}
             placeholder="https://instagram.com/yourhandle"
           />
         </div>
@@ -394,6 +429,7 @@ export default function CreatorProfile() {
             className="creator-form-input"
             value={formData.youtube}
             onChange={handleInputChange}
+            onBlur={handleUrlBlur}
             placeholder="https://youtube.com/@yourchannel"
           />
         </div>
@@ -407,6 +443,7 @@ export default function CreatorProfile() {
             className="creator-form-input"
             value={formData.twitter}
             onChange={handleInputChange}
+            onBlur={handleUrlBlur}
             placeholder="https://twitter.com/yourhandle"
           />
         </div>
@@ -420,6 +457,7 @@ export default function CreatorProfile() {
             className="creator-form-input"
             value={formData.linkedin}
             onChange={handleInputChange}
+            onBlur={handleUrlBlur}
             placeholder="https://linkedin.com/in/yourprofile"
           />
         </div>

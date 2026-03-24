@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useNotification } from '@/contexts/NotificationContext';
-
+import { useAuth } from '@/contexts/AuthContext';
 import { uploadImage, getClassThumbnailPath, validateFile } from '@/lib/utils/serverStorage';
+import { canEditField, getEditRestrictionReason } from '@/lib/fieldAccessControl';
+import { generateFieldChanges, createAuditLog } from '@/lib/auditLogging';
 
 declare global {
     interface Window {
@@ -12,6 +14,8 @@ declare global {
         doc: any;
         getDoc: any;
         updateDoc: any;
+        collection: any;
+        addDoc: any;
     }
 }
 
@@ -23,10 +27,12 @@ interface EditClassFormProps {
 
 export default function EditClassForm({ classId, onCancel, onSuccess }: EditClassFormProps) {
     const { showSuccess, showError } = useNotification();
+    const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [classData, setClassData] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isApproved, setIsApproved] = useState(false);
     
     // Thumbnail upload state
     const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
@@ -56,6 +62,7 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
             if (classSnap.exists()) {
                 const data = classSnap.data();
                 setClassData(data);
+                setIsApproved(data.status === 'approved');
                 // Set existing thumbnail URL as preview
                 if (data.videoLink) {
                     setThumbnailPreview(data.videoLink);
@@ -104,6 +111,9 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
             const form = e.currentTarget;
             const formData = new FormData(form);
 
+            // Collect original values for audit log
+            const originalData = { ...classData };
+
             // Upload thumbnail to server storage if file was selected
             let finalVideoLink = formData.get('videoLink') as string;
             if (thumbnailFile) {
@@ -136,8 +146,43 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                 updatedData.maxSeats = parseInt(maxSeatsInput.trim());
             }
 
+                        // Filter out restricted fields based on approval status
+                        const editableData: any = {};
+                        for (const [key, value] of Object.entries(updatedData)) {
+                            if (canEditField(key, isApproved)) {
+                                editableData[key] = value;
+                            }
+                        }
             const classRef = window.doc(window.firebaseDb, 'classes', classId);
-            await window.updateDoc(classRef, updatedData);
+                        await window.updateDoc(classRef, editableData);
+
+                        // Create and save audit log
+                        try {
+                            const changes = generateFieldChanges(originalData, editableData);
+                            if (changes.length > 0) {
+                                const auditLog = createAuditLog(
+                                    classId,
+                                    user?.uid || 'unknown',
+                                    changes,
+                                    {
+                                        creatorName: user?.name,
+                                        action: 'updated',
+                                        notes: `Fields edited: ${changes.map(c => c.fieldName).join(', ')}`
+                                    }
+                                );
+                
+                                // Save to auditLogs collection
+                                if (window.firebaseDb && window.collection && window.addDoc) {
+                                    await window.addDoc(
+                                        window.collection(window.firebaseDb, 'auditLogs'),
+                                        auditLog
+                                    );
+                                }
+                            }
+                        } catch (logError) {
+                            console.error('Failed to save audit log:', logError);
+                            // Don't fail the update if audit logging fails
+                        }
 
             showSuccess('Class updated successfully!');
             onSuccess();
@@ -188,44 +233,116 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
             </div>
 
             <form onSubmit={handleSubmit} className="creator-form">
+                                {isApproved && (
+                                    <div style={{
+                                        padding: '1.25rem',
+                                        background: 'rgba(66, 165, 245, 0.1)',
+                                        borderRadius: '8px',
+                                        border: '1px solid rgba(66, 165, 245, 0.3)',
+                                        marginBottom: '1.5rem'
+                                    }}>
+                                        <p style={{ color: '#42A5F5', fontSize: '0.9rem', margin: '0 0 0.5rem 0', fontWeight: 600 }}>
+                                            ✅ Course Approved
+                                        </p>
+                                        <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.8rem', margin: 0 }}>
+                                            Some fields are locked to maintain course integrity. You can only edit cosmetic and safe fields.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {!isApproved && (
+                                    <div style={{
+                                        padding: '1.25rem',
+                                        background: 'rgba(255, 152, 0, 0.1)',
+                                        borderRadius: '8px',
+                                        border: '1px solid rgba(255, 152, 0, 0.3)',
+                                        marginBottom: '1.5rem'
+                                    }}>
+                                        <p style={{ color: '#FF9800', fontSize: '0.9rem', margin: '0 0 0.5rem 0', fontWeight: 600 }}>
+                                            ⏳ Pending Approval
+                                        </p>
+                                        <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.8rem', margin: 0 }}>
+                                            You can edit all fields before the course is approved by an admin.
+                                        </p>
+                                    </div>
+                                )}
+
                 <div className="creator-form-group">
-                    <label htmlFor="title" className="creator-field-label">Title</label>
+                                        <label htmlFor="title" className="creator-field-label">
+                                            Title {canEditField('title', isApproved) ? '' : '🔒'}
+                                        </label>
                     <input
                         type="text"
                         id="title"
                         name="title"
                         className="creator-form-input"
                         defaultValue={classData?.title}
-                        required
+                                                required
+                                                disabled={!canEditField('title', isApproved)}
+                                                style={{
+                                                    opacity: canEditField('title', isApproved) ? 1 : 0.6,
+                                                    cursor: canEditField('title', isApproved) ? 'text' : 'not-allowed'
+                                                }}
                     />
+                                        {!canEditField('title', isApproved) && (
+                                            <small style={{ display: 'block', marginTop: '0.35rem', color: '#FF9800', fontSize: '0.75rem' }}>
+                                                {getEditRestrictionReason('title', isApproved)}
+                                            </small>
+                                        )}
                 </div>
 
                 <div className="creator-form-group">
-                    <label htmlFor="subtitle" className="creator-field-label">Subtitle</label>
+                                        <label htmlFor="subtitle" className="creator-field-label">
+                                            Subtitle {canEditField('subtitle', isApproved) ? '' : '🔒'}
+                                        </label>
                     <input
                         type="text"
                         id="subtitle"
                         name="subtitle"
                         className="creator-form-input"
                         defaultValue={classData?.subtitle}
-                        required
+                                                required
+                                                disabled={!canEditField('subtitle', isApproved)}
+                                                style={{
+                                                    opacity: canEditField('subtitle', isApproved) ? 1 : 0.6,
+                                                    cursor: canEditField('subtitle', isApproved) ? 'text' : 'not-allowed'
+                                                }}
                     />
+                                        {!canEditField('subtitle', isApproved) && (
+                                            <small style={{ display: 'block', marginTop: '0.35rem', color: '#FF9800', fontSize: '0.75rem' }}>
+                                                {getEditRestrictionReason('subtitle', isApproved)}
+                                            </small>
+                                        )}
                 </div>
 
                 <div className="creator-form-group">
-                    <label htmlFor="description" className="creator-field-label">Description</label>
+                                        <label htmlFor="description" className="creator-field-label">
+                                            Description {canEditField('description', isApproved) ? '' : '🔒'}
+                                        </label>
                     <textarea
                         id="description"
                         name="description"
                         className="creator-form-input creator-textarea"
                         rows={4}
                         defaultValue={classData?.description}
-                        required
+                                                required
+                                                disabled={!canEditField('description', isApproved)}
+                                                style={{
+                                                    opacity: canEditField('description', isApproved) ? 1 : 0.6,
+                                                    cursor: canEditField('description', isApproved) ? 'text' : 'not-allowed'
+                                                }}
                     />
+                                        {!canEditField('description', isApproved) && (
+                                            <small style={{ display: 'block', marginTop: '0.35rem', color: '#FF9800', fontSize: '0.75rem' }}>
+                                                {getEditRestrictionReason('description', isApproved)}
+                                            </small>
+                                        )}
                 </div>
 
                 <div className="creator-form-group">
-                    <label htmlFor="price" className="creator-field-label">Price (INR)</label>
+                                        <label htmlFor="price" className="creator-field-label">
+                                            Price (INR) {canEditField('price', isApproved) ? '' : '🔒'}
+                                        </label>
                     <input
                         type="number"
                         id="price"
@@ -234,12 +351,24 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                         min="0"
                         step="0.01"
                         defaultValue={classData?.price}
-                        required
+                                                required
+                                                disabled={!canEditField('price', isApproved)}
+                                                style={{
+                                                    opacity: canEditField('price', isApproved) ? 1 : 0.6,
+                                                    cursor: canEditField('price', isApproved) ? 'text' : 'not-allowed'
+                                                }}
                     />
+                                        {!canEditField('price', isApproved) && (
+                                            <small style={{ display: 'block', marginTop: '0.35rem', color: '#FF9800', fontSize: '0.75rem' }}>
+                                                {getEditRestrictionReason('price', isApproved)}
+                                            </small>
+                                        )}
                 </div>
 
                 <div className="creator-form-group">
-                    <label htmlFor="thumbnail" className="creator-field-label">Thumbnail Image</label>
+                                        <label htmlFor="thumbnail" className="creator-field-label">
+                                            Thumbnail Image {canEditField('videoLink', isApproved) ? '' : '🔒'}
+                                        </label>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
                         <div style={{ flex: 1 }}>
                             <input
@@ -247,7 +376,7 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                                 id="thumbnail"
                                 accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
                                 onChange={handleThumbnailChange}
-                                disabled={uploadingThumbnail || saving}
+                                                                disabled={uploadingThumbnail || saving || !canEditField('videoLink', isApproved)}
                                 style={{ 
                                     width: '100%',
                                     padding: '0.75rem',
@@ -255,12 +384,18 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                                     border: '1px solid rgba(255, 255, 255, 0.2)',
                                     borderRadius: '8px',
                                     color: '#fff',
-                                    cursor: (uploadingThumbnail || saving) ? 'not-allowed' : 'pointer'
+                                                                        cursor: (uploadingThumbnail || saving || !canEditField('videoLink', isApproved)) ? 'not-allowed' : 'pointer',
+                                                                        opacity: canEditField('videoLink', isApproved) ? 1 : 0.6
                                 }}
                             />
                             <small style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)', display: 'block', marginTop: '0.5rem' }}>
                                 Max size: 5MB. Formats: JPEG, PNG, WebP, GIF.
                             </small>
+                                                        {!canEditField('videoLink', isApproved) && (
+                                                            <small style={{ display: 'block', marginTop: '0.35rem', color: '#FF9800', fontSize: '0.75rem' }}>
+                                                                {getEditRestrictionReason('videoLink', isApproved)}
+                                                            </small>
+                                                        )}
                             {uploadingThumbnail && (
                                 <div style={{ marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
                                     ⏳ Uploading thumbnail...
@@ -291,7 +426,9 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                 </div>
 
                 <div className="creator-form-group">
-                    <label htmlFor="videoLink" className="creator-field-label">Video/Image Link (Optional)</label>
+                                        <label htmlFor="videoLink" className="creator-field-label">
+                                            Video/Image Link (Optional) {canEditField('videoLink', isApproved) ? '' : '🔒'}
+                                        </label>
                     <input
                         type="url"
                         id="videoLink"
@@ -299,15 +436,26 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                         className="creator-form-input"
                         defaultValue={classData?.videoLink}
                         placeholder="https://... (thumbnail image URL or video URL)"
-                        disabled={!!thumbnailFile}
+                                                disabled={!!thumbnailFile || !canEditField('videoLink', isApproved)}
+                                                style={{
+                                                    opacity: canEditField('videoLink', isApproved) ? 1 : 0.6,
+                                                    cursor: canEditField('videoLink', isApproved) ? 'text' : 'not-allowed'
+                                                }}
                     />
+                                        {!canEditField('videoLink', isApproved) && (
+                                            <small style={{ display: 'block', marginTop: '0.35rem', color: '#FF9800', fontSize: '0.75rem' }}>
+                                                {getEditRestrictionReason('videoLink', isApproved)}
+                                            </small>
+                                        )}
                     <small style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)', display: 'block', marginTop: '0.5rem' }}>
                         {thumbnailFile ? 'Uploaded thumbnail will override this field.' : 'If you don\'t upload a thumbnail above, you can provide an image or video URL here.'}
                     </small>
                 </div>
 
                 <div className="creator-form-group">
-                    <label htmlFor="maxSeats" className="creator-field-label">Max Seats (Optional)</label>
+                                        <label htmlFor="maxSeats" className="creator-field-label">
+                                            Max Seats (Optional) {canEditField('maxSeats', isApproved) ? '' : '🔒'}
+                                        </label>
                     <input
                         type="number"
                         id="maxSeats"
@@ -315,7 +463,17 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                         className="creator-form-input"
                         min="1"
                         defaultValue={classData?.maxSeats}
+                                                disabled={!canEditField('maxSeats', isApproved)}
+                                                style={{
+                                                    opacity: canEditField('maxSeats', isApproved) ? 1 : 0.6,
+                                                    cursor: canEditField('maxSeats', isApproved) ? 'text' : 'not-allowed'
+                                                }}
                     />
+                                        {!canEditField('maxSeats', isApproved) && (
+                                            <small style={{ display: 'block', marginTop: '0.35rem', color: '#FF9800', fontSize: '0.75rem' }}>
+                                                {getEditRestrictionReason('maxSeats', isApproved)}
+                                            </small>
+                                        )}
                 </div>
 
                 <div style={{
@@ -326,7 +484,7 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                     marginBottom: '1rem'
                 }}>
                     <p style={{ color: '#FF9800', fontSize: '0.875rem', margin: 0 }}>
-                        ℹ️ Note: Category, schedule, and other core details cannot be edited. If you need to change these, please delete this class and create a new one.
+                                                ℹ️ Note: Some core fields (category, subcategory, level) cannot be edited after approval. If you need to change these, please delete this class and create a new one.
                     </p>
                 </div>
 
