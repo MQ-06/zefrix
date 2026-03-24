@@ -61,6 +61,7 @@ export default function StudentDashboard() {
   // Profile state
   const [profileName, setProfileName] = useState('');
   const [profileInterests, setProfileInterests] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
   const [profileImage, setProfileImage] = useState('');
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [profileImagePreview, setProfileImagePreview] = useState('');
@@ -83,6 +84,13 @@ export default function StudentDashboard() {
   const [loadingTrending, setLoadingTrending] = useState(false);
   const [classEnrollmentCounts, setClassEnrollmentCounts] = useState<Record<string, number>>({});
   const [classRatings, setClassRatings] = useState<Record<string, { avg: number; count: number }>>({});
+  const [contactSubmitting, setContactSubmitting] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    subject: '',
+    message: '',
+  });
 
   const router = useRouter();
   const userInitial = ((user?.displayName || user?.email || 'S')[0] || 'S').toUpperCase();
@@ -266,11 +274,13 @@ export default function StudentDashboard() {
           const userData = userSnap.data();
           setProfileName(userData.displayName || user.displayName || '');
           setProfileInterests(userData.interests || '');
+          setProfilePhone(userData.phoneNumber || userData.phone || '');
           setProfileImage(userData.photoURL || user.photoURL || '');
           setProfileImagePreview(userData.photoURL || user.photoURL || '');
         } else {
           // Set defaults from Firebase Auth
           setProfileName(user.displayName || '');
+          setProfilePhone('');
           setProfileImage(user.photoURL || '');
           setProfileImagePreview(user.photoURL || '');
         }
@@ -298,6 +308,54 @@ export default function StudentDashboard() {
     setActiveView(view);
     // Scroll to top when switching views
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    setContactForm((prev) => ({
+      ...prev,
+      name: prev.name || user.displayName || '',
+      email: prev.email || user.email || '',
+    }));
+  }, [user]);
+
+  const handleContactInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setContactForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleContactSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    if (!contactForm.name.trim() || !contactForm.email.trim() || !contactForm.subject.trim() || !contactForm.message.trim()) {
+      showError('Please fill all enquiry form fields.');
+      return;
+    }
+
+    setContactSubmitting(true);
+    try {
+      const response = await fetch('/api/notifications/contact-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: contactForm.name.trim(),
+          email: contactForm.email.trim(),
+          subject: contactForm.subject.trim(),
+          messageId: `student-dashboard-${user?.uid || 'guest'}-${Date.now()}`,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send enquiry');
+      }
+
+      showSuccess('Enquiry sent successfully. Our team will contact you soon.');
+      setContactForm((prev) => ({ ...prev, subject: '', message: '' }));
+    } catch (error: any) {
+      showError(error?.message || 'Failed to send enquiry. Please try again.');
+    } finally {
+      setContactSubmitting(false);
+    }
   };
 
 
@@ -883,6 +941,15 @@ export default function StudentDashboard() {
           height: auto;
         }
 
+        .sidebar-role-label {
+          margin-top: 0.5rem;
+          color: rgba(255, 255, 255, 0.75);
+          font-size: 0.78rem;
+          font-weight: 600;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+        }
+
         .sidebar-nav {
           flex: 1;
           overflow-y: auto;
@@ -1374,6 +1441,62 @@ export default function StudentDashboard() {
           max-width: 600px;
         }
 
+        .student-contact-card {
+          max-width: 900px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .student-contact-text {
+          color: rgba(255, 255, 255, 0.85);
+          margin-bottom: 1rem;
+        }
+
+        .student-contact-actions {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .student-contact-chip {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.7rem 1rem;
+          border-radius: 10px;
+          color: #fff;
+          text-decoration: none;
+          font-weight: 600;
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          background: rgba(255, 255, 255, 0.08);
+          transition: all 0.2s ease;
+        }
+
+        .student-contact-chip:hover {
+          transform: translateY(-1px);
+          border-color: rgba(255, 255, 255, 0.36);
+        }
+
+        .student-contact-chip.call {
+          background: rgba(217, 42, 99, 0.18);
+          border-color: rgba(217, 42, 99, 0.45);
+        }
+
+        .student-contact-chip.whatsapp {
+          background: rgba(37, 211, 102, 0.16);
+          border-color: rgba(37, 211, 102, 0.45);
+        }
+
+        .student-contact-form {
+          margin-top: 1.5rem;
+          padding-top: 1.5rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          max-width: 100%;
+        }
+
+        .student-contact-submit {
+          max-width: 220px;
+        }
+
         .form-group {
           margin-bottom: 1.5rem;
         }
@@ -1402,6 +1525,34 @@ export default function StudentDashboard() {
         .form-input:focus {
           outline: none;
           border-color: #D92A63;
+        }
+
+        .save-profile-btn {
+          background: linear-gradient(135deg, #D92A63 0%, #FF654B 100%);
+          color: #fff;
+          border: 2px solid rgba(255, 255, 255, 0.28);
+          border-radius: 10px;
+          padding: 0.9rem 1.4rem;
+          font-size: 0.95rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .save-profile-btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 10px 22px rgba(217, 42, 99, 0.28);
+          border-color: rgba(255, 255, 255, 0.45);
+        }
+
+        .save-profile-btn:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
         }
 
         /* Select dropdown styling */
@@ -1763,6 +1914,10 @@ export default function StudentDashboard() {
             width: 120px;
           }
 
+          .sidebar-role-label {
+            font-size: 0.72rem;
+          }
+
           .welcome-section h2 {
             font-size: 1.125rem;
           }
@@ -1799,6 +1954,7 @@ export default function StudentDashboard() {
         <div className={`sidebar ${isMenuOpen ? 'open' : ''}`}>
           <div className="sidebar-logo">
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f9_6907f6cf8f1c1a9c8e68ea5c_logo.png" alt="Zefrix" />
+            <div className="sidebar-role-label">Zefrix Learner</div>
           </div>
           <nav className="sidebar-nav">
             <a href="#" onClick={(e) => handleNavClick(e, 'dashboard')} className={`sidebar-nav-item ${activeView === 'dashboard' ? 'active' : ''}`}>
@@ -1821,6 +1977,10 @@ export default function StudentDashboard() {
             <a href="#" onClick={(e) => handleNavClick(e, 'browse-classes')} className={`sidebar-nav-item ${activeView === 'browse-classes' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Browse Batches</div>
+            </a>
+            <a href="#" onClick={(e) => handleNavClick(e, 'contact-us')} className={`sidebar-nav-item ${activeView === 'contact-us' ? 'active' : ''}`}>
+              <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+              <div>Contact Us</div>
             </a>
             <a href="#" onClick={(e) => handleNavClick(e, 'profile')} className={`sidebar-nav-item ${activeView === 'profile' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
@@ -2601,6 +2761,59 @@ export default function StudentDashboard() {
             </>
           )}
 
+          {(activeView as string) === 'contact-us' && (
+            <div className="creator-section">
+              <h2 className="section-title">Contact Us</h2>
+              <div className="widget-card student-contact-card">
+                <p className="student-contact-text">
+                  Reach us directly or send an enquiry from here.
+                </p>
+                <div className="student-contact-actions">
+                  <a href="tel:+918854996448" className="student-contact-chip call">Call +91 8854996448</a>
+                  <a href="https://wa.me/918854996448" target="_blank" rel="noopener noreferrer" className="student-contact-chip whatsapp">WhatsApp</a>
+                  <a href="mailto:contact@zefrix.com" className="student-contact-chip">contact@zefrix.com</a>
+                </div>
+
+                <form onSubmit={handleContactSubmit} className="profile-form student-contact-form">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="student-contact-name">Name</label>
+                    <input id="student-contact-name" name="name" className="form-input" value={contactForm.name} onChange={handleContactInputChange} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="student-contact-email">Email</label>
+                    <input id="student-contact-email" name="email" type="email" className="form-input" value={contactForm.email} onChange={handleContactInputChange} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="student-contact-subject">Subject</label>
+                    <input id="student-contact-subject" name="subject" className="form-input" value={contactForm.subject} onChange={handleContactInputChange} placeholder="Tell us what you need help with" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="student-contact-message">Message</label>
+                    <textarea id="student-contact-message" name="message" rows={5} className="form-input" value={contactForm.message} onChange={handleContactInputChange} placeholder="Write your enquiry..." required />
+                  </div>
+                  <button
+                    type="submit"
+                    className="save-profile-btn student-contact-submit"
+                    disabled={contactSubmitting}
+                    style={{
+                      marginTop: '0.75rem',
+                      background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+                      color: '#fff',
+                      border: '2px solid rgba(255, 255, 255, 0.3)',
+                      borderRadius: '10px',
+                      padding: '14px 24px',
+                      fontWeight: 700,
+                      cursor: contactSubmitting ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 8px 20px rgba(217, 42, 99, 0.25)',
+                    }}
+                  >
+                    {contactSubmitting ? 'Sending...' : 'Send Enquiry'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
           {activeView === 'profile' && (
             <>
               {/* My Profile */}
@@ -2690,6 +2903,7 @@ export default function StudentDashboard() {
                       await window.setDoc(userRef, {
                         displayName: profileName,
                         interests: profileInterests,
+                        phoneNumber: profilePhone,
                         photoURL: finalImageUrl,
                         email: user.email,
                         role: 'student',
@@ -2902,6 +3116,43 @@ export default function StudentDashboard() {
                       }}>
                         Separate multiple interests with commas
                       </p>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '1.75rem' }}>
+                      <label htmlFor="phone" className="form-label" style={{ 
+                        fontSize: '0.95rem', 
+                        fontWeight: '600',
+                        marginBottom: '0.75rem',
+                        display: 'block'
+                      }}>
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        id="phone"
+                        className="form-input"
+                        value={profilePhone}
+                        onChange={(e) => setProfilePhone(e.target.value)}
+                        placeholder="+91 9876543210"
+                        style={{
+                          width: '100%',
+                          padding: '0.875rem 1.25rem',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '12px',
+                          color: '#fff',
+                          fontSize: '1rem',
+                          transition: 'all 0.3s'
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = '#D92A63';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        }}
+                      />
                     </div>
 
                     <div className="form-group" style={{ marginBottom: '1.75rem' }}>

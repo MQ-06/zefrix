@@ -128,6 +128,15 @@ export default function AdminDashboard() {
   const [loadingPayouts, setLoadingPayouts] = useState(false);
   const [processingPayout, setProcessingPayout] = useState<string | null>(null);
   const [selectedPayout, setSelectedPayout] = useState<any | null>(null);
+  const [isEditingPayoutDetails, setIsEditingPayoutDetails] = useState(false);
+  const [savingPayoutDetailsId, setSavingPayoutDetailsId] = useState<string | null>(null);
+  const [payoutDetailsForm, setPayoutDetailsForm] = useState({
+    accountHolderName: '',
+    accountNumber: '',
+    ifscCode: '',
+    bankName: '',
+    upiId: ''
+  });
 
   // Modal state
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
@@ -933,6 +942,91 @@ export default function AdminDashboard() {
       showError(`Failed to mark payout as paid: ${error.message}`);
     } finally {
       setProcessingPayout(null);
+    }
+  };
+
+  const getNormalizedPayoutDetails = (bankDetails?: any) => ({
+    accountHolderName: (bankDetails?.accountHolderName || '').trim(),
+    accountNumber: (bankDetails?.accountNumber || '').trim(),
+    ifscCode: (bankDetails?.ifscCode || '').trim().toUpperCase(),
+    bankName: (bankDetails?.bankName || '').trim(),
+    upiId: (bankDetails?.upiId || '').trim().toLowerCase()
+  });
+
+  const openPayoutDetailsModal = (payout: any) => {
+    setSelectedPayout(payout);
+    setPayoutDetailsForm(getNormalizedPayoutDetails(payout?.bankDetails));
+    setIsEditingPayoutDetails(false);
+  };
+
+  const handleSavePayoutDetails = async (payout: any) => {
+    if (!window.firebaseDb || !window.doc || !window.updateDoc) {
+      showError('Firebase not initialized');
+      return;
+    }
+
+    if (!user) {
+      showError('You must be logged in to perform this action');
+      return;
+    }
+
+    const normalizedDetails = getNormalizedPayoutDetails(payoutDetailsForm);
+    setSavingPayoutDetailsId(payout.creatorId);
+
+    try {
+      const userRef = window.doc(window.firebaseDb, 'users', payout.creatorId);
+      const timestampValue = window.serverTimestamp ? window.serverTimestamp() : new Date();
+
+      await window.updateDoc(userRef, {
+        bankAccountHolderName: normalizedDetails.accountHolderName,
+        accountHolderName: normalizedDetails.accountHolderName,
+        bankAccountNumber: normalizedDetails.accountNumber,
+        accountNumber: normalizedDetails.accountNumber,
+        bankIFSC: normalizedDetails.ifscCode,
+        ifscCode: normalizedDetails.ifscCode,
+        bankName: normalizedDetails.bankName,
+        upiId: normalizedDetails.upiId,
+        payoutDetailsUpdatedAt: timestampValue,
+        payoutDetailsUpdatedBy: user.email || user.uid,
+        updatedAt: timestampValue
+      });
+
+      setPayouts(prev => prev.map(item =>
+        item.creatorId === payout.creatorId
+          ? {
+              ...item,
+              bankDetails: {
+                accountHolderName: normalizedDetails.accountHolderName,
+                accountNumber: normalizedDetails.accountNumber,
+                ifscCode: normalizedDetails.ifscCode,
+                bankName: normalizedDetails.bankName,
+                upiId: normalizedDetails.upiId
+              }
+            }
+          : item
+      ));
+
+      setSelectedPayout((prev: any) => {
+        if (!prev || prev.creatorId !== payout.creatorId) return prev;
+        return {
+          ...prev,
+          bankDetails: {
+            accountHolderName: normalizedDetails.accountHolderName,
+            accountNumber: normalizedDetails.accountNumber,
+            ifscCode: normalizedDetails.ifscCode,
+            bankName: normalizedDetails.bankName,
+            upiId: normalizedDetails.upiId
+          }
+        };
+      });
+
+      setIsEditingPayoutDetails(false);
+      showSuccess(`Payout details updated for ${payout.name}`);
+    } catch (error: any) {
+      console.error('Error updating payout details:', error);
+      showError(`Failed to update payout details: ${error.message}`);
+    } finally {
+      setSavingPayoutDetailsId(null);
     }
   };
 
@@ -2054,27 +2148,18 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td>
-                      {payout.status === 'paid' ? (
-                        <span style={{ 
-                          padding: '0.5rem 1rem', 
-                          fontSize: '0.875rem',
-                          color: '#4CAF50',
-                          fontWeight: '600'
-                        }}>
-                          Paid
-                        </span>
-                      ) : (
-                        <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
-                          <button
-                            className="button-dark"
-                            onClick={() => {
-                              setSelectedPayout(payout);
-                            }}
-                            style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                            disabled={processingPayout === payout.creatorId}
-                          >
-                            View Details
-                          </button>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                        <button
+                          className="button-dark"
+                          onClick={() => {
+                            openPayoutDetailsModal(payout);
+                          }}
+                          style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                          disabled={processingPayout === payout.creatorId}
+                        >
+                          {payout.status === 'paid' ? 'View / Edit Details' : 'View Details'}
+                        </button>
+                        {payout.status !== 'paid' ? (
                           <button
                             className="button-dark"
                             onClick={() => {
@@ -2091,8 +2176,18 @@ export default function AdminDashboard() {
                           >
                             {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
                           </button>
-                        </div>
-                      )}
+                        ) : (
+                          <span style={{ 
+                            padding: '0.5rem 1rem', 
+                            fontSize: '0.875rem',
+                            color: '#4CAF50',
+                            fontWeight: '600',
+                            textAlign: 'center'
+                          }}>
+                            Paid
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -2144,17 +2239,17 @@ export default function AdminDashboard() {
                   )}
                 </div>
                 
-                {payout.status !== 'paid' && (
-                  <div className="payout-card-actions">
-                    <button
-                      className="button-dark payout-card-btn"
-                      onClick={() => {
-                        setSelectedPayout(payout);
-                      }}
-                      disabled={processingPayout === payout.creatorId}
-                    >
-                      View Details
-                    </button>
+                <div className="payout-card-actions">
+                  <button
+                    className="button-dark payout-card-btn"
+                    onClick={() => {
+                      openPayoutDetailsModal(payout);
+                    }}
+                    disabled={processingPayout === payout.creatorId}
+                  >
+                    {payout.status === 'paid' ? 'View / Edit Details' : 'View Details'}
+                  </button>
+                  {payout.status !== 'paid' && (
                     <button
                       className="button-dark payout-card-btn payout-card-btn-primary"
                       onClick={() => {
@@ -2166,8 +2261,8 @@ export default function AdminDashboard() {
                     >
                       {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -2644,6 +2739,15 @@ export default function AdminDashboard() {
         .sidebar-logo img {
           width: 150px;
           height: auto;
+        }
+
+        .sidebar-role-label {
+          margin-top: 0.5rem;
+          color: rgba(255, 255, 255, 0.75);
+          font-size: 0.78rem;
+          font-weight: 600;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
         }
 
         .sidebar-nav {
@@ -4651,6 +4755,10 @@ export default function AdminDashboard() {
             width: 120px;
           }
 
+          .sidebar-role-label {
+            font-size: 0.72rem;
+          }
+
           .hamburger {
             top: 0.75rem;
             left: 0.75rem;
@@ -5271,6 +5379,7 @@ export default function AdminDashboard() {
         <div className={`sidebar ${isMenuOpen ? 'open' : ''}`}>
           <div className="sidebar-logo">
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f9_6907f6cf8f1c1a9c8e68ea5c_logo.png" alt="Zefrix" />
+            <div className="sidebar-role-label">Zefrix Admin</div>
           </div>
           <nav className="sidebar-nav">
             <a onClick={() => handleNavClick('dashboard')} className={`sidebar-nav-item ${activePage === 'dashboard' ? 'active' : ''}`}>
@@ -5383,8 +5492,87 @@ export default function AdminDashboard() {
               </div>
 
               <div className="payout-bank-section">
-                <h3 className="payout-section-title">Bank Details</h3>
-                {selectedPayout.bankDetails && (selectedPayout.bankDetails.accountNumber || selectedPayout.bankDetails.ifscCode || selectedPayout.bankDetails.bankName) ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <h3 className="payout-section-title" style={{ marginBottom: 0 }}>Bank Details</h3>
+                  {!isEditingPayoutDetails ? (
+                    <button
+                      className="payout-modal-btn payout-btn-secondary"
+                      style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
+                      onClick={() => {
+                        setPayoutDetailsForm(getNormalizedPayoutDetails(selectedPayout.bankDetails));
+                        setIsEditingPayoutDetails(true);
+                      }}
+                      disabled={savingPayoutDetailsId === selectedPayout.creatorId}
+                    >
+                      Edit Bank/UPI
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        className="payout-modal-btn payout-btn-secondary"
+                        style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
+                        onClick={() => {
+                          setPayoutDetailsForm(getNormalizedPayoutDetails(selectedPayout.bankDetails));
+                          setIsEditingPayoutDetails(false);
+                        }}
+                        disabled={savingPayoutDetailsId === selectedPayout.creatorId}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="payout-modal-btn payout-btn-primary"
+                        style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
+                        onClick={() => handleSavePayoutDetails(selectedPayout)}
+                        disabled={savingPayoutDetailsId === selectedPayout.creatorId}
+                      >
+                        {savingPayoutDetailsId === selectedPayout.creatorId ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {isEditingPayoutDetails ? (
+                  <div className="payout-bank-details" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                    <input
+                      type="text"
+                      value={payoutDetailsForm.accountHolderName}
+                      onChange={(e) => setPayoutDetailsForm(prev => ({ ...prev, accountHolderName: e.target.value }))}
+                      placeholder="Account holder name"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem', width: '100%' }}
+                    />
+                    <input
+                      type="text"
+                      value={payoutDetailsForm.accountNumber}
+                      onChange={(e) => setPayoutDetailsForm(prev => ({ ...prev, accountNumber: e.target.value }))}
+                      placeholder="Account number"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem', width: '100%' }}
+                    />
+                    <input
+                      type="text"
+                      value={payoutDetailsForm.ifscCode}
+                      onChange={(e) => setPayoutDetailsForm(prev => ({ ...prev, ifscCode: e.target.value.toUpperCase() }))}
+                      placeholder="IFSC code"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem', width: '100%' }}
+                    />
+                    <input
+                      type="text"
+                      value={payoutDetailsForm.bankName}
+                      onChange={(e) => setPayoutDetailsForm(prev => ({ ...prev, bankName: e.target.value }))}
+                      placeholder="Bank name"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem', width: '100%' }}
+                    />
+                    <input
+                      type="text"
+                      value={payoutDetailsForm.upiId}
+                      onChange={(e) => setPayoutDetailsForm(prev => ({ ...prev, upiId: e.target.value.toLowerCase() }))}
+                      placeholder="UPI ID"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem', width: '100%' }}
+                    />
+                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>
+                      Admin can update any payout details here if creator shared corrected details over email/WhatsApp.
+                    </div>
+                  </div>
+                ) : selectedPayout.bankDetails && (selectedPayout.bankDetails.accountNumber || selectedPayout.bankDetails.ifscCode || selectedPayout.bankDetails.bankName || selectedPayout.bankDetails.upiId) ? (
                   <div className="payout-bank-details">
                     <div className="payout-info-item">
                       <span className="payout-info-label">Account Holder:</span>
@@ -5411,9 +5599,9 @@ export default function AdminDashboard() {
                   </div>
                 ) : (
                   <div className="payout-warning">
-                    <span style={{ color: '#FF9800', fontSize: '1rem', marginRight: '0.5rem' }}>⚠️</span>
+                    <span style={{ color: '#FF9800', fontSize: '1rem', marginRight: '0.5rem' }}>⚠</span>
                     <span style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                      Bank details not provided by creator. Please contact {selectedPayout.email} to get bank account information.
+                      No payout details saved yet. Use "Edit Bank/UPI" to add corrected details shared by creator.
                     </span>
                   </div>
                 )}

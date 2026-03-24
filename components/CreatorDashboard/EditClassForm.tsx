@@ -165,7 +165,7 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                                     user?.uid || 'unknown',
                                     changes,
                                     {
-                                        creatorName: user?.name,
+                                        creatorName: user?.name || undefined,
                                         action: 'updated',
                                         notes: `Fields edited: ${changes.map(c => c.fieldName).join(', ')}`
                                     }

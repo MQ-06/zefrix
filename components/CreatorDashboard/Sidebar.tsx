@@ -24,6 +24,7 @@ export default function CreatorSidebar({ activeSection, onSectionChange, onLogou
       <div className={`sidebar ${isMenuOpen ? 'open' : ''}`}>
         <div className="sidebar-logo">
           <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f9_6907f6cf8f1c1a9c8e68ea5c_logo.png" alt="Zefrix" />
+          <div className="sidebar-role-label">Zefrix Creator</div>
         </div>
         <nav className="sidebar-nav">
           <a href="#" onClick={(e) => handleNavClick(e, 'dashboard')} className={`sidebar-nav-item ${activeSection === 'dashboard' ? 'active' : ''}`}>
@@ -50,6 +51,10 @@ export default function CreatorSidebar({ activeSection, onSectionChange, onLogou
           <a href="#" onClick={(e) => handleNavClick(e, 'enrollments')} className={`sidebar-nav-item ${activeSection === 'enrollments' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
             <div>All Enrollments</div>
+          </a>
+          <a href="#" onClick={(e) => handleNavClick(e, 'contact-us')} className={`sidebar-nav-item ${activeSection === 'contact-us' ? 'active' : ''}`}>
+            <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+            <div>Contact Us</div>
           </a>
           <a href="#" onClick={(e) => handleNavClick(e, 'profile')} className={`sidebar-nav-item ${activeSection === 'profile' ? 'active' : ''}`}>
             <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />

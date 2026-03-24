@@ -60,6 +60,77 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(classId || null);
 
+  useEffect(() => {
+    let isMounted = true;
+    let authUnsubscribe: (() => void) | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const startLoading = (currentUser: any) => {
+      if (!isMounted || !currentUser) return;
+      setUser(currentUser);
+      if (classId) {
+        fetchEnrollments(classId);
+      } else {
+        fetchClassesAndEnrollments(currentUser.uid);
+      }
+    };
+
+    const tryInitialize = () => {
+      if (!window.firebaseAuth || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        return false;
+      }
+
+      const currentUser = window.firebaseAuth.currentUser;
+      if (currentUser) {
+        startLoading(currentUser);
+        return true;
+      }
+
+      if (!authUnsubscribe) {
+        authUnsubscribe = window.firebaseAuth.onAuthStateChanged((nextUser: any) => {
+          if (!isMounted) return;
+          if (nextUser) {
+            startLoading(nextUser);
+          } else {
+            setLoading(false);
+          }
+        });
+      }
+
+      return false;
+    };
+
+    if (!tryInitialize()) {
+      pollTimer = setInterval(() => {
+        if (tryInitialize() && pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }, 100);
+    }
+
+    return () => {
+      isMounted = false;
+      if (pollTimer) clearInterval(pollTimer);
+      if (authUnsubscribe) authUnsubscribe();
+    };
+  }, [classId]);
+
+  useEffect(() => {
+    setSelectedClassId(classId || null);
+  }, [classId]);
+
+  useEffect(() => {
+    if (classId) return;
+
+    if (selectedClassId) {
+      setEnrollments(allEnrollments.filter((enrollment) => enrollment.classId === selectedClassId));
+      return;
+    }
+
+    setEnrollments(allEnrollments);
+  }, [selectedClassId, allEnrollments, classId]);
+
   const fetchEnrollments = async (targetClassId: string) => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
       setLoading(false);
@@ -86,8 +157,8 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
 
       setEnrollments(enrollmentsList);
       
-      // Fetch student info for each enrollment
-      await fetchStudentsInfo(enrollmentsList);
+      // Render enrollments immediately; enrich student info in background.
+      void fetchStudentsInfo(enrollmentsList);
     } catch (error) {
       console.error('Error fetching enrollments:', error);
       showError('Failed to load enrollments');
@@ -131,18 +202,23 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
       // Then get all enrollments for these classes
       const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
       const fetchedEnrollments: Enrollment[] = [];
+      const enrollmentQueryPromises: Promise<any>[] = [];
 
-      // Firestore 'in' query has limit of 10, so we need to batch
+      // Firestore 'in' query has limit of 10, so we batch and run queries in parallel.
       for (let i = 0; i < classIds.length; i += 10) {
         const batch = classIds.slice(i, i + 10);
         const q = window.query(enrollmentsRef, window.where('classId', 'in', batch));
-        const querySnapshot = await window.getDocs(q);
+        enrollmentQueryPromises.push(window.getDocs(q));
+      }
+
+      const enrollmentSnapshots = await Promise.all(enrollmentQueryPromises);
+      enrollmentSnapshots.forEach((querySnapshot: any) => {
         querySnapshot.forEach((doc: any) => {
           fetchedEnrollments.push({ id: doc.id, ...doc.data() });
         });
-      }
+      });
 
-      // Sort by enrollment date (newest first)
+      
       fetchedEnrollments.sort((a, b) => {
         const aTime = a.enrolledAt?.toMillis?.() || 0;
         const bTime = b.enrolledAt?.toMillis?.() || 0;
@@ -151,7 +227,7 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
 
       setAllEnrollments(fetchedEnrollments);
       setEnrollments(fetchedEnrollments);
-      await fetchStudentsInfo(fetchedEnrollments);
+      void fetchStudentsInfo(fetchedEnrollments);
     } catch (error) {
       console.error('Error fetching enrollments:', error);
       showError('Failed to load enrollments');
@@ -163,47 +239,53 @@ export default function EnrollmentList({ classId, className, onBack }: Enrollmen
   const fetchStudentsInfo = async (enrollmentsList: Enrollment[]) => {
     if (!window.firebaseDb || !window.doc || !window.getDoc) return;
 
-    const studentsMap: Record<string, StudentInfo> = {};
-    const uniqueStudentIds = Array.from(new Set(enrollmentsList.map(e => e.studentId)));
+    const uniqueStudentIds = Array.from(new Set(enrollmentsList.map((e) => e.studentId)));
 
-    for (const studentId of uniqueStudentIds) {
-      // Start with enrollment data as fallback
-      const enrollment = enrollmentsList.find(e => e.studentId === studentId);
-      const fallbackInfo: StudentInfo = {
+    const fallbackMap: Record<string, StudentInfo> = {};
+    uniqueStudentIds.forEach((studentId) => {
+      const enrollment = enrollmentsList.find((e) => e.studentId === studentId);
+      fallbackMap[studentId] = {
         name: enrollment?.studentName || 'Student',
         email: enrollment?.studentEmail || '',
       };
+    });
 
-      // Try to fetch additional user info, but don't fail if permissions are insufficient
+    // Show fallback data immediately for a fast first render.
+    setStudentsInfo(fallbackMap);
+
+    const profileLookups = uniqueStudentIds.map(async (studentId) => {
+      const fallbackInfo = fallbackMap[studentId];
       try {
         const userRef = window.doc(window.firebaseDb, 'users', studentId);
         const userSnap = await window.getDoc(userRef);
         if (userSnap.exists()) {
           const userData = userSnap.data();
-          studentsMap[studentId] = {
+          return [studentId, {
             name: userData.name || userData.displayName || fallbackInfo.name,
             email: userData.email || fallbackInfo.email,
             phone: userData.phone || userData.whatsapp || '',
             photoURL: userData.photoURL || userData.profileImage || '',
-          };
-        } else {
-          // Use enrollment data if user document doesn't exist
-          studentsMap[studentId] = fallbackInfo;
+          } as StudentInfo] as const;
         }
       } catch (error: any) {
-        // If permission denied or any other error, use enrollment data
-        // This is expected for creators who cannot read student user documents
-        if (error.code === 'permission-denied' || error.code === 'PERMISSION_DENIED') {
-          // Silently use enrollment data - this is expected behavior
-          studentsMap[studentId] = fallbackInfo;
-        } else {
+        if (error.code !== 'permission-denied' && error.code !== 'PERMISSION_DENIED') {
           console.error(`Error fetching student ${studentId}:`, error);
-          studentsMap[studentId] = fallbackInfo;
         }
       }
-    }
 
-    setStudentsInfo(studentsMap);
+      return [studentId, fallbackInfo] as const;
+    });
+
+    const lookupResults = await Promise.allSettled(profileLookups);
+    const enrichedMap: Record<string, StudentInfo> = { ...fallbackMap };
+    lookupResults.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        const [studentId, info] = result.value;
+        enrichedMap[studentId] = info;
+      }
+    });
+
+    setStudentsInfo(enrichedMap);
   };
 
   const formatDate = (date: any) => {

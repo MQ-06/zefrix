@@ -6,7 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNotification } from '@/contexts/NotificationContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import SafePhoneInput from '@/components/SafePhoneInput';
+import PhoneInput, { isValidPhoneNumber, parsePhoneNumber } from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 
 export default function SignupLoginPage() {
   const [isActive, setIsActive] = useState(false);
@@ -16,6 +17,8 @@ export default function SignupLoginPage() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [signupPhoneNumber, setSignupPhoneNumber] = useState<string>('');
+  const [signupPhoneError, setSignupPhoneError] = useState<string>('');
   const router = useRouter();
   const { signUp, signIn, signInWithGoogle, resetPassword, user, loading } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
@@ -38,30 +41,32 @@ export default function SignupLoginPage() {
     }
   }, [user, loading, router]);
 
-  // Phone number validation function
-  const validatePhoneNumber = (phone: string): { valid: boolean; error?: string } => {
+  // Phone number validation function for signup form
+  const getSignupPhoneValidationError = (phone: string): string => {
     if (!phone || !phone.trim()) {
-      return { valid: false, error: 'Phone number is required' };
+      return 'Phone number is required';
     }
 
-    // Remove all non-digit characters for validation
-    const digitsOnly = phone.replace(/\D/g, '');
-    
-    // Check if it's a valid length (10-15 digits is standard for international numbers)
-    if (digitsOnly.length < 10) {
-      return { valid: false, error: 'Phone number must be at least 10 digits' };
-    }
-    
-    if (digitsOnly.length > 15) {
-      return { valid: false, error: 'Phone number is too long (maximum 15 digits)' };
+    const digitsCount = (phone || '').replace(/\D/g, '').length;
+    if (digitsCount > 15) {
+      return 'Phone number is too long. Please use up to 15 digits including country code.';
     }
 
-    // Check for common invalid patterns
-    if (/^0+$/.test(digitsOnly)) {
-      return { valid: false, error: 'Phone number cannot be all zeros' };
+    if (!isValidPhoneNumber(phone)) {
+      return 'Please enter a valid phone number';
     }
 
-    return { valid: true };
+    return '';
+  };
+
+  const handleSignupPhoneChange = (value?: string) => {
+    setSignupPhoneNumber(value || '');
+    if (value) {
+      const error = getSignupPhoneValidationError(value);
+      setSignupPhoneError(error);
+    } else {
+      setSignupPhoneError('');
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -74,10 +79,9 @@ export default function SignupLoginPage() {
     const name = (form.querySelector('#signup-name') as HTMLInputElement)?.value.trim();
     const email = (form.querySelector('#signup-email') as HTMLInputElement)?.value.trim();
     const password = (form.querySelector('#signup-password') as HTMLInputElement)?.value;
-    const phoneNumber = (form.querySelector('#signup-phone') as HTMLInputElement)?.value.trim();
 
     // Validation
-    if (!name || !email || !password || !phoneNumber) {
+    if (!name || !email || !password || !signupPhoneNumber) {
       showError('Please fill in all fields');
       setIsSubmitting(false);
       return;
@@ -97,15 +101,18 @@ export default function SignupLoginPage() {
     }
 
     // Validate phone number
-    const phoneValidation = validatePhoneNumber(phoneNumber);
-    if (!phoneValidation.valid) {
-      showError(phoneValidation.error || 'Invalid phone number');
+    const phoneError = getSignupPhoneValidationError(signupPhoneNumber);
+    if (phoneError) {
+      showError(phoneError);
+      setSignupPhoneError(phoneError);
       setIsSubmitting(false);
       return;
     }
 
     try {
-      await signUp(email, password, name, phoneNumber);
+      // Normalize phone to E.164 format
+      const normalizedPhone = signupPhoneNumber;
+      await signUp(email, password, name, normalizedPhone);
       showSuccess('Account created successfully! Redirecting...');
       // Delay redirect to show notification
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -677,6 +684,56 @@ export default function SignupLoginPage() {
               height: 40px;
             }
           }
+
+          /* Phone Input Styling */
+          .container .PhoneInput {
+            background-color: #eee;
+            border: none;
+            border-radius: 8px;
+            padding: 0;
+            width: 100%;
+            display: flex;
+            font-family: 'Poppins', sans-serif;
+            margin: 8px 0;
+          }
+
+          .container .PhoneInputCountry {
+            padding: 10px 8px;
+            border-right: 1px solid #ddd;
+            background-color: #eee;
+            border-radius: 8px 0 0 8px;
+          }
+
+          .container .PhoneInputCountrySelect {
+            border: none;
+            background-color: transparent;
+            color: #000;
+            font-size: 13px;
+            cursor: pointer;
+            outline: none;
+            font-family: 'Poppins', sans-serif;
+          }
+
+          .container .PhoneInputInput {
+            background-color: transparent !important;
+            border: none !important;
+            color: #000;
+            font-size: 13px;
+            padding: 10px 15px !important;
+            width: 100%;
+            outline: none;
+            font-family: 'Poppins', sans-serif;
+            margin: 0 !important;
+          }
+
+          .container .PhoneInputInput::placeholder {
+            color: #999;
+          }
+
+          .container .PhoneInput:focus-within {
+            background-color: #f5f5f5;
+            border: 1px solid #4e54c8;
+          }
         `}</style>
 
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
@@ -694,15 +751,37 @@ export default function SignupLoginPage() {
               <span style={{ color: '#666' }}>or use your email for registration</span>
               <input type="text" id="signup-name" placeholder="Name" required autoComplete="name" />
               <input type="email" id="signup-email" placeholder="Email" required autoComplete="email" />
-              <input 
-                type="tel" 
-                id="signup-phone" 
-                placeholder="Phone Number (e.g., +91 9876543210)" 
-                required 
-                autoComplete="tel"
-                pattern="[+]?[0-9\s\-()]{10,15}"
-                title="Please enter a valid phone number (10-15 digits)"
-              />
+              <div style={{
+                marginTop: '8px',
+                marginBottom: '8px'
+              }}>
+                <PhoneInput
+                  international
+                  defaultCountry="IN"
+                  value={signupPhoneNumber || undefined}
+                  onChange={handleSignupPhoneChange}
+                  placeholder="Enter mobile number"
+                  countryCallingCodeEditable={false}
+                />
+                {signupPhoneError && (
+                  <small style={{
+                    display: 'block',
+                    marginTop: '5px',
+                    color: '#d32f2f',
+                    fontSize: '12px'
+                  }}>
+                    {signupPhoneError}
+                  </small>
+                )}
+                <small style={{
+                  display: 'block',
+                  marginTop: '3px',
+                  color: '#999',
+                  fontSize: '11px'
+                }}>
+                  Uses international format (example: +919876543210)
+                </small>
+              </div>
               <div className="password-input-wrapper">
                 <input 
                   type={showSignupPassword ? "text" : "password"} 

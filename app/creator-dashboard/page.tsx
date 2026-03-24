@@ -144,7 +144,7 @@ interface ApprovedClass {
 }
 
 export default function CreatorDashboard() {
-  const { showError } = useNotification();
+  const { showError, showSuccess } = useNotification();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [user, setUser] = useState<any>(null);
   const [approvedClasses, setApprovedClasses] = useState<ApprovedClass[]>([]);
@@ -156,6 +156,13 @@ export default function CreatorDashboard() {
   const [viewingEnrollmentsClassId, setViewingEnrollmentsClassId] = useState<string | null>(null);
   const [viewingEnrollmentsClassName, setViewingEnrollmentsClassName] = useState<string | null>(null);
   const [liveClassData, setLiveClassData] = useState<{classId: string; sessionId: string; sessionData: any} | null>(null);
+  const [contactSubmitting, setContactSubmitting] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    subject: '',
+    message: '',
+  });
   const router = useRouter();
 
   useEffect(() => {
@@ -316,6 +323,54 @@ export default function CreatorDashboard() {
       if (confirm('Log out of Zefrix?')) {
         window.logout();
       }
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    setContactForm((prev) => ({
+      ...prev,
+      name: prev.name || user.displayName || '',
+      email: prev.email || user.email || '',
+    }));
+  }, [user]);
+
+  const handleContactInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setContactForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleContactSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    if (!contactForm.name.trim() || !contactForm.email.trim() || !contactForm.subject.trim() || !contactForm.message.trim()) {
+      showError('Please fill all enquiry form fields.');
+      return;
+    }
+
+    setContactSubmitting(true);
+    try {
+      const response = await fetch('/api/notifications/contact-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: contactForm.name.trim(),
+          email: contactForm.email.trim(),
+          subject: contactForm.subject.trim(),
+          messageId: `creator-dashboard-${user?.uid || 'guest'}-${Date.now()}`,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send enquiry');
+      }
+
+      showSuccess('Enquiry sent successfully. Our team will contact you soon.');
+      setContactForm((prev) => ({ ...prev, subject: '', message: '' }));
+    } catch (error: any) {
+      showError(error?.message || 'Failed to send enquiry. Please try again.');
+    } finally {
+      setContactSubmitting(false);
     }
   };
 
@@ -508,6 +563,15 @@ export default function CreatorDashboard() {
         .sidebar-logo img {
           width: 150px;
           height: auto;
+        }
+
+        .sidebar-role-label {
+          margin-top: 0.5rem;
+          color: rgba(255, 255, 255, 0.75);
+          font-size: 0.78rem;
+          font-weight: 600;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
         }
 
         .sidebar-nav {
@@ -804,6 +868,62 @@ export default function CreatorDashboard() {
           border-radius: 16px;
           max-width: 900px;
           margin: 0 auto;
+        }
+
+        .creator-contact-container {
+          max-width: 900px;
+          margin: 0 auto;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .creator-contact-text {
+          color: rgba(255, 255, 255, 0.85);
+          margin-bottom: 1rem;
+        }
+
+        .creator-contact-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+        }
+
+        .creator-contact-chip {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.7rem 1rem;
+          border-radius: 10px;
+          color: #fff;
+          text-decoration: none;
+          font-weight: 600;
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          background: rgba(255, 255, 255, 0.08);
+          transition: all 0.2s ease;
+        }
+
+        .creator-contact-chip:hover {
+          transform: translateY(-1px);
+          border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .creator-contact-chip.call {
+          background: rgba(217, 42, 99, 0.18);
+          border-color: rgba(217, 42, 99, 0.45);
+        }
+
+        .creator-contact-chip.whatsapp {
+          background: rgba(37, 211, 102, 0.16);
+          border-color: rgba(37, 211, 102, 0.45);
+        }
+
+        .creator-contact-form {
+          margin-top: 1.5rem;
+          padding-top: 1.5rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .creator-contact-submit {
+          max-width: 240px;
         }
 
         .creator-form {
@@ -1794,6 +1914,10 @@ export default function CreatorDashboard() {
             width: 120px;
           }
 
+          .sidebar-role-label {
+            font-size: 0.72rem;
+          }
+
           .hamburger {
             top: 0.75rem;
             left: 0.75rem;
@@ -2190,6 +2314,59 @@ export default function CreatorDashboard() {
             {activeSection === 'enrollments' && (
               <div id="enrollments" className="creator-section">
                 <EnrollmentList />
+              </div>
+            )}
+
+            {activeSection === 'contact-us' && (
+              <div id="contact-us" className="creator-section">
+                <h2 className="creator-section-title">Contact Us</h2>
+                <div className="creator-form-container creator-contact-container">
+                  <p className="creator-contact-text">
+                    Reach us directly or send an enquiry from here.
+                  </p>
+                  <div className="creator-contact-actions">
+                    <a href="tel:+918854996448" className="creator-contact-chip call">Call +91 8854996448</a>
+                    <a href="https://wa.me/918854996448" target="_blank" rel="noopener noreferrer" className="creator-contact-chip whatsapp">WhatsApp</a>
+                    <a href="mailto:contact@zefrix.com" className="creator-contact-chip">contact@zefrix.com</a>
+                  </div>
+
+                  <form onSubmit={handleContactSubmit} className="creator-form creator-contact-form">
+                    <div className="creator-form-group">
+                      <label className="creator-field-label" htmlFor="creator-contact-name">Name</label>
+                      <input id="creator-contact-name" name="name" className="creator-form-input" value={contactForm.name} onChange={handleContactInputChange} required />
+                    </div>
+                    <div className="creator-form-group">
+                      <label className="creator-field-label" htmlFor="creator-contact-email">Email</label>
+                      <input id="creator-contact-email" name="email" type="email" className="creator-form-input" value={contactForm.email} onChange={handleContactInputChange} required />
+                    </div>
+                    <div className="creator-form-group">
+                      <label className="creator-field-label" htmlFor="creator-contact-subject">Subject</label>
+                      <input id="creator-contact-subject" name="subject" className="creator-form-input" value={contactForm.subject} onChange={handleContactInputChange} placeholder="Tell us what you need help with" required />
+                    </div>
+                    <div className="creator-form-group">
+                      <label className="creator-field-label" htmlFor="creator-contact-message">Message</label>
+                      <textarea id="creator-contact-message" name="message" className="creator-form-input" value={contactForm.message} onChange={handleContactInputChange} rows={5} placeholder="Write your enquiry..." required />
+                    </div>
+                    <button
+                      type="submit"
+                      className="creator-submit-btn creator-contact-submit"
+                      disabled={contactSubmitting}
+                      style={{
+                        marginTop: '0.75rem',
+                        background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+                        color: '#fff',
+                        border: '2px solid rgba(255, 255, 255, 0.3)',
+                        borderRadius: '10px',
+                        padding: '14px 24px',
+                        fontWeight: 700,
+                        cursor: contactSubmitting ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 8px 20px rgba(217, 42, 99, 0.25)',
+                      }}
+                    >
+                      {contactSubmitting ? 'Sending...' : 'Send Enquiry'}
+                    </button>
+                  </form>
+                </div>
               </div>
             )}
 
