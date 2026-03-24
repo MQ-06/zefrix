@@ -10,6 +10,8 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import HydrationGuard from '@/components/HydrationGuard';
 import { isClient } from '@/app/utils/environment';
+import PhoneInput, { isValidPhoneNumber, parsePhoneNumber } from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 
 declare global {
   interface Window {
@@ -77,6 +79,61 @@ interface FormData {
   twitter: string;
   linkedin: string;
   password: string;
+}
+
+interface PhoneValidationResult {
+  valid: boolean;
+  error?: string;
+  normalized?: string;
+  countryIso?: string;
+  dialCode?: string;
+}
+
+function getPhoneDigitsCount(phone: string): number {
+  return (phone || '').replace(/\D/g, '').length;
+}
+
+function getStepOneValidationMessage(fullname: string, email: string, phone: string): string {
+  if (!fullname.trim()) {
+    return 'Please enter your full name to continue.';
+  }
+
+  if (!email.trim()) {
+    return 'Please enter your email address to continue.';
+  }
+
+  if (!phone.trim()) {
+    return 'Please enter your phone number to continue.';
+  }
+
+  if (getPhoneDigitsCount(phone) > 15) {
+    return 'Phone number is too long. Please use up to 15 digits including country code.';
+  }
+
+  if (!isValidPhoneNumber(phone)) {
+    return 'Please enter a valid phone number for the selected country.';
+  }
+
+  return '';
+}
+
+function validatePhoneNumber(phone: string): PhoneValidationResult {
+  if (!phone || !phone.trim()) {
+    return { valid: false, error: 'Phone number is required' };
+  }
+
+  if (!isValidPhoneNumber(phone)) {
+    return { valid: false, error: 'Please enter a valid phone number' };
+  }
+
+  const parsed = parsePhoneNumber(phone);
+
+  return {
+    valid: true,
+    normalized: parsed?.number || phone,
+    countryIso: parsed?.country || 'IN',
+    dialCode: parsed?.countryCallingCode || '91',
+  };
 }
 
 export default function BecomeACreatorPage() {
@@ -147,6 +204,10 @@ export default function BecomeACreatorPage() {
     }
   };
 
+  const handlePhoneNumberChange = (value?: string) => {
+    setFormData(prev => ({ ...prev, phoneNumber: value || '' }));
+  };
+
   // Handle profile image file upload
   const handleProfileImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -192,7 +253,7 @@ export default function BecomeACreatorPage() {
     switch (step) {
       case 1:
         // Require fullname, email, and phone number
-        return !!(formData.fullname && formData.email && formData.phoneNumber);
+        return !!(formData.fullname && formData.email && validatePhoneNumber(formData.phoneNumber).valid);
       case 2:
         return !!formData.category;
       case 3:
@@ -215,7 +276,7 @@ export default function BecomeACreatorPage() {
     // Validate the current step
     switch (currentStep) {
       case 1:
-        return !!(formData.fullname && formData.email && formData.phoneNumber);
+        return !!(formData.fullname && formData.email && validatePhoneNumber(formData.phoneNumber).valid);
       case 2:
         return !!formData.category;
       case 3:
@@ -228,6 +289,14 @@ export default function BecomeACreatorPage() {
         return false;
     }
   }, [mounted, currentStep, formData.fullname, formData.email, formData.phoneNumber, formData.category, formData.bio, formData.expertise, formData.password]);
+
+  const stepOneValidationMessage = useMemo(() => {
+    if (!mounted || currentStep !== 1 || isStepValid) {
+      return '';
+    }
+
+    return getStepOneValidationMessage(formData.fullname, formData.email, formData.phoneNumber);
+  }, [mounted, currentStep, isStepValid, formData.fullname, formData.email, formData.phoneNumber]);
 
   // Navigation handlers
   const nextStep = () => {
@@ -280,30 +349,14 @@ export default function BecomeACreatorPage() {
       return;
     }
 
-    // Validate phone number
-    const validatePhoneNumber = (phone: string): { valid: boolean; error?: string } => {
-      if (!phone || !phone.trim()) {
-        return { valid: false, error: 'Phone number is required' };
-      }
-      const digitsOnly = phone.replace(/\D/g, '');
-      if (digitsOnly.length < 10) {
-        return { valid: false, error: 'Phone number must be at least 10 digits' };
-      }
-      if (digitsOnly.length > 15) {
-        return { valid: false, error: 'Phone number is too long (maximum 15 digits)' };
-      }
-      if (/^0+$/.test(digitsOnly)) {
-        return { valid: false, error: 'Phone number cannot be all zeros' };
-      }
-      return { valid: true };
-    };
-
     const phoneValidation = validatePhoneNumber(formData.phoneNumber);
     if (!phoneValidation.valid) {
       showError(phoneValidation.error || 'Invalid phone number');
       setIsSubmitting(false);
       return;
     }
+
+    const normalizedPhoneNumber = phoneValidation.normalized || formData.phoneNumber.trim();
 
     const isGoogleUser = window.firebaseAuth?.currentUser?.providerData?.some(
       (provider: any) => provider.providerId === 'google.com'
@@ -319,7 +372,7 @@ export default function BecomeACreatorPage() {
       let currentUser = window.firebaseAuth?.currentUser;
       
       if (!currentUser) {
-        await signUp(formData.email.trim(), formData.password, formData.fullname.trim(), formData.phoneNumber.trim());
+        await signUp(formData.email.trim(), formData.password, formData.fullname.trim(), normalizedPhoneNumber);
         
         if (!window.firebaseAuth || !window.firebaseAuth.currentUser) {
           showError('User creation successful, but could not update profile. Please try logging in.');
@@ -336,7 +389,9 @@ export default function BecomeACreatorPage() {
         uid: currentUser.uid,
         email: formData.email.trim(),
         name: formData.fullname.trim(),
-        phoneNumber: formData.phoneNumber.trim(),
+        phoneNumber: normalizedPhoneNumber,
+        phoneCountryIso: phoneValidation.countryIso || 'IN',
+        phoneDialCode: phoneValidation.dialCode || '91',
         creatorCategory: formData.category,
         subCategory: formData.subCategory?.trim() || '',
         role: 'creator',
@@ -478,16 +533,24 @@ export default function BecomeACreatorPage() {
             </div>
             <div className="form-group">
               <label>Phone Number *</label>
-              <input
-                type="tel"
-                name="phoneNumber"
-                value={formData.phoneNumber}
-                onChange={handleInputChange}
-                placeholder="+91 9876543210"
-                required
-                pattern="[+]?[0-9\s\-()]{10,15}"
-                title="Please enter a valid phone number (10-15 digits)"
-              />
+              <div className="phone-input-wrapper">
+                <PhoneInput
+                  international
+                  defaultCountry="IN"
+                  value={formData.phoneNumber || undefined}
+                  onChange={handlePhoneNumberChange}
+                  placeholder="Enter mobile number"
+                  countryCallingCodeEditable={false}
+                />
+              </div>
+              <small style={{ display: 'block', marginTop: '0.35rem', color: '#777', fontSize: '11px' }}>
+                Uses international format (example: +919876543210)
+              </small>
+              {stepOneValidationMessage && (
+                <small className="field-error" role="alert">
+                  {stepOneValidationMessage}
+                </small>
+              )}
             </div>
           </div>
         );
@@ -964,6 +1027,52 @@ export default function BecomeACreatorPage() {
           outline: none;
         }
 
+        .phone-input-wrapper .PhoneInput {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          width: 100%;
+          padding: 10px 15px;
+          border: none;
+          border-radius: 8px;
+          background-color: #eee;
+          margin: 8px 0;
+          transition: all 0.3s ease;
+        }
+
+        .phone-input-wrapper .PhoneInput:focus-within {
+          background-color: #f5f5f5;
+        }
+
+        .phone-input-wrapper .PhoneInputCountry {
+          margin-right: 0;
+        }
+
+        .phone-input-wrapper .PhoneInputCountrySelect {
+          border: none;
+          background: transparent;
+          font-family: 'Poppins', sans-serif;
+          font-size: 13px;
+          color: #333;
+          cursor: pointer;
+        }
+
+        .phone-input-wrapper .PhoneInputInput {
+          border: none;
+          background: transparent;
+          color: #000;
+          font-family: 'Poppins', sans-serif;
+          font-size: 13px;
+          width: 100%;
+          outline: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .phone-input-wrapper .PhoneInputInput::placeholder {
+          color: #999;
+        }
+
         .password-input-wrapper {
           position: relative;
           width: 100%;
@@ -1012,6 +1121,14 @@ export default function BecomeACreatorPage() {
         .form-group select option {
           color: #333;
           background: white;
+        }
+
+        .field-error {
+          display: block;
+          margin-top: 0.35rem;
+          color: #d92a63;
+          font-size: 11px;
+          font-weight: 500;
         }
 
         .form-group input:focus,

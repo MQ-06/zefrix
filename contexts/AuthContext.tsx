@@ -26,6 +26,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+interface PhoneValidationResult {
+  valid: boolean;
+  error?: string;
+  normalized?: string;
+}
+
 declare global {
   interface Window {
     firebaseAuth: any;
@@ -56,6 +62,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const normalizeEmail = (email?: string | null) => (email || '').toLowerCase();
+
+  const validatePhoneNumber = (phone: string): PhoneValidationResult => {
+    if (!phone || !phone.trim()) {
+      return { valid: false, error: 'Phone number is required' };
+    }
+
+    const digitsOnly = phone.replace(/\D/g, '');
+
+    if (digitsOnly.length < 10) {
+      return { valid: false, error: 'Phone number must be at least 10 digits' };
+    }
+
+    if (digitsOnly.length > 15) {
+      return { valid: false, error: 'Phone number is too long (maximum 15 digits)' };
+    }
+
+    if (/^(\d)\1+$/.test(digitsOnly)) {
+      return { valid: false, error: 'Please enter a valid phone number' };
+    }
+
+    if (digitsOnly === '1234567890' || digitsOnly === '9876543210') {
+      return { valid: false, error: 'Please enter a valid phone number' };
+    }
+
+    const localPart = digitsOnly.startsWith('91') && digitsOnly.length === 12
+      ? digitsOnly.slice(2)
+      : (digitsOnly.startsWith('0') && digitsOnly.length === 11 ? digitsOnly.slice(1) : digitsOnly);
+
+    if (localPart.length === 10 && !/^[6-9]\d{9}$/.test(localPart)) {
+      return { valid: false, error: 'Please enter a valid mobile number' };
+    }
+
+    return { valid: true, normalized: digitsOnly };
+  };
 
   // Initialize Firebase immediately on client mount
   useEffect(() => {
@@ -386,6 +426,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Firebase Auth methods not available. Please refresh the page.');
     }
 
+    const hasPhoneInput = !!(phoneNumber && phoneNumber.trim());
+    const phoneValidation = hasPhoneInput ? validatePhoneNumber(phoneNumber as string) : { valid: false };
+    if (hasPhoneInput && !phoneValidation.valid) {
+      throw new Error(phoneValidation.error || 'Invalid phone number');
+    }
+    const normalizedPhoneNumber = hasPhoneInput ? phoneValidation.normalized : undefined;
+
     try {
       const cred = await window.createUserWithEmailAndPassword(window.firebaseAuth, email.trim(), password);
       await window.updateProfile(cred.user, { displayName: name });
@@ -406,7 +453,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // For students: name, email, and phoneNumber are required
       // For creators: profile completion is handled separately in become-a-creator page
       const hasRequiredFields = name.trim() && email.trim() && 
-        (role === 'student' ? (phoneNumber && phoneNumber.trim()) : true);
+        (role === 'student' ? !!normalizedPhoneNumber : true);
 
       const userData: any = {
         uid: cred.user.uid,
@@ -420,8 +467,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       // Add phone number if provided
-      if (phoneNumber && phoneNumber.trim()) {
-        userData.phoneNumber = phoneNumber.trim();
+      if (normalizedPhoneNumber) {
+        userData.phoneNumber = normalizedPhoneNumber;
       }
 
       await window.setDoc(window.doc(window.firebaseDb, 'users', cred.user.uid), userData);
