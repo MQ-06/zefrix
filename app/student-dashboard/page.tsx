@@ -413,125 +413,114 @@ export default function StudentDashboard() {
 
   // Fetch upcoming sessions for enrolled batches
   useEffect(() => {
-    const fetchUpcomingSessions = async () => {
-      if (!user || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        console.log('📋 Cannot fetch sessions - missing Firebase or user');
-        return;
-      }
+    let sessionsUnsubscribe: (() => void) | null = null;
+    let batchesUnsubscribe: (() => void) | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let sessionDocs: any[] = [];
+    let batchDocs: any[] = [];
 
-      if (enrollments.length === 0) {
-        console.log('📋 No enrollments found, skipping session fetch');
+    const rebuildUpcomingSessions = () => {
+      if (!user || enrollments.length === 0) {
         setUpcomingSessions([]);
         return;
       }
 
-      try {
-        console.log('🔍 Fetching sessions for enrollments:', enrollments.map(e => e.classId));
-        const sessions: any[] = [];
-        const now = new Date();
+      const enrollmentIds = enrollments.map(e => e.classId);
+      const now = new Date();
+      const sessions: any[] = [];
 
-        // Fetch from sessions collection
-        const sessionsRef = window.collection(window.firebaseDb, 'sessions');
-        const sessionsSnapshot = await window.getDocs(sessionsRef);
-        
-        console.log(`📊 Found ${sessionsSnapshot.size} total sessions in collection`);
-        
-        sessionsSnapshot.forEach((doc: any) => {
-          const session = { id: doc.id, ...doc.data() };
-          console.log('📅 Processing session:', {
-            classId: session.classId,
-            className: session.className,
-            sessionDate: session.sessionDate,
-            hasDate: !!session.sessionDate
+      sessionDocs.forEach((session: any) => {
+        let sessionDate: Date;
+        if (session.sessionDate?.toDate) {
+          sessionDate = session.sessionDate.toDate();
+        } else if (session.sessionDate) {
+          sessionDate = new Date(session.sessionDate);
+        } else {
+          return;
+        }
+
+        const isFuture = sessionDate > now;
+        const isRecent = (now.getTime() - sessionDate.getTime()) < 3600000;
+        if ((isFuture || isRecent) && enrollmentIds.includes(session.classId)) {
+          sessions.push({
+            ...session,
+            className: session.className || 'Batch',
+            sessionDate,
+            sessionTime: session.sessionTime || session.startTime || '',
+            meetingLink: session.meetingLink || session.meetLink,
+            recordingLink: session.recordingLink || session.recording || null,
+            status: session.status || 'scheduled',
+            sessionNumber: session.sessionNumber,
+            classId: session.classId
           });
-          
-          // Handle different date formats
-          let sessionDate: Date;
-          if (session.sessionDate?.toDate) {
-            sessionDate = session.sessionDate.toDate();
-          } else if (session.sessionDate) {
-            sessionDate = new Date(session.sessionDate);
-          } else {
-            console.log('⚠️ Session missing date, skipping:', session.id);
-            return; // Skip if no date
-          }
-          
-          // Only include future sessions (or past sessions within last hour for debugging)
-          const isFuture = sessionDate > now;
-          const isRecent = (now.getTime() - sessionDate.getTime()) < 3600000; // Last hour
-          
-          if (isFuture || isRecent) {
-            // Check if student is enrolled in this batch
-            const enrollmentIds = enrollments.map(e => e.classId);
-            const isEnrolled = enrollmentIds.includes(session.classId);
-            
-            console.log('✅ Session check:', {
-              classId: session.classId,
-              isEnrolled,
-              enrollmentIds,
-              isFuture,
-              isRecent
-            });
-            
-            if (isEnrolled) {
-              sessions.push({
-                ...session,
-                className: session.className || 'Batch',
-                sessionDate: sessionDate,
-                sessionTime: session.sessionTime || session.startTime || '',
-                meetingLink: session.meetingLink || session.meetLink,
-                recordingLink: session.recordingLink || session.recording || null,
-                status: session.status || 'scheduled',
-                sessionNumber: session.sessionNumber,
-                classId: session.classId
-              });
-            }
-          }
-        });
+        }
+      });
 
-        // Also fetch from batches (for backward compatibility)
-        const batchesRef = window.collection(window.firebaseDb, 'batches');
-        const allBatchesSnapshot = await window.getDocs(batchesRef);
-        
-        console.log(`📊 Found ${allBatchesSnapshot.size} total batches`);
-        
-        allBatchesSnapshot.forEach((doc: any) => {
-          const batch = { id: doc.id, ...doc.data() };
-          const batchDate = batch.batchDate?.toDate ? batch.batchDate.toDate() : new Date(batch.batchDate);
-          
-          // Only include future sessions
-          if (batchDate > now && batch.status === 'scheduled') {
-            // Check if student is enrolled in this batch
-            const isEnrolled = enrollments.some(e => e.classId === batch.classId);
-            if (isEnrolled) {
-              sessions.push({
-                ...batch,
-                className: batch.className || 'Batch',
-                sessionDate: batchDate,
-                sessionTime: batch.batchTime,
-                meetingLink: batch.meetingLink
-              });
-            }
-          }
-        });
+      batchDocs.forEach((batch: any) => {
+        const batchDate = batch.batchDate?.toDate ? batch.batchDate.toDate() : new Date(batch.batchDate);
+        if (batchDate > now && batch.status === 'scheduled' && enrollmentIds.includes(batch.classId)) {
+          sessions.push({
+            ...batch,
+            className: batch.className || 'Batch',
+            sessionDate: batchDate,
+            sessionTime: batch.batchTime,
+            meetingLink: batch.meetingLink
+          });
+        }
+      });
 
-        // Sort by date (earliest first)
-        sessions.sort((a, b) => {
-          const aTime = a.sessionDate?.getTime() || 0;
-          const bTime = b.sessionDate?.getTime() || 0;
-          return aTime - bTime;
-        });
+      sessions.sort((a, b) => {
+        const aTime = a.sessionDate?.getTime() || 0;
+        const bTime = b.sessionDate?.getTime() || 0;
+        return aTime - bTime;
+      });
 
-        console.log(`✅ Found ${sessions.length} upcoming sessions for enrolled batches`);
-        setUpcomingSessions(sessions.slice(0, 10)); // Limit to 10 upcoming
-      } catch (error) {
-        console.error('❌ Error fetching upcoming sessions:', error);
-      }
+      setUpcomingSessions(sessions.slice(0, 10));
     };
 
-    if (user) {
-      fetchUpcomingSessions();
-    }
+    const setupUpcomingSessionsListeners = () => {
+      if (!user || !window.firebaseDb || !window.collection || !window.onSnapshot) {
+        retryTimeout = setTimeout(setupUpcomingSessionsListeners, 500);
+        return;
+      }
+
+      if (enrollments.length === 0) {
+        setUpcomingSessions([]);
+        return;
+      }
+
+      const sessionsRef = window.collection(window.firebaseDb, 'sessions');
+      sessionsUnsubscribe = window.onSnapshot(sessionsRef, (sessionsSnapshot: any) => {
+        const nextSessions: any[] = [];
+        sessionsSnapshot.forEach((doc: any) => {
+          nextSessions.push({ id: doc.id, ...doc.data() });
+        });
+        sessionDocs = nextSessions;
+        rebuildUpcomingSessions();
+      }, (error: any) => {
+        console.error('❌ Error in sessions listener:', error);
+      });
+
+      const batchesRef = window.collection(window.firebaseDb, 'batches');
+      batchesUnsubscribe = window.onSnapshot(batchesRef, (batchesSnapshot: any) => {
+        const nextBatches: any[] = [];
+        batchesSnapshot.forEach((doc: any) => {
+          nextBatches.push({ id: doc.id, ...doc.data() });
+        });
+        batchDocs = nextBatches;
+        rebuildUpcomingSessions();
+      }, (error: any) => {
+        console.error('❌ Error in batches listener:', error);
+      });
+    };
+
+    setupUpcomingSessionsListeners();
+
+    return () => {
+      if (sessionsUnsubscribe) sessionsUnsubscribe();
+      if (batchesUnsubscribe) batchesUnsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [user, enrollments]);
 
   // Fetch enrollment counts for all batches

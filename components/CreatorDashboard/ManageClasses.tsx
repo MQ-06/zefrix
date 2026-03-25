@@ -13,6 +13,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
     getDoc: any;
     doc: any;
     deleteDoc: any;
@@ -47,6 +48,8 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
   const [deletingClassId, setDeletingClassId] = useState<string | null>(null);
 
   useEffect(() => {
+    let classUnsubscribe: (() => void) | null = null;
+
     // Wait for Firebase to initialize
     const checkFirebase = setInterval(() => {
       if (window.firebaseAuth && window.firebaseDb) {
@@ -54,15 +57,20 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
         const currentUser = window.firebaseAuth.currentUser;
         if (currentUser) {
           setUser(currentUser);
-          fetchClasses(currentUser.uid);
+          classUnsubscribe = setupClassesListener(currentUser.uid);
         } else {
           // Listen for auth state change
           const unsubscribe = window.firebaseAuth.onAuthStateChanged((user: any) => {
             if (user) {
               setUser(user);
-              fetchClasses(user.uid);
+              if (classUnsubscribe) classUnsubscribe();
+              classUnsubscribe = setupClassesListener(user.uid);
             } else {
               setLoading(false);
+              if (classUnsubscribe) {
+                classUnsubscribe();
+                classUnsubscribe = null;
+              }
             }
           });
           return () => unsubscribe();
@@ -70,40 +78,51 @@ export default function ManageClasses({ onEditClass, onViewClass, onViewEnrollme
       }
     }, 100);
 
-    return () => clearInterval(checkFirebase);
+    return () => {
+      clearInterval(checkFirebase);
+      if (classUnsubscribe) classUnsubscribe();
+    };
   }, []);
 
-  const fetchClasses = async (creatorId: string) => {
-    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+  const setupClassesListener = (creatorId: string) => {
+    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
       console.log('Firebase not ready yet');
       setLoading(false);
-      return;
+      return () => {};
     }
 
     setLoading(true);
     try {
       const classesRef = window.collection(window.firebaseDb, 'classes');
       const q = window.query(classesRef, window.where('creatorId', '==', creatorId));
-      const querySnapshot = await window.getDocs(q);
 
-      const classesList: ClassItem[] = [];
-      querySnapshot.forEach((doc: any) => {
-        classesList.push({ classId: doc.id, ...doc.data() });
+      const unsubscribe = window.onSnapshot(q, (querySnapshot: any) => {
+        const classesList: ClassItem[] = [];
+        querySnapshot.forEach((doc: any) => {
+          classesList.push({ classId: doc.id, ...doc.data() });
+        });
+
+        // Sort by creation date (newest first)
+        classesList.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+
+        setClasses(classesList);
+        setLoading(false);
+      }, (error: any) => {
+        console.error('Error in classes listener:', error);
+        showError('Failed to load classes. Please refresh the page.');
+        setLoading(false);
       });
 
-      // Sort by creation date (newest first)
-      classesList.sort((a, b) => {
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
-      });
-
-      setClasses(classesList);
+      return unsubscribe;
     } catch (error) {
-      console.error('Error fetching classes:', error);
+      console.error('Error setting up classes listener:', error);
       showError('Failed to load classes. Please refresh the page.');
-    } finally {
       setLoading(false);
+      return () => {};
     }
   };
 

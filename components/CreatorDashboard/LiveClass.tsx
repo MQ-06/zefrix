@@ -14,6 +14,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
     serverTimestamp: any;
     arrayUnion: any;
     Timestamp: any;
@@ -44,23 +45,26 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
   const [classStartTime, setClassStartTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    fetchEnrolledStudents();
+    const unsubscribe = setupEnrolledStudentsListener();
     // Mark session as live
     markSessionAsLive();
     setClassStartTime(new Date());
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [classId]);
 
-  const fetchEnrolledStudents = async () => {
-    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+  const setupEnrolledStudentsListener = () => {
+    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
       setLoading(false);
-      return;
+      return () => {};
     }
 
-    try {
-      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-      const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', classId));
-      const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
-      
+    const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+    const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', classId));
+
+    return window.onSnapshot(enrollmentsQuery, (enrollmentsSnapshot: any) => {
       const enrolledStudents: any[] = [];
       enrollmentsSnapshot.forEach((doc: any) => {
         const enrollment = doc.data();
@@ -75,11 +79,11 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
       });
 
       setStudents(enrolledStudents);
-    } catch (error) {
-      console.error('Error fetching students:', error);
-    } finally {
       setLoading(false);
-    }
+    }, (error: any) => {
+      console.error('Error in students listener:', error);
+      setLoading(false);
+    });
   };
 
   const markSessionAsLive = async () => {

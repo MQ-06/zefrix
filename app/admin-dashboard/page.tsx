@@ -145,8 +145,133 @@ export default function AdminDashboard() {
   const [classSessions, setClassSessions] = useState<any[]>([]);
   const [classBankDetails, setClassBankDetails] = useState<any>(null);
   const [loadingClassDetails, setLoadingClassDetails] = useState(false);
+  const [classEditForm, setClassEditForm] = useState({
+    title: '',
+    subtitle: '',
+    description: '',
+    category: '',
+    subCategory: '',
+    level: '',
+    price: '',
+    maxSeats: '',
+    videoLink: '',
+    demoVideoLink: ''
+  });
+  const [savingClassEdits, setSavingClassEdits] = useState(false);
+  const [sessionEditForms, setSessionEditForms] = useState<Record<string, { dateTime: string; meetingLink: string }>>({});
+  const [savingSessionId, setSavingSessionId] = useState<string | null>(null);
+  const [newSessionForm, setNewSessionForm] = useState({ dateTime: '', meetingLink: '' });
+  const [addingSession, setAddingSession] = useState(false);
 
   const router = useRouter();
+
+  const toDateTimeLocalValue = (dateInput: any, timeInput?: string) => {
+    if (!dateInput) return '';
+
+    const baseDate = dateInput?.toDate ? dateInput.toDate() : new Date(dateInput);
+    if (Number.isNaN(baseDate.getTime())) return '';
+
+    let hours = baseDate.getHours();
+    let minutes = baseDate.getMinutes();
+
+    if (timeInput && typeof timeInput === 'string' && timeInput.includes(':')) {
+      const [h, m] = timeInput.split(':');
+      const parsedHours = parseInt(h, 10);
+      const parsedMinutes = parseInt(m, 10);
+      if (!Number.isNaN(parsedHours)) hours = parsedHours;
+      if (!Number.isNaN(parsedMinutes)) minutes = parsedMinutes;
+    }
+
+    const datePart = `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}-${String(baseDate.getDate()).padStart(2, '0')}`;
+    const timePart = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    return `${datePart}T${timePart}`;
+  };
+
+  const extractSessionTime = (dateValue: Date) => {
+    return `${String(dateValue.getHours()).padStart(2, '0')}:${String(dateValue.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const formatDateYYYYMMDD = (dateValue: Date) => {
+    return `${dateValue.getFullYear()}-${String(dateValue.getMonth() + 1).padStart(2, '0')}-${String(dateValue.getDate()).padStart(2, '0')}`;
+  };
+
+  const buildClassSessionsPayload = (sessions: any[]) => {
+    const normalized = [...sessions].sort((a, b) => {
+      const aDate = a.sessionDate?.toDate ? a.sessionDate.toDate() : new Date(a.sessionDate);
+      const bDate = b.sessionDate?.toDate ? b.sessionDate.toDate() : new Date(b.sessionDate);
+      return aDate.getTime() - bDate.getTime();
+    });
+
+    return normalized.map((session: any, index: number) => {
+      const sessionDateValue = session.sessionDate?.toDate ? session.sessionDate.toDate() : new Date(session.sessionDate);
+      const sessionTimeValue = session.sessionTime || session.startTime || extractSessionTime(sessionDateValue);
+      return {
+        sessionNumber: Number(session.sessionNumber) || index + 1,
+        date: formatDateYYYYMMDD(sessionDateValue),
+        time: sessionTimeValue,
+        meetLink: session.meetingLink || session.meetLink || ''
+      };
+    });
+  };
+
+  const getClassSessionMetadata = (sessions: any[]) => {
+    if (!sessions.length) {
+      return { numberSessions: 0, startISO: '' };
+    }
+
+    const sortedByDate = [...sessions].sort((a, b) => {
+      const aDate = a.sessionDate?.toDate ? a.sessionDate.toDate() : new Date(a.sessionDate);
+      const bDate = b.sessionDate?.toDate ? b.sessionDate.toDate() : new Date(b.sessionDate);
+      return aDate.getTime() - bDate.getTime();
+    });
+
+    const firstSessionDate = sortedByDate[0].sessionDate?.toDate
+      ? sortedByDate[0].sessionDate.toDate()
+      : new Date(sortedByDate[0].sessionDate);
+
+    return {
+      numberSessions: sortedByDate.length,
+      startISO: Number.isNaN(firstSessionDate.getTime()) ? '' : firstSessionDate.toISOString()
+    };
+  };
+
+  const validateMeetingLink = (meetingLink: string) => {
+    const value = (meetingLink || '').trim();
+    if (!value) return null;
+
+    try {
+      const parsedUrl = new URL(value);
+      if (parsedUrl.protocol !== 'https:') {
+        return 'Meeting link must use HTTPS.';
+      }
+      if (!parsedUrl.hostname || !parsedUrl.hostname.includes('.')) {
+        return 'Please enter a valid meeting URL.';
+      }
+      return null;
+    } catch {
+      return 'Please enter a valid meeting URL.';
+    }
+  };
+
+  const validateSessionDateIntegrity = (sessionDate: Date, sessionIdToIgnore?: string) => {
+    if (Number.isNaN(sessionDate.getTime())) {
+      return 'Invalid session date/time.';
+    }
+
+    const currentMinute = Math.floor(sessionDate.getTime() / 60000);
+    const duplicate = classSessions.find((session: any) => {
+      if (session.id === sessionIdToIgnore) return false;
+      const existingDate = session.sessionDate?.toDate ? session.sessionDate.toDate() : new Date(session.sessionDate);
+      if (Number.isNaN(existingDate.getTime())) return false;
+      return Math.floor(existingDate.getTime() / 60000) === currentMinute;
+    });
+
+    if (duplicate) {
+      return 'Another session already exists at the same date/time. Choose a different slot.';
+    }
+
+    return null;
+  };
 
   useEffect(() => {
     // Load Firebase SDKs dynamically
@@ -310,7 +435,20 @@ export default function AdminDashboard() {
       const classRef = window.doc(window.firebaseDb, 'classes', classId);
       const classSnap = await window.getDoc(classRef);
       if (classSnap.exists()) {
-        setSelectedClassDetails({ classId, ...classSnap.data() });
+        const classData = classSnap.data();
+        setSelectedClassDetails({ classId, ...classData });
+        setClassEditForm({
+          title: classData.title || '',
+          subtitle: classData.subtitle || '',
+          description: classData.description || '',
+          category: classData.category || '',
+          subCategory: classData.subCategory || '',
+          level: classData.level || '',
+          price: classData.price !== undefined && classData.price !== null ? String(classData.price) : '',
+          maxSeats: classData.maxSeats !== undefined && classData.maxSeats !== null ? String(classData.maxSeats) : '',
+          videoLink: classData.videoLink || '',
+          demoVideoLink: classData.demoVideoLink || classData.demoVideo || ''
+        });
       }
 
       // Get sessions
@@ -327,6 +465,15 @@ export default function AdminDashboard() {
         return aDate.getTime() - bDate.getTime();
       });
       setClassSessions(sessions);
+      const initialSessionForms: Record<string, { dateTime: string; meetingLink: string }> = {};
+      sessions.forEach((session: any) => {
+        initialSessionForms[session.id] = {
+          dateTime: toDateTimeLocalValue(session.sessionDate, session.sessionTime || session.startTime),
+          meetingLink: session.meetingLink || session.meetLink || ''
+        };
+      });
+      setSessionEditForms(initialSessionForms);
+      setNewSessionForm({ dateTime: '', meetingLink: '' });
 
       // Get bank details from batch creator
       if (classSnap.exists()) {
@@ -348,6 +495,260 @@ export default function AdminDashboard() {
       showError('Failed to load batch details');
     } finally {
       setLoadingClassDetails(false);
+    }
+  };
+
+  const handleSaveClassEdits = async () => {
+    if (!selectedClassDetails?.classId) {
+      showError('No class selected');
+      return;
+    }
+
+    if (!window.firebaseDb || !window.doc || !window.updateDoc) {
+      showError('Firebase not initialized');
+      return;
+    }
+
+    if (!classEditForm.title.trim()) {
+      showError('Class title is required');
+      return;
+    }
+
+    setSavingClassEdits(true);
+    try {
+      const classRef = window.doc(window.firebaseDb, 'classes', selectedClassDetails.classId);
+      const parsedPrice = classEditForm.price.trim() === '' ? null : Number(classEditForm.price);
+      const parsedMaxSeats = classEditForm.maxSeats.trim() === '' ? null : Number(classEditForm.maxSeats);
+
+      if (classEditForm.price.trim() !== '' && Number.isNaN(parsedPrice)) {
+        throw new Error('Price must be a valid number');
+      }
+
+      if (classEditForm.maxSeats.trim() !== '' && Number.isNaN(parsedMaxSeats)) {
+        throw new Error('Max seats must be a valid number');
+      }
+
+      const payload = {
+        title: classEditForm.title.trim(),
+        subtitle: classEditForm.subtitle.trim(),
+        description: classEditForm.description.trim(),
+        category: classEditForm.category.trim(),
+        subCategory: classEditForm.subCategory.trim(),
+        level: classEditForm.level.trim(),
+        price: parsedPrice,
+        maxSeats: parsedMaxSeats,
+        videoLink: classEditForm.videoLink.trim(),
+        demoVideoLink: classEditForm.demoVideoLink.trim(),
+        demoVideo: classEditForm.demoVideoLink.trim(),
+        updatedAt: new Date(),
+        adminEditedAt: new Date(),
+        adminEditedBy: user?.email || user?.uid || 'admin'
+      };
+
+      await window.updateDoc(classRef, payload);
+
+      setSelectedClassDetails((prev: any) => prev ? { ...prev, ...payload } : prev);
+      setPendingClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...payload } : item));
+      setApprovedClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...payload } : item));
+      await handleViewClassDetails(selectedClassDetails.classId);
+      showSuccess('Class details updated by admin');
+    } catch (error: any) {
+      console.error('Error updating class details:', error);
+      showError(`Failed to update class details: ${error.message}`);
+    } finally {
+      setSavingClassEdits(false);
+    }
+  };
+
+  const handleSaveSession = async (sessionId: string) => {
+    if (!window.firebaseDb || !window.doc || !window.updateDoc) {
+      showError('Firebase not initialized');
+      return;
+    }
+
+    const form = sessionEditForms[sessionId];
+    if (!form?.dateTime) {
+      showError('Please set session date and time');
+      return;
+    }
+
+    const parsedDate = new Date(form.dateTime);
+    if (Number.isNaN(parsedDate.getTime())) {
+      showError('Invalid session date/time');
+      return;
+    }
+
+    const meetingLinkError = validateMeetingLink(form.meetingLink || '');
+    if (meetingLinkError) {
+      showError(meetingLinkError);
+      return;
+    }
+
+    const sessionIntegrityError = validateSessionDateIntegrity(parsedDate, sessionId);
+    if (sessionIntegrityError) {
+      showError(sessionIntegrityError);
+      return;
+    }
+
+    setSavingSessionId(sessionId);
+    try {
+      const sessionRef = window.doc(window.firebaseDb, 'sessions', sessionId);
+      const sessionTime = extractSessionTime(parsedDate);
+      const meetingLink = form.meetingLink.trim();
+      const payload = {
+        sessionDate: parsedDate,
+        sessionTime,
+        startTime: sessionTime,
+        meetingLink,
+        meetLink: meetingLink,
+        updatedAt: new Date(),
+        adminEditedAt: new Date(),
+        adminEditedBy: user?.email || user?.uid || 'admin'
+      };
+
+      await window.updateDoc(sessionRef, payload);
+
+      const updatedSessions = classSessions.map((session: any) =>
+        session.id === sessionId
+          ? { ...session, ...payload }
+          : session
+      );
+      setClassSessions(updatedSessions);
+
+      if (selectedClassDetails?.classId) {
+        const classRef = window.doc(window.firebaseDb, 'classes', selectedClassDetails.classId);
+        const sessionMetadata = getClassSessionMetadata(updatedSessions);
+        const classSyncPayload = {
+          sessions: buildClassSessionsPayload(updatedSessions),
+          numberSessions: sessionMetadata.numberSessions,
+          startISO: sessionMetadata.startISO,
+          updatedAt: new Date(),
+          adminEditedAt: new Date(),
+          adminEditedBy: user?.email || user?.uid || 'admin'
+        };
+        await window.updateDoc(classRef, {
+          ...classSyncPayload
+        });
+
+        setSelectedClassDetails((prev: any) => prev ? { ...prev, ...classSyncPayload } : prev);
+        setPendingClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
+        setApprovedClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
+      }
+
+      showSuccess('Session updated by admin');
+    } catch (error: any) {
+      console.error('Error updating session:', error);
+      showError(`Failed to update session: ${error.message}`);
+    } finally {
+      setSavingSessionId(null);
+    }
+  };
+
+  const handleAddSessionByAdmin = async () => {
+    if (!selectedClassDetails?.classId) {
+      showError('No class selected');
+      return;
+    }
+
+    if (!window.firebaseDb || !window.collection || !window.addDoc) {
+      showError('Firebase not initialized');
+      return;
+    }
+
+    if (!newSessionForm.dateTime) {
+      showError('Please select date and time for new session');
+      return;
+    }
+
+    const parsedDate = new Date(newSessionForm.dateTime);
+    if (Number.isNaN(parsedDate.getTime())) {
+      showError('Invalid new session date/time');
+      return;
+    }
+
+    const meetingLinkError = validateMeetingLink(newSessionForm.meetingLink || '');
+    if (meetingLinkError) {
+      showError(meetingLinkError);
+      return;
+    }
+
+    const sessionIntegrityError = validateSessionDateIntegrity(parsedDate);
+    if (sessionIntegrityError) {
+      showError(sessionIntegrityError);
+      return;
+    }
+
+    setAddingSession(true);
+    try {
+      const maxSessionNumber = classSessions.reduce((max, session: any) => {
+        const current = Number(session.sessionNumber) || 0;
+        return Math.max(max, current);
+      }, 0);
+      const nextSessionNumber = maxSessionNumber + 1;
+      const sessionTime = extractSessionTime(parsedDate);
+      const meetingLink = newSessionForm.meetingLink.trim();
+
+      const sessionsRef = window.collection(window.firebaseDb, 'sessions');
+      const sessionPayload = {
+        classId: selectedClassDetails.classId,
+        className: selectedClassDetails.title || 'Class',
+        sessionNumber: nextSessionNumber,
+        sessionDate: parsedDate,
+        sessionTime,
+        startTime: sessionTime,
+        meetingLink,
+        meetLink: meetingLink,
+        creatorId: selectedClassDetails.creatorId || '',
+        createdAt: new Date(),
+        adminCreatedAt: new Date(),
+        adminCreatedBy: user?.email || user?.uid || 'admin'
+      };
+
+      const docRef = await window.addDoc(sessionsRef, sessionPayload);
+      const insertedSession = { id: docRef.id, ...sessionPayload };
+
+      const updatedSessions = [...classSessions, insertedSession].sort((a: any, b: any) => {
+        const aDate = a.sessionDate?.toDate ? a.sessionDate.toDate() : new Date(a.sessionDate);
+        const bDate = b.sessionDate?.toDate ? b.sessionDate.toDate() : new Date(b.sessionDate);
+        return aDate.getTime() - bDate.getTime();
+      });
+
+      setClassSessions(updatedSessions);
+      setSessionEditForms(prev => ({
+        ...prev,
+        [docRef.id]: {
+          dateTime: toDateTimeLocalValue(sessionPayload.sessionDate, sessionPayload.sessionTime),
+          meetingLink: sessionPayload.meetingLink || ''
+        }
+      }));
+
+      if (selectedClassDetails?.classId) {
+        const classRef = window.doc(window.firebaseDb, 'classes', selectedClassDetails.classId);
+        const sessionMetadata = getClassSessionMetadata(updatedSessions);
+        const classSyncPayload = {
+          sessions: buildClassSessionsPayload(updatedSessions),
+          numberSessions: sessionMetadata.numberSessions,
+          startISO: sessionMetadata.startISO,
+          updatedAt: new Date(),
+          adminEditedAt: new Date(),
+          adminEditedBy: user?.email || user?.uid || 'admin'
+        };
+        await window.updateDoc(classRef, {
+          ...classSyncPayload
+        });
+
+        setSelectedClassDetails((prev: any) => prev ? { ...prev, ...classSyncPayload } : prev);
+        setPendingClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
+        setApprovedClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
+      }
+
+      setNewSessionForm({ dateTime: '', meetingLink: '' });
+      showSuccess('New session added by admin');
+    } catch (error: any) {
+      console.error('Error adding session:', error);
+      showError(`Failed to add session: ${error.message}`);
+    } finally {
+      setAddingSession(false);
     }
   };
 
@@ -960,11 +1361,6 @@ export default function AdminDashboard() {
   };
 
   const handleSavePayoutDetails = async (payout: any) => {
-    if (!window.firebaseDb || !window.doc || !window.updateDoc) {
-      showError('Firebase not initialized');
-      return;
-    }
-
     if (!user) {
       showError('You must be logged in to perform this action');
       return;
@@ -974,22 +1370,27 @@ export default function AdminDashboard() {
     setSavingPayoutDetailsId(payout.creatorId);
 
     try {
-      const userRef = window.doc(window.firebaseDb, 'users', payout.creatorId);
-      const timestampValue = window.serverTimestamp ? window.serverTimestamp() : new Date();
+      const idToken = await window.firebaseAuth?.currentUser?.getIdToken?.();
+      if (!idToken) {
+        throw new Error('Authentication token missing. Please login again.');
+      }
 
-      await window.updateDoc(userRef, {
-        bankAccountHolderName: normalizedDetails.accountHolderName,
-        accountHolderName: normalizedDetails.accountHolderName,
-        bankAccountNumber: normalizedDetails.accountNumber,
-        accountNumber: normalizedDetails.accountNumber,
-        bankIFSC: normalizedDetails.ifscCode,
-        ifscCode: normalizedDetails.ifscCode,
-        bankName: normalizedDetails.bankName,
-        upiId: normalizedDetails.upiId,
-        payoutDetailsUpdatedAt: timestampValue,
-        payoutDetailsUpdatedBy: user.email || user.uid,
-        updatedAt: timestampValue
+      const response = await fetch('/api/admin/payout-details', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          creatorId: payout.creatorId,
+          bankDetails: normalizedDetails
+        })
       });
+
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Failed to update payout details');
+      }
 
       setPayouts(prev => prev.map(item =>
         item.creatorId === payout.creatorId
@@ -1730,7 +2131,16 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div className="class-card-actions">
+                  <div className="class-card-actions pending-actions">
+                    <button
+                      onClick={() => handleViewClassDetails(classItem.classId)}
+                      className="class-action-btn view-details-btn"
+                      disabled={isProcessing}
+                      style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                    >
+                      <Eye size={16} />
+                      <span>View Details</span>
+                    </button>
                     <button
                       onClick={() => handleClassAction(classItem.classId, 'approved')}
                       className="class-action-btn approve-btn"
@@ -1892,6 +2302,107 @@ export default function AdminDashboard() {
               <>
                 {/* Sessions */}
                 <div style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.25rem' }}>Admin Editable Class Fields</h3>
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    padding: '1rem',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    marginBottom: '1.5rem',
+                    display: 'grid',
+                    gap: '0.75rem'
+                  }}>
+                    <input
+                      type="text"
+                      value={classEditForm.title}
+                      onChange={(e) => setClassEditForm(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Class title"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem' }}
+                    />
+                    <input
+                      type="text"
+                      value={classEditForm.subtitle}
+                      onChange={(e) => setClassEditForm(prev => ({ ...prev, subtitle: e.target.value }))}
+                      placeholder="Class subtitle"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem' }}
+                    />
+                    <textarea
+                      value={classEditForm.description}
+                      onChange={(e) => setClassEditForm(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Class description"
+                      rows={4}
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem', resize: 'vertical' }}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <input
+                        type="text"
+                        value={classEditForm.category}
+                        onChange={(e) => setClassEditForm(prev => ({ ...prev, category: e.target.value }))}
+                        placeholder="Category"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem' }}
+                      />
+                      <input
+                        type="text"
+                        value={classEditForm.subCategory}
+                        onChange={(e) => setClassEditForm(prev => ({ ...prev, subCategory: e.target.value }))}
+                        placeholder="Sub-category"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem' }}
+                      />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+                      <input
+                        type="text"
+                        value={classEditForm.level}
+                        onChange={(e) => setClassEditForm(prev => ({ ...prev, level: e.target.value }))}
+                        placeholder="Level"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem' }}
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={classEditForm.price}
+                        onChange={(e) => setClassEditForm(prev => ({ ...prev, price: e.target.value }))}
+                        placeholder="Price"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem' }}
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={classEditForm.maxSeats}
+                        onChange={(e) => setClassEditForm(prev => ({ ...prev, maxSeats: e.target.value }))}
+                        placeholder="Max seats"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem' }}
+                      />
+                    </div>
+                    <input
+                      type="url"
+                      value={classEditForm.videoLink}
+                      onChange={(e) => setClassEditForm(prev => ({ ...prev, videoLink: e.target.value }))}
+                      placeholder="Class image URL (thumbnail)"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem' }}
+                    />
+                    <input
+                      type="url"
+                      value={classEditForm.demoVideoLink}
+                      onChange={(e) => setClassEditForm(prev => ({ ...prev, demoVideoLink: e.target.value }))}
+                      placeholder="Demo video URL"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.65rem 0.8rem' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+                      <span style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.8rem' }}>
+                        Admin has full privileges to update live batch details.
+                      </span>
+                      <button
+                        className="class-action-btn"
+                        onClick={handleSaveClassEdits}
+                        disabled={savingClassEdits}
+                        style={{ width: 'auto' }}
+                      >
+                        {savingClassEdits ? 'Saving...' : 'Save Class Edits'}
+                      </button>
+                    </div>
+                  </div>
+
                   <h3 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.25rem' }}>Sessions ({classSessions.length})</h3>
                   {classSessions.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -1905,23 +2416,62 @@ export default function AdminDashboard() {
                           <div style={{ color: '#fff', marginBottom: '0.5rem', fontWeight: '600' }}>
                             Session {idx + 1}
                           </div>
-                          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
-                            Date: {session.sessionDate?.toDate ? new Date(session.sessionDate.toDate()).toLocaleString() : 'N/A'}
-                          </div>
-                          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
-                            Time: {session.sessionTime || session.startTime || 'N/A'}
-                          </div>
-                          {session.meetingLink && (
-                            <div style={{ marginTop: '0.5rem' }}>
-                              <a href={session.meetingLink} target="_blank" rel="noopener noreferrer" style={{
-                                color: '#D92A63',
-                                textDecoration: 'none',
-                                fontSize: '0.875rem'
-                              }}>
-                                Meeting Link →
-                              </a>
+                          <div style={{ display: 'grid', gap: '0.6rem' }}>
+                            <input
+                              type="datetime-local"
+                              value={sessionEditForms[session.id]?.dateTime || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setSessionEditForms(prev => ({
+                                  ...prev,
+                                  [session.id]: {
+                                    ...(prev[session.id] || { dateTime: '', meetingLink: '' }),
+                                    dateTime: value
+                                  }
+                                }));
+                              }}
+                              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem' }}
+                            />
+                            <input
+                              type="url"
+                              value={sessionEditForms[session.id]?.meetingLink || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setSessionEditForms(prev => ({
+                                  ...prev,
+                                  [session.id]: {
+                                    ...(prev[session.id] || { dateTime: '', meetingLink: '' }),
+                                    meetingLink: value
+                                  }
+                                }));
+                              }}
+                              placeholder="Google Meet link"
+                              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem' }}
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{ color: 'rgba(255, 255, 255, 0.65)', fontSize: '0.8rem' }}>
+                                Current: {session.sessionDate?.toDate ? new Date(session.sessionDate.toDate()).toLocaleString() : 'N/A'} | {session.sessionTime || session.startTime || 'N/A'}
+                              </div>
+                              <button
+                                className="class-action-btn"
+                                onClick={() => handleSaveSession(session.id)}
+                                disabled={savingSessionId === session.id}
+                                style={{ width: 'auto' }}
+                              >
+                                {savingSessionId === session.id ? 'Saving...' : 'Save Session'}
+                              </button>
                             </div>
-                          )}
+                            {(sessionEditForms[session.id]?.meetingLink || session.meetingLink) && (
+                              <a
+                                href={sessionEditForms[session.id]?.meetingLink || session.meetingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#D92A63', textDecoration: 'none', fontSize: '0.82rem' }}
+                              >
+                                Open meeting link →
+                              </a>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1930,6 +2480,41 @@ export default function AdminDashboard() {
                       No sessions configured yet
                     </div>
                   )}
+
+                  <div style={{
+                    marginTop: '1rem',
+                    background: 'rgba(217, 42, 99, 0.08)',
+                    border: '1px solid rgba(217, 42, 99, 0.3)',
+                    borderRadius: '8px',
+                    padding: '1rem',
+                    display: 'grid',
+                    gap: '0.65rem'
+                  }}>
+                    <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.95rem' }}>Add New Google Meet Session</div>
+                    <input
+                      type="datetime-local"
+                      value={newSessionForm.dateTime}
+                      onChange={(e) => setNewSessionForm(prev => ({ ...prev, dateTime: e.target.value }))}
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem' }}
+                    />
+                    <input
+                      type="url"
+                      value={newSessionForm.meetingLink}
+                      onChange={(e) => setNewSessionForm(prev => ({ ...prev, meetingLink: e.target.value }))}
+                      placeholder="Google Meet link for this session"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        className="class-action-btn"
+                        onClick={handleAddSessionByAdmin}
+                        disabled={addingSession}
+                        style={{ width: 'auto' }}
+                      >
+                        {addingSession ? 'Adding...' : 'Add Session'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Bank Details */}
@@ -3843,6 +4428,16 @@ export default function AdminDashboard() {
           display: flex;
           gap: 0.75rem;
           margin-top: auto;
+        }
+
+        .class-card-actions.pending-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.65rem;
+        }
+
+        .class-card-actions.pending-actions .view-details-btn {
+          grid-column: 1 / -1;
         }
 
         .class-action-btn {

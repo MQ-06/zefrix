@@ -90,6 +90,8 @@ export default function ProductPage({ params }: PageProps) {
     let retryCount = 0;
     const MAX_RETRIES = 20; // Increased retries for hard refresh scenarios
     let retryTimeout: NodeJS.Timeout | null = null;
+    let classUnsubscribe: (() => void) | null = null;
+    let enrollmentsUnsubscribe: (() => void) | null = null;
 
     // Load Firebase if not already loaded
     const initializeFirebase = () => {
@@ -149,14 +151,14 @@ export default function ProductPage({ params }: PageProps) {
 
     initializeFirebase();
 
-    const fetchCourse = async () => {
+    const setupCourseListener = async () => {
       if (!isMounted) return;
 
       // Wait for Firebase to load with better retry logic
-      if (!window.firebaseDb || !window.doc || !window.getDoc || !window.collection || !window.query || !window.where || !window.getDocs) {
+      if (!window.firebaseDb || !window.doc || !window.collection || !window.query || !window.where || !window.onSnapshot) {
         if (retryCount < MAX_RETRIES) {
           retryCount++;
-          retryTimeout = setTimeout(fetchCourse, 300);
+          retryTimeout = setTimeout(setupCourseListener, 300);
           return;
         } else {
           console.error('Firebase failed to initialize after maximum retries');
@@ -172,69 +174,92 @@ export default function ProductPage({ params }: PageProps) {
 
       try {
         const docRef = window.doc(window.firebaseDb, 'classes', params.slug);
-        const docSnap = await window.getDoc(docRef);
+        if (classUnsubscribe) {
+          classUnsubscribe();
+          classUnsubscribe = null;
+        }
 
-        if (docSnap.exists()) {
+        classUnsubscribe = window.onSnapshot(docRef, (docSnap: any) => {
+          if (!isMounted) return;
+
+          if (!docSnap.exists()) {
+            setCourse(null);
+            setLoading(false);
+            if (enrollmentsUnsubscribe) {
+              enrollmentsUnsubscribe();
+              enrollmentsUnsubscribe = null;
+            }
+            return;
+          }
+
           const data = docSnap.data();
-          // Debug: Log subcategory field
-          console.log('📋 [Product Page] Subcategory data:', {
-            subCategory: data.subCategory,
-            subcategory: data.subcategory,
-            allData: data
-          });
-          // Only show approved classes
-          if (data.status === 'approved') {
-            // Fetch enrollment count
-            let enrollmentCount = 0;
-            if (window.collection && window.query && window.where && window.getDocs) {
-              try {
-                const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-                const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', docSnap.id));
-                const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
-                enrollmentCount = enrollmentsSnapshot.size;
-              } catch (error) {
-                console.error('Error fetching enrollment count:', error);
-              }
+          if (data.status !== 'approved') {
+            setCourse(null);
+            setLoading(false);
+            if (enrollmentsUnsubscribe) {
+              enrollmentsUnsubscribe();
+              enrollmentsUnsubscribe = null;
+            }
+            return;
+          }
+
+          const baseCourse = {
+            id: docSnap.id,
+            slug: docSnap.id,
+            title: data.title || 'Untitled Batch',
+            subtitle: data.subtitle || '',
+            price: data.price || 0,
+            image: (data.videoLink && data.videoLink.trim() !== '') ? data.videoLink : DEFAULT_COURSE_IMAGE,
+            instructor: data.creatorName || 'Instructor',
+            instructorId: data.creatorId || '',
+            instructorImage: getAvatarUrl(data.creatorName || 'Instructor', 200),
+            description: data.description || 'No description available.',
+            whatStudentsWillLearn: data.whatStudentsWillLearn || '',
+            level: data.level || '',
+            sections: data.numberSessions || 1,
+            duration: data.duration || 1,
+            students: 0,
+            enrollmentCount: course?.enrollmentCount || 0,
+            originalPrice: data.price || 0,
+            scheduleType: data.scheduleType || 'one-time',
+            startISO: data.startISO || '',
+            startDate: data.startDate || data.date || '',
+            endDate: data.endDate || '',
+            startTime: data.recurringStartTime || data.startTime || '',
+            endTime: data.recurringEndTime || data.endTime || '',
+            sessionLengthMinutes: data.sessionLengthMinutes || 60,
+            maxSeats: data.maxSeats || null,
+            days: data.days || [],
+            category: data.category || '',
+            subCategory: data.subCategory || data.subcategory || '',
+          };
+
+          setCourse(baseCourse);
+          setLoading(false);
+
+          if (window.collection && window.query && window.where && window.onSnapshot) {
+            if (enrollmentsUnsubscribe) {
+              enrollmentsUnsubscribe();
+              enrollmentsUnsubscribe = null;
             }
 
-            setCourse({
-              id: docSnap.id,
-              slug: docSnap.id,
-              title: data.title || 'Untitled Batch',
-              subtitle: data.subtitle || '',
-              price: data.price || 0,
-              image: (data.videoLink && data.videoLink.trim() !== '') ? data.videoLink : DEFAULT_COURSE_IMAGE,
-              instructor: data.creatorName || 'Instructor',
-              instructorId: data.creatorId || '',
-              instructorImage: getAvatarUrl(data.creatorName || 'Instructor', 200),
-              description: data.description || 'No description available.',
-              whatStudentsWillLearn: data.whatStudentsWillLearn || '',
-              level: data.level || '',
-              sections: data.numberSessions || 1,
-              duration: data.duration || 1,
-              students: 0,
-              enrollmentCount: enrollmentCount,
-              originalPrice: data.price || 0,
-              // Schedule information
-              scheduleType: data.scheduleType || 'one-time',
-              startISO: data.startISO || '',
-              startDate: data.startDate || data.date || '',
-              endDate: data.endDate || '',
-              startTime: data.recurringStartTime || data.startTime || '',
-              endTime: data.recurringEndTime || data.endTime || '',
-              sessionLengthMinutes: data.sessionLengthMinutes || 60,
-              maxSeats: data.maxSeats || null,
-              days: data.days || [],
-              category: data.category || '',
-              subCategory: data.subCategory || data.subcategory || '',
+            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+            const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', docSnap.id));
+            enrollmentsUnsubscribe = window.onSnapshot(enrollmentsQuery, (enrollmentsSnapshot: any) => {
+              if (!isMounted) return;
+              const enrollmentCount = enrollmentsSnapshot.size;
+              setCourse((prev: any) => prev ? { ...prev, enrollmentCount } : prev);
+            }, (error: any) => {
+              console.error('Error in enrollment count listener:', error);
             });
-          } else {
-            setCourse(null);
           }
-        } else {
-          // Batch not found
-          setCourse(null);
-        }
+        }, (error: any) => {
+          console.error('Error in product class listener:', error);
+          if (isMounted) {
+            setCourse(null);
+            setLoading(false);
+          }
+        });
       } catch (err) {
         console.error('Error fetching batch:', err);
         setCourse(null);
@@ -246,23 +271,25 @@ export default function ProductPage({ params }: PageProps) {
     // Listen for Firebase ready event
     const handleFirebaseReady = () => {
       if (isMounted) {
-        fetchCourse();
+        setupCourseListener();
       }
     };
     window.addEventListener('firebaseProductReady', handleFirebaseReady);
 
     // Try fetching immediately if Firebase is already loaded
     if (window.firebaseDb && window.doc && window.getDoc) {
-      fetchCourse();
+      setupCourseListener();
     } else {
       // Otherwise, start retry loop
-      fetchCourse();
+      setupCourseListener();
     }
 
     return () => {
       isMounted = false;
       window.removeEventListener('firebaseProductReady', handleFirebaseReady);
       if (retryTimeout) clearTimeout(retryTimeout);
+      if (classUnsubscribe) classUnsubscribe();
+      if (enrollmentsUnsubscribe) enrollmentsUnsubscribe();
     };
   }, [params.slug]);
 

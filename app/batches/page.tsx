@@ -14,6 +14,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
   }
 }
 
@@ -44,7 +45,7 @@ function BatchesContent() {
     if (typeof window === 'undefined') return;
     
     // Check if Firebase is already fully initialized
-    if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs) {
+    if (window.firebaseDb && window.collection && window.query && window.where && window.getDocs && window.onSnapshot) {
       console.log('✅ Firebase already initialized with all functions');
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('firebaseReady'));
@@ -64,7 +65,7 @@ function BatchesContent() {
     script.type = 'module';
     script.setAttribute('data-firebase-batches-init', 'true');
     script.textContent = `
-      import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      import { getFirestore, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
       
       // Wait for firebaseDb to be available (from AuthContext)
       const checkAndSetFunctions = () => {
@@ -74,9 +75,10 @@ function BatchesContent() {
           window.query = query;
           window.where = where;
           window.getDocs = getDocs;
+          window.onSnapshot = onSnapshot;
           
           // Verify they're set
-          if (window.collection && window.query && window.where && window.getDocs) {
+          if (window.collection && window.query && window.where && window.getDocs && window.onSnapshot) {
             console.log('✅ Firebase query functions added successfully');
             window.dispatchEvent(new CustomEvent('firebaseReady'));
           } else {
@@ -100,6 +102,7 @@ function BatchesContent() {
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | null = null;
+    let classesUnsubscribe: (() => void) | null = null;
     let isMounted = true;
     const MAX_RETRIES = 20; // Increased retries
     let retryCount = 0;
@@ -108,7 +111,7 @@ function BatchesContent() {
 
     const fetchBatches = async () => {
       // Wait for Firebase to be ready - check ALL required functions
-      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !window.onSnapshot) {
         // Listen for firebaseReady event on first attempt only
         if (!eventListenerAdded) {
           eventListenerAdded = true;
@@ -134,7 +137,8 @@ function BatchesContent() {
               collection: !!window.collection,
               query: !!window.query,
               where: !!window.where,
-              getDocs: !!window.getDocs
+              getDocs: !!window.getDocs,
+              onSnapshot: !!window.onSnapshot
             });
           }
           timeoutId = setTimeout(fetchBatches, delay);
@@ -146,7 +150,8 @@ function BatchesContent() {
             collection: !!window.collection,
             query: !!window.query,
             where: !!window.where,
-            getDocs: !!window.getDocs
+            getDocs: !!window.getDocs,
+            onSnapshot: !!window.onSnapshot
           });
           if (eventHandler) {
             window.removeEventListener('firebaseReady', eventHandler);
@@ -173,7 +178,7 @@ function BatchesContent() {
       setLoading(true);
       try {
         // Double-check all functions are available before using them
-        if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
+        if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !window.onSnapshot) {
           console.error('❌ Firebase functions not available when trying to fetch');
           if (isMounted) {
             setLoading(false);
@@ -188,73 +193,68 @@ function BatchesContent() {
         const classesRef = window.collection(window.firebaseDb, 'classes');
         const q = window.query(classesRef, window.where('status', '==', 'approved'));
         
-        // Use getDocs for one-time fetch (much faster than onSnapshot)
-        const snapshot = await window.getDocs(q);
-        
-        const classes: ApprovedClass[] = [];
-        snapshot.forEach((doc: any) => {
-          classes.push({ classId: doc.id, ...doc.data() });
-        });
-        
-        const endTime = performance.now();
-        console.log(`✅ Loaded ${classes.length} approved classes in ${(endTime - startTime).toFixed(2)}ms`);
-        
-        // Sort by creation date (newest first)
-        classes.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
+        if (classesUnsubscribe) {
+          classesUnsubscribe();
+          classesUnsubscribe = null;
+        }
 
-        // Fetch enrollment counts for all classes
-        if (classes.length > 0 && window.collection && window.query && window.where && window.getDocs) {
-          try {
-            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-            
-            // Fetch enrollment counts for all classes in parallel
-            const enrollmentPromises = classes.map(async (classItem) => {
-              try {
-                const enrollmentsQuery = window.query(
-                  enrollmentsRef,
-                  window.where('classId', '==', classItem.classId)
-                );
-                const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
-                return {
-                  classId: classItem.classId,
-                  enrollmentCount: enrollmentsSnapshot.size
-                };
-              } catch (error) {
-                console.error(`Error fetching enrollment count for class ${classItem.classId}:`, error);
-                return {
-                  classId: classItem.classId,
-                  enrollmentCount: 0
-                };
-              }
-            });
+        classesUnsubscribe = window.onSnapshot(q, async (snapshot: any) => {
+          const classes: ApprovedClass[] = [];
+          snapshot.forEach((doc: any) => {
+            classes.push({ classId: doc.id, ...doc.data() });
+          });
 
-            const enrollmentCounts = await Promise.all(enrollmentPromises);
-            
-            // Add enrollment counts to classes
-            const enrollmentMap = new Map(
-              enrollmentCounts.map(ec => [ec.classId, ec.enrollmentCount])
-            );
-            
-            classes.forEach(classItem => {
-              (classItem as any).enrollmentCount = enrollmentMap.get(classItem.classId) || 0;
-            });
-          } catch (error) {
-            console.error('Error fetching enrollment counts:', error);
-            // Continue without enrollment counts if fetch fails
-            classes.forEach(classItem => {
-              (classItem as any).enrollmentCount = 0;
-            });
+          const endTime = performance.now();
+          console.log(`✅ Live update: ${classes.length} approved classes in ${(endTime - startTime).toFixed(2)}ms`);
+
+          classes.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+
+          if (classes.length > 0 && window.collection && window.query && window.where && window.getDocs) {
+            try {
+              const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+              const enrollmentPromises = classes.map(async (classItem) => {
+                try {
+                  const enrollmentsQuery = window.query(
+                    enrollmentsRef,
+                    window.where('classId', '==', classItem.classId)
+                  );
+                  const enrollmentsSnapshot = await window.getDocs(enrollmentsQuery);
+                  return {
+                    classId: classItem.classId,
+                    enrollmentCount: enrollmentsSnapshot.size
+                  };
+                } catch {
+                  return { classId: classItem.classId, enrollmentCount: 0 };
+                }
+              });
+
+              const enrollmentCounts = await Promise.all(enrollmentPromises);
+              const enrollmentMap = new Map(enrollmentCounts.map(ec => [ec.classId, ec.enrollmentCount]));
+              classes.forEach(classItem => {
+                (classItem as any).enrollmentCount = enrollmentMap.get(classItem.classId) || 0;
+              });
+            } catch {
+              classes.forEach(classItem => {
+                (classItem as any).enrollmentCount = 0;
+              });
+            }
           }
-        }
-        
-        if (isMounted) {
-          setApprovedClasses(classes);
-          setLoading(false);
-        }
+
+          if (isMounted) {
+            setApprovedClasses(classes);
+            setLoading(false);
+          }
+        }, (error: any) => {
+          console.error('❌ Error in approved classes listener:', error);
+          if (isMounted) {
+            setApprovedClasses([]);
+            setLoading(false);
+          }
+        });
       } catch (error: any) {
         console.error('❌ Error fetching classes:', error);
         // Prevent error from propagating to Next.js error boundary
@@ -278,6 +278,7 @@ function BatchesContent() {
       if (eventHandler) {
         window.removeEventListener('firebaseReady', eventHandler);
       }
+      if (classesUnsubscribe) classesUnsubscribe();
     };
   }, []);
 

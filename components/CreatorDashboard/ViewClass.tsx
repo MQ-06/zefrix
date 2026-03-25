@@ -16,6 +16,8 @@ declare global {
         query: any;
         where: any;
         getDocs: any;
+        onSnapshot: any;
+        updateDoc: any;
     }
 }
 
@@ -78,100 +80,78 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
     const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'students'>('overview');
 
     useEffect(() => {
-        fetchClassData();
-        fetchEnrollments();
-        fetchSessions();
-    }, [classId]);
+        let classUnsubscribe: (() => void) | null = null;
+        let enrollmentsUnsubscribe: (() => void) | null = null;
+        let sessionsUnsubscribe: (() => void) | null = null;
+        let retryTimeout: NodeJS.Timeout | null = null;
 
-    const fetchClassData = async () => {
-        if (!window.firebaseDb || !window.doc || !window.getDoc) {
-            console.log('Firebase not ready yet');
-            setLoading(false);
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const classRef = window.doc(window.firebaseDb, 'classes', classId);
-            const classSnap = await window.getDoc(classRef);
-
-            if (classSnap.exists()) {
-                setClassData({ classId: classSnap.id, ...classSnap.data() } as ClassData);
-            } else {
-                showError('Batch not found!');
-                onBack();
+        const setupListeners = () => {
+            if (!window.firebaseDb || !window.doc || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+                retryTimeout = setTimeout(setupListeners, 300);
+                return;
             }
-        } catch (error) {
-            console.error('Error fetching class data:', error);
-            showError('Failed to load class data. Please try again.');
-        } finally {
-            setLoading(false);
-        }
-    };
 
+            setLoading(true);
 
-    const fetchEnrollments = async () => {
-        if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-            return;
-        }
-
-        try {
-            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
-            const q = window.query(enrollmentsRef, window.where('classId', '==', classId));
-            const querySnapshot = await window.getDocs(q);
-
-            const enrollmentsList: EnrollmentData[] = [];
-            querySnapshot.forEach((doc: any) => {
-                const data = doc.data();
-                enrollmentsList.push({ id: doc.id, ...data });
-                // Debug: Log attendance data
-                if (data.sessionAttendance) {
-                    console.log(`Enrollment ${doc.id} (${data.studentName}) - sessionAttendance keys:`, Object.keys(data.sessionAttendance));
+            const classRef = window.doc(window.firebaseDb, 'classes', classId);
+            classUnsubscribe = window.onSnapshot(classRef, (classSnap: any) => {
+                if (classSnap.exists()) {
+                    setClassData({ classId: classSnap.id, ...classSnap.data() } as ClassData);
+                    setLoading(false);
+                } else {
+                    showError('Batch not found!');
+                    onBack();
                 }
+            }, (error: any) => {
+                console.error('Error in class listener:', error);
+                showError('Failed to load class data. Please try again.');
+                setLoading(false);
             });
 
-            // Sort by enrollment date (newest first)
-            enrollmentsList.sort((a, b) => {
-                const aTime = a.enrolledAt?.toMillis?.() || 0;
-                const bTime = b.enrolledAt?.toMillis?.() || 0;
-                return bTime - aTime;
+            const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+            const enrollmentsQuery = window.query(enrollmentsRef, window.where('classId', '==', classId));
+            enrollmentsUnsubscribe = window.onSnapshot(enrollmentsQuery, (querySnapshot: any) => {
+                const enrollmentsList: EnrollmentData[] = [];
+                querySnapshot.forEach((doc: any) => {
+                    const data = doc.data();
+                    enrollmentsList.push({ id: doc.id, ...data });
+                });
+
+                enrollmentsList.sort((a, b) => {
+                    const aTime = a.enrolledAt?.toMillis?.() || 0;
+                    const bTime = b.enrolledAt?.toMillis?.() || 0;
+                    return bTime - aTime;
+                });
+
+                setEnrollments(enrollmentsList);
+            }, (error: any) => {
+                console.error('Error in enrollments listener:', error);
             });
 
-            console.log(`✅ Fetched ${enrollmentsList.length} enrollments for class ${classId}`);
-            setEnrollments(enrollmentsList);
-        } catch (error) {
-            console.error('Error fetching enrollments:', error);
-        }
-    };
-
-    const fetchSessions = async () => {
-        if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-            return;
-        }
-
-        try {
             const sessionsRef = window.collection(window.firebaseDb, 'sessions');
-            const q = window.query(sessionsRef, window.where('classId', '==', classId));
-            const querySnapshot = await window.getDocs(q);
+            const sessionsQuery = window.query(sessionsRef, window.where('classId', '==', classId));
+            sessionsUnsubscribe = window.onSnapshot(sessionsQuery, (querySnapshot: any) => {
+                const sessionsList: any[] = [];
+                querySnapshot.forEach((doc: any) => {
+                    sessionsList.push({ id: doc.id, ...doc.data() });
+                });
 
-            const sessionsList: any[] = [];
-            querySnapshot.forEach((doc: any) => {
-                const sessionData = { id: doc.id, ...doc.data() };
-                sessionsList.push(sessionData);
-                console.log(`Session ${doc.id} - status: ${sessionData.status}, attendance:`, sessionData.attendance);
+                sessionsList.sort((a, b) => (a.sessionNumber || 0) - (b.sessionNumber || 0));
+                setSessions(sessionsList);
+            }, (error: any) => {
+                console.error('Error in sessions listener:', error);
             });
+        };
 
-            // Sort by session number
-            sessionsList.sort((a, b) => {
-                return (a.sessionNumber || 0) - (b.sessionNumber || 0);
-            });
+        setupListeners();
 
-            console.log(`✅ Fetched ${sessionsList.length} sessions for class ${classId}`);
-            setSessions(sessionsList);
-        } catch (error) {
-            console.error('Error fetching sessions:', error);
-        }
-    };
+        return () => {
+            if (retryTimeout) clearTimeout(retryTimeout);
+            if (classUnsubscribe) classUnsubscribe();
+            if (enrollmentsUnsubscribe) enrollmentsUnsubscribe();
+            if (sessionsUnsubscribe) sessionsUnsubscribe();
+        };
+    }, [classId]);
 
     const formatDate = (timestamp: any) => {
         if (!timestamp) return 'N/A';
@@ -246,7 +226,6 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                 recordingLink: downloadURL,
                 recordingUploadedAt: new Date()
             });
-            fetchSessions();
             showSuccess('Recording uploaded successfully!');
         } catch (error: any) {
             console.error('Recording upload error:', error);
@@ -482,8 +461,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                     recurringEndTime={classData.recurringEndTime}
                                     days={classData.days}
                                     onSuccess={() => {
-                                        fetchClassData();
-                                        fetchSessions();
+                                        // Real-time listeners keep class and session data in sync.
                                     }}
                                 />
                             </div>
@@ -672,8 +650,7 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                         recurringEndTime={classData.recurringEndTime}
                                         days={classData.days}
                                         onSuccess={() => {
-                                            fetchClassData();
-                                            fetchSessions();
+                                            // Real-time listeners keep class and session data in sync.
                                         }}
                                     />
                                 </div>

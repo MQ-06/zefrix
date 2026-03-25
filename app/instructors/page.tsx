@@ -1,11 +1,19 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import InstructorCard from '@/components/InstructorCard';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useReliableFetch } from '@/app/hooks/useReliableFetch';
-import { isClient } from '@/app/utils/environment';
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
+  authDomain: "zefrix-custom.firebaseapp.com",
+  projectId: "zefrix-custom",
+  storageBucket: "zefrix-custom.firebasestorage.app",
+  messagingSenderId: "50732408558",
+  appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
+  measurementId: "G-27HS1SWB5X"
+};
 
 declare global {
   interface Window {
@@ -14,6 +22,7 @@ declare global {
     query: any;
     where: any;
     getDocs: any;
+    onSnapshot: any;
   }
 }
 
@@ -27,163 +36,153 @@ interface Creator {
 }
 
 function InstructorsContent() {
-  // Use reliable fetch hook with retry logic
-  const { data: creators = [], loading } = useReliableFetch<Creator[]>({
-    fetchFn: async () => {
-      // Wait for Firebase to be ready
-      if (!isClient || typeof window === 'undefined') {
-        throw new Error('Client-side only');
-      }
+  const [creators, setCreators] = useState<Creator[]>([]);
+  const [loading, setLoading] = useState(true);
+  const creatorsRef = useRef<Creator[]>([]);
+  const classCountRef = useRef<Record<string, number>>({});
+  const hasUsersSnapshotRef = useRef(false);
+  const hasClassesSnapshotRef = useRef(false);
 
-      // Wait for Firebase to initialize
-      let attempts = 0;
-      while (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
-        if (attempts++ > 50) {
-          throw new Error('Firebase initialization timeout');
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
 
-      // If Firebase is not initialized, try to initialize it
-      if (!window.firebaseDb) {
-        // Check if script is already being loaded
-        const existingScript = document.querySelector('script[data-firebase-instructors-init]');
-        if (existingScript) {
-          // Wait for existing script to load
-          await new Promise<void>((resolve) => {
-            const handleReady = () => {
-              window.removeEventListener('firebaseReady', handleReady);
-              resolve();
-            };
-            window.addEventListener('firebaseReady', handleReady);
-            setTimeout(() => resolve(), 5000); // Timeout after 5 seconds
-          });
-        } else {
-          const script = document.createElement('script');
-          script.type = 'module';
-          script.setAttribute('data-firebase-instructors-init', 'true');
-          script.textContent = `
-            try {
-              import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-              import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-              
-              const firebaseConfig = {
-                apiKey: "AIzaSyDnj-_1jW6g2p7DoJvOPKtPIWPwe42csRw",
-                authDomain: "zefrix-custom.firebaseapp.com",
-                projectId: "zefrix-custom",
-                storageBucket: "zefrix-custom.firebasestorage.app",
-                messagingSenderId: "50732408558",
-                appId: "1:50732408558:web:3468d17b9c5b7e1cccddff",
-                measurementId: "G-27HS1SWB5X"
-              };
-              
-              // Use existing app if already initialized
-              const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-              window.firebaseDb = getFirestore(app);
-              window.collection = collection;
-              window.query = query;
-              window.where = where;
-              window.getDocs = getDocs;
-              window.dispatchEvent(new CustomEvent('firebaseReady'));
-            } catch (error) {
-              console.error('Firebase initialization error:', error);
-              window.dispatchEvent(new CustomEvent('firebaseError', { detail: error }));
-            }
-          `;
-          script.onerror = () => {
-            console.error('❌ Failed to load Firebase script');
-            window.dispatchEvent(new CustomEvent('firebaseError', { detail: new Error('Script load failed') }));
-          };
-          document.head.appendChild(script);
+    let isActive = true;
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let usersUnsubscribe: (() => void) | null = null;
+    let classesUnsubscribe: (() => void) | null = null;
 
-          // Wait for Firebase to be ready
-          await new Promise<void>((resolve) => {
-            const handleReady = () => {
-              window.removeEventListener('firebaseReady', handleReady);
-              resolve();
-            };
-            window.addEventListener('firebaseReady', handleReady);
-            setTimeout(() => resolve(), 5000); // Timeout after 5 seconds
-          });
+    const applyMergedData = () => {
+      const merged = creatorsRef.current.map((creator) => ({
+        ...creator,
+        totalClasses: classCountRef.current[creator.id] || 0,
+      }));
+
+      if (isActive) {
+        setCreators(merged);
+        if (hasUsersSnapshotRef.current && hasClassesSnapshotRef.current) {
+          setLoading(false);
         }
       }
+    };
 
-      try {
-        console.log('🔍 Fetching creators from Firestore...');
-        console.log('Firebase DB:', !!window.firebaseDb);
-        console.log('Collection function:', !!window.collection);
+    const setupListeners = () => {
+      if (!isActive) return;
 
-        const usersRef = window.collection(window.firebaseDb, 'users');
-        console.log('Users ref created:', !!usersRef);
+      if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.onSnapshot) {
+        retryTimeout = setTimeout(setupListeners, 200);
+        return;
+      }
 
-        const q = window.query(usersRef, window.where('role', '==', 'creator'));
-        console.log('Query created:', !!q);
+      const usersRef = window.collection(window.firebaseDb, 'users');
+      const usersQuery = window.query(usersRef, window.where('role', '==', 'creator'));
 
-        console.log('📡 Executing getDocs...');
-        const querySnapshot = await window.getDocs(q);
+      const classesRef = window.collection(window.firebaseDb, 'classes');
+      const classesQuery = window.query(classesRef, window.where('status', '==', 'approved'));
 
-        console.log(`✅ Query executed! Found ${querySnapshot.size} creators in query`);
-
+      usersUnsubscribe = window.onSnapshot(usersQuery, (usersSnapshot: any) => {
         const creatorsData: Creator[] = [];
-        querySnapshot.forEach((doc: any) => {
+        usersSnapshot.forEach((doc: any) => {
           const data = doc.data();
-          console.log('Creator data:', { id: doc.id, name: data.name, role: data.role, photoURL: data.photoURL, profileImage: data.profileImage });
-          // Prefer photoURL, then profileImage, then empty string (will fallback to avatar API in component)
-          const imageUrl = data.photoURL || data.profileImage || '';
           creatorsData.push({
             id: doc.id,
             name: data.name || data.email?.split('@')[0] || 'Creator',
             email: data.email || '',
-            photoURL: imageUrl,
+            photoURL: data.photoURL || data.profileImage || '',
             role: data.role,
-            totalClasses: 0
+            totalClasses: 0,
           });
         });
 
-        // Get class count for each creator (only approved classes)
-        // Wrap in try-catch to handle potential errors gracefully
-        try {
-          const classesRef = window.collection(window.firebaseDb, 'classes');
-          const classesQuery = window.query(classesRef, window.where('status', '==', 'approved'));
-          const classesSnapshot = await window.getDocs(classesQuery);
-
-          const creatorClassCount: { [key: string]: number } = {};
-          classesSnapshot.forEach((doc: any) => {
-            const classData = doc.data();
-            if (classData.creatorId && classData.status === 'approved') {
-              creatorClassCount[classData.creatorId] = (creatorClassCount[classData.creatorId] || 0) + 1;
-            }
-          });
-
-          creatorsData.forEach(creator => {
-            creator.totalClasses = creatorClassCount[creator.id] || 0;
-          });
-        } catch (classCountError: any) {
-          console.warn('Error fetching class counts (non-blocking):', classCountError);
-          // Continue without class counts - set all to 0
-          creatorsData.forEach(creator => {
-            creator.totalClasses = 0;
-          });
+        creatorsRef.current = creatorsData;
+        hasUsersSnapshotRef.current = true;
+        applyMergedData();
+      }, (error: any) => {
+        console.error('Error in creators listener:', error);
+        if (isActive) {
+          hasUsersSnapshotRef.current = true;
+          setCreators([]);
+          setLoading(false);
         }
+      });
 
-        console.log(`Setting ${creatorsData.length} creators`);
-        return creatorsData;
-      } catch (error: any) {
-        console.error('Error fetching creators:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
-        // Show error to user
-        if (error.code === 'permission-denied') {
-          console.error('Permission denied - check Firestore rules');
-        } else if (error.message?.includes('404') || error.message?.includes('QUIC')) {
-          console.warn('Network/Firestore connection error - this may be temporary');
+      classesUnsubscribe = window.onSnapshot(classesQuery, (classesSnapshot: any) => {
+        const creatorClassCount: Record<string, number> = {};
+        classesSnapshot.forEach((doc: any) => {
+          const classData = doc.data();
+          if (classData.creatorId) {
+            creatorClassCount[classData.creatorId] = (creatorClassCount[classData.creatorId] || 0) + 1;
+          }
+        });
+
+        classCountRef.current = creatorClassCount;
+        hasClassesSnapshotRef.current = true;
+        applyMergedData();
+      }, (error: any) => {
+        console.error('Error in approved classes listener:', error);
+        if (isActive) {
+          hasClassesSnapshotRef.current = true;
+          classCountRef.current = {};
+          applyMergedData();
         }
-        throw error;
+      });
+    };
+
+    if (window.firebaseDb && window.collection && window.query && window.where && window.onSnapshot) {
+      setupListeners();
+    } else {
+      const existingScript = document.querySelector('script[data-firebase-instructors-init]');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.setAttribute('data-firebase-instructors-init', 'true');
+        const firebaseConfigStr = JSON.stringify(FIREBASE_CONFIG);
+        script.textContent = `
+          try {
+            import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+            import { getFirestore, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+            const firebaseConfig = ` + firebaseConfigStr + `;
+            const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+            window.firebaseDb = getFirestore(app);
+            window.collection = collection;
+            window.query = query;
+            window.where = where;
+            window.getDocs = getDocs;
+            window.onSnapshot = onSnapshot;
+            window.dispatchEvent(new Event('firebaseReady'));
+          } catch (error) {
+            console.error('Firebase initialization error:', error);
+            window.dispatchEvent(new CustomEvent('firebaseError', { detail: error }));
+          }
+        `;
+        script.onerror = () => {
+          console.error('Failed to load Firebase script');
+        };
+        document.head.appendChild(script);
       }
-    },
-    retries: 2,
-    retryDelay: 1000
-  });
+
+      const handleReady = () => {
+        setupListeners();
+      };
+
+      window.addEventListener('firebaseReady', handleReady);
+
+      return () => {
+        isActive = false;
+        if (retryTimeout) clearTimeout(retryTimeout);
+        if (usersUnsubscribe) usersUnsubscribe();
+        if (classesUnsubscribe) classesUnsubscribe();
+        window.removeEventListener('firebaseReady', handleReady);
+      };
+    }
+
+    return () => {
+      isActive = false;
+      if (retryTimeout) clearTimeout(retryTimeout);
+      if (usersUnsubscribe) usersUnsubscribe();
+      if (classesUnsubscribe) classesUnsubscribe();
+    };
+  }, []);
 
   return (
     <>
