@@ -62,6 +62,10 @@ export default function StudentDashboard() {
   const [profileName, setProfileName] = useState('');
   const [profileInterests, setProfileInterests] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
+  const [profileBio, setProfileBio] = useState('');
+  const [profileCity, setProfileCity] = useState('');
+  const [profileState, setProfileState] = useState('');
+  const [profileCountry, setProfileCountry] = useState('');
   const [profileImage, setProfileImage] = useState('');
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [profileImagePreview, setProfileImagePreview] = useState('');
@@ -272,15 +276,23 @@ export default function StudentDashboard() {
 
         if (userSnap.exists()) {
           const userData = userSnap.data();
-          setProfileName(userData.displayName || user.displayName || '');
+          setProfileName(userData.name || userData.displayName || user.displayName || '');
           setProfileInterests(userData.interests || '');
           setProfilePhone(userData.phoneNumber || userData.phone || '');
+          setProfileBio(userData.bio || '');
+          setProfileCity(userData.city || '');
+          setProfileState(userData.state || '');
+          setProfileCountry(userData.country || '');
           setProfileImage(userData.photoURL || user.photoURL || '');
           setProfileImagePreview(userData.photoURL || user.photoURL || '');
         } else {
           // Set defaults from Firebase Auth
           setProfileName(user.displayName || '');
           setProfilePhone('');
+          setProfileBio('');
+          setProfileCity('');
+          setProfileState('');
+          setProfileCountry('');
           setProfileImage(user.photoURL || '');
           setProfileImagePreview(user.photoURL || '');
         }
@@ -341,7 +353,9 @@ export default function StudentDashboard() {
           name: contactForm.name.trim(),
           email: contactForm.email.trim(),
           subject: contactForm.subject.trim(),
-          messageId: `student-dashboard-${user?.uid || 'guest'}-${Date.now()}`,
+          message: contactForm.message.trim(),
+          source: 'student-dashboard',
+          userId: user?.uid || null,
         }),
       });
 
@@ -2890,9 +2904,14 @@ export default function StudentDashboard() {
                       // Update/create user document in Firestore
                       const userRef = window.doc(window.firebaseDb, 'users', user.uid);
                       await window.setDoc(userRef, {
+                        name: profileName,
                         displayName: profileName,
                         interests: profileInterests,
                         phoneNumber: profilePhone,
+                        bio: profileBio,
+                        city: profileCity,
+                        state: profileState,
+                        country: profileCountry,
                         photoURL: finalImageUrl,
                         email: user.email,
                         role: 'student',
@@ -3142,6 +3161,153 @@ export default function StudentDashboard() {
                           e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
                         }}
                       />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '1.75rem' }}>
+                      <label htmlFor="bio" className="form-label" style={{
+                        fontSize: '0.95rem',
+                        fontWeight: '600',
+                        marginBottom: '0.75rem',
+                        display: 'block'
+                      }}>
+                        Bio
+                      </label>
+                      <textarea
+                        id="bio"
+                        value={profileBio}
+                        onChange={(e) => setProfileBio(e.target.value)}
+                        placeholder="Tell us a little about yourself"
+                        rows={3}
+                        style={{
+                          width: '100%',
+                          padding: '0.875rem 1.25rem',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '12px',
+                          color: '#fff',
+                          fontSize: '1rem',
+                          transition: 'all 0.3s',
+                          resize: 'vertical'
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = '#D92A63';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.75rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label htmlFor="city" className="form-label" style={{
+                          fontSize: '0.95rem',
+                          fontWeight: '600',
+                          marginBottom: '0.75rem',
+                          display: 'block'
+                        }}>
+                          City
+                        </label>
+                        <input
+                          type="text"
+                          id="city"
+                          value={profileCity}
+                          onChange={(e) => setProfileCity(e.target.value)}
+                          placeholder="City"
+                          style={{
+                            width: '100%',
+                            padding: '0.875rem 1.25rem',
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            borderRadius: '12px',
+                            color: '#fff',
+                            fontSize: '1rem',
+                            transition: 'all 0.3s'
+                          }}
+                          onFocus={(e) => {
+                            e.currentTarget.style.borderColor = '#D92A63';
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                          }}
+                          onBlur={(e) => {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                          }}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label htmlFor="state" className="form-label" style={{
+                          fontSize: '0.95rem',
+                          fontWeight: '600',
+                          marginBottom: '0.75rem',
+                          display: 'block'
+                        }}>
+                          State
+                        </label>
+                        <input
+                          type="text"
+                          id="state"
+                          value={profileState}
+                          onChange={(e) => setProfileState(e.target.value)}
+                          placeholder="State"
+                          style={{
+                            width: '100%',
+                            padding: '0.875rem 1.25rem',
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            borderRadius: '12px',
+                            color: '#fff',
+                            fontSize: '1rem',
+                            transition: 'all 0.3s'
+                          }}
+                          onFocus={(e) => {
+                            e.currentTarget.style.borderColor = '#D92A63';
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                          }}
+                          onBlur={(e) => {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                          }}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label htmlFor="country" className="form-label" style={{
+                          fontSize: '0.95rem',
+                          fontWeight: '600',
+                          marginBottom: '0.75rem',
+                          display: 'block'
+                        }}>
+                          Country
+                        </label>
+                        <input
+                          type="text"
+                          id="country"
+                          value={profileCountry}
+                          onChange={(e) => setProfileCountry(e.target.value)}
+                          placeholder="Country"
+                          style={{
+                            width: '100%',
+                            padding: '0.875rem 1.25rem',
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            borderRadius: '12px',
+                            color: '#fff',
+                            fontSize: '1rem',
+                            transition: 'all 0.3s'
+                          }}
+                          onFocus={(e) => {
+                            e.currentTarget.style.borderColor = '#D92A63';
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                          }}
+                          onBlur={(e) => {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                          }}
+                        />
+                      </div>
                     </div>
 
                     <div className="form-group" style={{ marginBottom: '1.75rem' }}>

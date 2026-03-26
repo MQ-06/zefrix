@@ -114,10 +114,27 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<any[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [studentLearningDetails, setStudentLearningDetails] = useState<any[]>([]);
+  const [loadingStudentLearning, setLoadingStudentLearning] = useState(false);
+  const [isStudentBatchesModalOpen, setIsStudentBatchesModalOpen] = useState(false);
+  const [isEditingStudent, setIsEditingStudent] = useState(false);
+  const [savingStudentDetails, setSavingStudentDetails] = useState(false);
+  const [studentEditForm, setStudentEditForm] = useState({
+    name: '',
+    email: '',
+    phoneNumber: '',
+    photoURL: '',
+    bio: '',
+    city: '',
+    state: '',
+    country: '',
+    isProfileComplete: false,
+  });
 
   // Contact messages
   const [contactMessages, setContactMessages] = useState<any[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [selectedContactMessage, setSelectedContactMessage] = useState<any | null>(null);
 
   // Enrollments
   const [enrollments, setEnrollments] = useState<any[]>([]);
@@ -164,6 +181,31 @@ export default function AdminDashboard() {
   const [addingSession, setAddingSession] = useState(false);
 
   const router = useRouter();
+
+  const closeDetailsModal = () => {
+    setIsModalOpen(false);
+    setIsStudentBatchesModalOpen(false);
+    setSelectedCreator(null);
+    setSelectedStudent(null);
+    setIsEditingStudent(false);
+    setSavingStudentDetails(false);
+    setStudentLearningDetails([]);
+    setLoadingStudentLearning(false);
+  };
+
+  const initializeStudentEditForm = (student: any) => {
+    setStudentEditForm({
+      name: student?.name || '',
+      email: student?.email || '',
+      phoneNumber: student?.phoneNumber || '',
+      photoURL: student?.photoURL || student?.profileImage || '',
+      bio: student?.bio || '',
+      city: student?.city || '',
+      state: student?.state || '',
+      country: student?.country || '',
+      isProfileComplete: !!student?.isProfileComplete,
+    });
+  };
 
   const toDateTimeLocalValue = (dateInput: any, timeInput?: string) => {
     if (!dateInput) return '';
@@ -1030,6 +1072,181 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchStudentLearningOverview = async (student: any) => {
+    if (!student?.uid || !window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !window.doc || !window.getDoc) {
+      setStudentLearningDetails([]);
+      return;
+    }
+
+    setLoadingStudentLearning(true);
+    try {
+      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+      const snapshots = await Promise.all([
+        window.getDocs(window.query(enrollmentsRef, window.where('studentId', '==', student.uid))),
+        student.email ? window.getDocs(window.query(enrollmentsRef, window.where('studentEmail', '==', student.email))) : Promise.resolve({ forEach: () => {} }),
+      ]);
+
+      const enrollmentMap = new Map<string, any>();
+      snapshots.forEach((snapshot: any) => {
+        snapshot.forEach((doc: any) => {
+          enrollmentMap.set(doc.id, { id: doc.id, ...doc.data() });
+        });
+      });
+
+      const rawEnrollments = Array.from(enrollmentMap.values());
+      if (!rawEnrollments.length) {
+        setStudentLearningDetails([]);
+        return;
+      }
+
+      const classDocs = await Promise.all(rawEnrollments.map(async (enrollment: any) => {
+        if (!enrollment.classId) return null;
+        try {
+          const classSnap = await window.getDoc(window.doc(window.firebaseDb, 'classes', enrollment.classId));
+          if (!classSnap.exists()) return null;
+          return { id: classSnap.id, ...classSnap.data() };
+        } catch {
+          return null;
+        }
+      }));
+
+      const classMap = new Map<string, any>();
+      classDocs.filter(Boolean).forEach((classData: any) => {
+        classMap.set(classData.id, classData);
+      });
+
+      const creatorIds = Array.from(new Set(classDocs.filter(Boolean).map((classData: any) => classData.creatorId).filter(Boolean)));
+      const creatorEntries = await Promise.all(creatorIds.map(async (creatorId: string) => {
+        try {
+          const creatorSnap = await window.getDoc(window.doc(window.firebaseDb, 'users', creatorId));
+          if (!creatorSnap.exists()) return null;
+          return [creatorId, creatorSnap.data()] as const;
+        } catch {
+          return null;
+        }
+      }));
+
+      const creatorMap = new Map<string, any>();
+      creatorEntries.filter(Boolean).forEach((entry: any) => {
+        creatorMap.set(entry[0], entry[1]);
+      });
+
+      const enriched = rawEnrollments.map((enrollment: any) => {
+        const classData = classMap.get(enrollment.classId) || {};
+        const creatorData = classData.creatorId ? creatorMap.get(classData.creatorId) : null;
+        return {
+          ...enrollment,
+          classTitle: enrollment.className || classData.title || 'Unknown Batch',
+          classStatus: classData.status || enrollment.status || 'active',
+          classPrice: enrollment.classPrice || classData.price || 0,
+          creatorId: classData.creatorId || enrollment.creatorId || null,
+          creatorName: classData.creatorName || creatorData?.name || 'Unknown Creator',
+          creatorEmail: creatorData?.email || '',
+        };
+      }).sort((a: any, b: any) => {
+        const aTime = a.enrolledAt?.toMillis?.() || 0;
+        const bTime = b.enrolledAt?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
+
+      setStudentLearningDetails(enriched);
+    } catch (error) {
+      console.error('Error fetching student learning overview:', error);
+      setStudentLearningDetails([]);
+    } finally {
+      setLoadingStudentLearning(false);
+    }
+  };
+
+  const openStudentDetailsModal = async (student: any) => {
+    setSelectedStudent(student);
+    setSelectedCreator(null);
+    setIsModalOpen(true);
+    setIsEditingStudent(false);
+    initializeStudentEditForm(student);
+    await fetchStudentLearningOverview(student);
+  };
+
+  const handleSaveStudentDetails = async () => {
+    if (!selectedStudent?.uid || !window.firebaseDb || !window.doc || !window.updateDoc || !window.collection || !window.query || !window.where || !window.getDocs) {
+      showError('Unable to save student details right now.');
+      return;
+    }
+
+    const trimmedName = studentEditForm.name.trim();
+    const trimmedEmail = studentEditForm.email.trim();
+    if (!trimmedName) {
+      showError('Member name is required.');
+      return;
+    }
+    if (!trimmedEmail) {
+      showError('Member email is required.');
+      return;
+    }
+
+    setSavingStudentDetails(true);
+    try {
+      const payload = {
+        name: trimmedName,
+        displayName: trimmedName,
+        email: trimmedEmail,
+        phoneNumber: studentEditForm.phoneNumber.trim(),
+        photoURL: studentEditForm.photoURL.trim(),
+        profileImage: studentEditForm.photoURL.trim(),
+        bio: studentEditForm.bio.trim(),
+        city: studentEditForm.city.trim(),
+        state: studentEditForm.state.trim(),
+        country: studentEditForm.country.trim(),
+        isProfileComplete: studentEditForm.isProfileComplete,
+        updatedAt: new Date(),
+        adminEditedAt: new Date(),
+        adminEditedBy: user?.email || user?.uid || 'admin',
+      };
+
+      const userRef = window.doc(window.firebaseDb, 'users', selectedStudent.uid);
+      await window.updateDoc(userRef, payload);
+
+      // Keep denormalized enrollment records in sync where student name/email is stored.
+      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+      const enrollmentSnapshots = await Promise.all([
+        window.getDocs(window.query(enrollmentsRef, window.where('studentId', '==', selectedStudent.uid))),
+        selectedStudent.email ? window.getDocs(window.query(enrollmentsRef, window.where('studentEmail', '==', selectedStudent.email))) : Promise.resolve({ forEach: () => {} }),
+      ]);
+
+      const enrollmentIds = new Set<string>();
+      enrollmentSnapshots.forEach((snapshot: any) => {
+        snapshot.forEach((doc: any) => {
+          enrollmentIds.add(doc.id);
+        });
+      });
+
+      await Promise.all(Array.from(enrollmentIds).map((enrollmentId) => {
+        const enrollmentRef = window.doc(window.firebaseDb, 'enrollments', enrollmentId);
+        return window.updateDoc(enrollmentRef, {
+          studentName: trimmedName,
+          studentEmail: trimmedEmail,
+          updatedAt: new Date(),
+        });
+      }));
+
+      setStudents((prev) => prev.map((student) => student.uid === selectedStudent.uid ? { ...student, ...payload } : student));
+      setSelectedStudent((prev: any) => prev ? { ...prev, ...payload } : prev);
+      setStudentLearningDetails((prev) => prev.map((enrollment) => ({
+        ...enrollment,
+        studentName: trimmedName,
+        studentEmail: trimmedEmail,
+      })));
+
+      showSuccess('Member details updated successfully.');
+      setIsEditingStudent(false);
+    } catch (error: any) {
+      console.error('Error saving student details:', error);
+      showError(error?.message || 'Failed to update member details.');
+    } finally {
+      setSavingStudentDetails(false);
+    }
+  };
+
   // Calculate real statistics (optimized with parallel queries)
   const calculateStats = async () => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) {
@@ -1110,12 +1327,54 @@ export default function AdminDashboard() {
     setLoadingMessages(true);
     try {
       const contactsRef = window.collection(window.firebaseDb, 'contacts');
-      const querySnapshot = await window.getDocs(contactsRef);
-
-      const messages: any[] = [];
-      querySnapshot.forEach((doc: any) => {
-        messages.push({ id: doc.id, ...doc.data() });
+      const contactsSnapshot = await window.getDocs(contactsRef);
+      const contacts: any[] = [];
+      contactsSnapshot.forEach((doc: any) => {
+        contacts.push({ id: doc.id, ...doc.data() });
       });
+
+      // Backward compatibility: older dashboard forms created only notifications,
+      // so include those records to keep the contact inbox complete.
+      const messagesById = new Map<string, any>();
+      contacts.forEach((item: any) => {
+        messagesById.set(item.id, item);
+      });
+
+      if (window.query && window.where) {
+        const notificationsRef = window.collection(window.firebaseDb, 'notifications');
+        const contactNotificationsQuery = window.query(
+          notificationsRef,
+          window.where('type', '==', 'new_contact_message')
+        );
+        const notificationsSnapshot = await window.getDocs(contactNotificationsQuery);
+
+        notificationsSnapshot.forEach((doc: any) => {
+          const notification = doc.data();
+          const metadata = notification.metadata || {};
+          const relatedId = metadata.messageId || notification.relatedId;
+
+          // Skip if this notification already points to a real contact doc.
+          if (relatedId && messagesById.has(relatedId)) {
+            return;
+          }
+
+          const fallbackId = relatedId || `notification-${doc.id}`;
+          if (!messagesById.has(fallbackId)) {
+            messagesById.set(fallbackId, {
+              id: fallbackId,
+              name: metadata.name || 'Unknown',
+              email: metadata.email || '-',
+              phone: metadata.phone || '',
+              subject: metadata.subject || notification.title || 'Contact Enquiry',
+              message: metadata.message || notification.message || 'Submitted via dashboard contact form',
+              createdAt: notification.createdAt || null,
+              source: metadata.source || 'legacy-notification',
+            });
+          }
+        });
+      }
+
+      const messages = Array.from(messagesById.values());
 
       messages.sort((a, b) => {
         const aTime = a.createdAt?.toMillis?.() || 0;
@@ -2029,9 +2288,7 @@ export default function AdminDashboard() {
                         <button 
                           className="creator-view-btn"
                           onClick={() => {
-                            setSelectedStudent(student);
-                            setSelectedCreator(null);
-                            setIsModalOpen(true);
+                            openStudentDetailsModal(student);
                           }}
                         >
                           <Eye size={16} />
@@ -2587,10 +2844,9 @@ export default function AdminDashboard() {
                 <tr style={{ background: 'rgba(255, 255, 255, 0.1)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Name</th>
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Email</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Phone</th>
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Subject</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Message</th>
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Date</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -2612,20 +2868,8 @@ export default function AdminDashboard() {
                         {message.email}
                       </a>
                     </td>
-                    <td style={{ padding: '1rem', color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.875rem' }}>
-                      {message.phone || '-'}
-                    </td>
                     <td style={{ padding: '1rem', color: 'rgba(255, 255, 255, 0.9)' }}>
                       {message.subject}
-                    </td>
-                    <td style={{ padding: '1rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', maxWidth: '300px' }}>
-                      <div style={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {message.message}
-                      </div>
                     </td>
                     <td style={{ padding: '1rem', color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                       {message.createdAt ? new Date(message.createdAt.toDate()).toLocaleDateString('en-US', {
@@ -2636,10 +2880,103 @@ export default function AdminDashboard() {
                         minute: '2-digit'
                       }) : 'N/A'}
                     </td>
+                    <td style={{ padding: '1rem' }}>
+                      <button
+                        onClick={() => setSelectedContactMessage(message)}
+                        style={{
+                          background: 'rgba(217, 42, 99, 0.18)',
+                          border: '1px solid rgba(217, 42, 99, 0.5)',
+                          color: '#fff',
+                          borderRadius: '8px',
+                          padding: '0.45rem 0.8rem',
+                          cursor: 'pointer',
+                          fontSize: '0.8rem',
+                          fontWeight: 600
+                        }}
+                      >
+                        View
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {selectedContactMessage && (
+        <div
+          onClick={() => setSelectedContactMessage(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '1rem'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(760px, 100%)',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              background: 'linear-gradient(145deg, rgba(28,35,76,0.95), rgba(18,24,55,0.97))',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '14px',
+              padding: '1.2rem'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ color: '#fff', margin: 0 }}>Message Details</h3>
+              <button
+                onClick={() => setSelectedContactMessage(null)}
+                style={{
+                  background: 'transparent',
+                  color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  borderRadius: '8px',
+                  padding: '0.35rem 0.6rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: '0.7rem' }}>
+              <div style={{ color: 'rgba(255,255,255,0.82)' }}><strong style={{ color: '#fff' }}>Name:</strong> {selectedContactMessage.name || '-'}</div>
+              <div style={{ color: 'rgba(255,255,255,0.82)' }}><strong style={{ color: '#fff' }}>Email:</strong> {selectedContactMessage.email || '-'}</div>
+              <div style={{ color: 'rgba(255,255,255,0.82)' }}><strong style={{ color: '#fff' }}>Phone:</strong> {selectedContactMessage.phone || '-'}</div>
+              <div style={{ color: 'rgba(255,255,255,0.82)' }}><strong style={{ color: '#fff' }}>Subject:</strong> {selectedContactMessage.subject || '-'}</div>
+              <div style={{ color: 'rgba(255,255,255,0.82)' }}>
+                <strong style={{ color: '#fff' }}>Date:</strong>{' '}
+                {selectedContactMessage.createdAt ? new Date(selectedContactMessage.createdAt.toDate()).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }) : 'N/A'}
+              </div>
+
+              <div style={{
+                marginTop: '0.3rem',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '10px',
+                padding: '0.9rem'
+              }}>
+                <div style={{ color: '#fff', fontWeight: 700, marginBottom: '0.4rem' }}>Message</div>
+                <div style={{ color: 'rgba(255,255,255,0.85)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                  {selectedContactMessage.message || 'No message provided'}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -3029,8 +3366,12 @@ export default function AdminDashboard() {
     const joinDate = person.createdAt?.toDate ? person.createdAt.toDate() : (person.createdAt ? new Date(person.createdAt) : null);
     const formattedDate = joinDate ? joinDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A';
 
+    const studentTotalSpend = !isCreator
+      ? studentLearningDetails.reduce((sum, enrollment) => sum + (Number(enrollment.classPrice) || 0), 0)
+      : 0;
+
     return (
-      <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+      <div className="modal-overlay" onClick={closeDetailsModal}>
         <div className="modal-content" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
             <div className="modal-title-section">
@@ -3048,11 +3389,7 @@ export default function AdminDashboard() {
                 <div className="modal-subtitle">{person.email}</div>
               </div>
             </div>
-            <button className="modal-close-btn" onClick={() => {
-              setIsModalOpen(false);
-              setSelectedCreator(null);
-              setSelectedStudent(null);
-            }}>
+            <button className="modal-close-btn" onClick={closeDetailsModal}>
               <X size={20} />
             </button>
           </div>
@@ -3127,6 +3464,129 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
+
+            {!isCreator && (
+              <div className="modal-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.9rem' }}>
+                  <h3 className="modal-section-title" style={{ marginBottom: 0 }}>Member Profile Management</h3>
+                  {!isEditingStudent ? (
+                    <button
+                      className="creator-view-btn"
+                      style={{ width: 'auto', padding: '0.45rem 0.8rem' }}
+                      onClick={() => {
+                        initializeStudentEditForm(person);
+                        setIsEditingStudent(true);
+                      }}
+                    >
+                      <span>Edit Details</span>
+                    </button>
+                  ) : null}
+                </div>
+
+                {isEditingStudent ? (
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
+                      <input
+                        type="text"
+                        value={studentEditForm.name}
+                        onChange={(e) => setStudentEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                        placeholder="Full name"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="email"
+                        value={studentEditForm.email}
+                        onChange={(e) => setStudentEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                        placeholder="Email"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
+                      <input
+                        type="text"
+                        value={studentEditForm.phoneNumber}
+                        onChange={(e) => setStudentEditForm((prev) => ({ ...prev, phoneNumber: e.target.value }))}
+                        placeholder="Phone number"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="url"
+                        value={studentEditForm.photoURL}
+                        onChange={(e) => setStudentEditForm((prev) => ({ ...prev, photoURL: e.target.value }))}
+                        placeholder="Profile image URL"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.7rem' }}>
+                      <input
+                        type="text"
+                        value={studentEditForm.city}
+                        onChange={(e) => setStudentEditForm((prev) => ({ ...prev, city: e.target.value }))}
+                        placeholder="City"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="text"
+                        value={studentEditForm.state}
+                        onChange={(e) => setStudentEditForm((prev) => ({ ...prev, state: e.target.value }))}
+                        placeholder="State"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="text"
+                        value={studentEditForm.country}
+                        onChange={(e) => setStudentEditForm((prev) => ({ ...prev, country: e.target.value }))}
+                        placeholder="Country"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                    </div>
+
+                    <textarea
+                      value={studentEditForm.bio}
+                      onChange={(e) => setStudentEditForm((prev) => ({ ...prev, bio: e.target.value }))}
+                      placeholder="Bio"
+                      rows={3}
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem', resize: 'vertical' }}
+                    />
+
+                    <label style={{ color: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={studentEditForm.isProfileComplete}
+                        onChange={(e) => setStudentEditForm((prev) => ({ ...prev, isProfileComplete: e.target.checked }))}
+                      />
+                      Profile complete
+                    </label>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+                      <button
+                        className="button-2"
+                        onClick={() => {
+                          setIsEditingStudent(false);
+                          initializeStudentEditForm(person);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="creator-view-btn"
+                        style={{ width: 'auto', padding: '0.45rem 0.8rem' }}
+                        onClick={handleSaveStudentDetails}
+                        disabled={savingStudentDetails}
+                      >
+                        <span>{savingStudentDetails ? 'Saving...' : 'Save Changes'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem' }}>
+                    Edit member account fields and save to update Firestore and related enrollment records.
+                  </div>
+                )}
+              </div>
+            )}
 
             {(person.bio || person.expertise || (isCreator && person.creatorCategory)) && (
               <div className="modal-section">
@@ -3271,6 +3731,39 @@ export default function AdminDashboard() {
                 </div>
               </>
             )}
+
+            {!isCreator && (
+              <>
+                <div className="modal-section">
+                  <h3 className="modal-section-title">Learning Overview</h3>
+                  <div className="modal-metrics-list">
+                    <div className="modal-metric-item">
+                      <div className="modal-metric-label">
+                        <BookOpen size={20} className="modal-metric-icon" />
+                        <span>Joined Batches</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+                        <div className="modal-metric-value">{studentLearningDetails.length}</div>
+                        <button
+                          className="creator-view-btn"
+                          style={{ width: 'auto', padding: '0.35rem 0.7rem' }}
+                          onClick={() => setIsStudentBatchesModalOpen(true)}
+                        >
+                          <span>View Batches</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="modal-metric-item">
+                      <div className="modal-metric-label">
+                        <TrendingUp size={20} className="modal-metric-icon" />
+                        <span>Total Spend</span>
+                      </div>
+                      <div className="modal-metric-value earnings">₹{studentTotalSpend.toFixed(2)}</div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -3279,6 +3772,66 @@ export default function AdminDashboard() {
 
   return (
     <>
+      {!selectedCreator && selectedStudent && isStudentBatchesModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 12000 }} onClick={() => setIsStudentBatchesModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '960px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-section">
+                <h2 className="modal-title" style={{ margin: 0 }}>Joined Batches and Creators</h2>
+              </div>
+              <button className="modal-close-btn" onClick={() => setIsStudentBatchesModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {loadingStudentLearning ? (
+                <div style={{ color: 'rgba(255,255,255,0.75)' }}>Loading joined batches...</div>
+              ) : studentLearningDetails.length === 0 ? (
+                <div style={{ color: 'rgba(255,255,255,0.7)' }}>No joined batches found for this member.</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+                        <th style={{ textAlign: 'left', color: '#fff', padding: '0.7rem 0.5rem', fontSize: '0.82rem' }}>Batch</th>
+                        <th style={{ textAlign: 'left', color: '#fff', padding: '0.7rem 0.5rem', fontSize: '0.82rem' }}>Creator</th>
+                        <th style={{ textAlign: 'left', color: '#fff', padding: '0.7rem 0.5rem', fontSize: '0.82rem' }}>Price</th>
+                        <th style={{ textAlign: 'left', color: '#fff', padding: '0.7rem 0.5rem', fontSize: '0.82rem' }}>Status</th>
+                        <th style={{ textAlign: 'left', color: '#fff', padding: '0.7rem 0.5rem', fontSize: '0.82rem' }}>Enrolled</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {studentLearningDetails.map((enrollment) => {
+                        const enrolledAt = enrollment.enrolledAt?.toDate ? enrollment.enrolledAt.toDate() : null;
+                        return (
+                          <tr key={enrollment.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                            <td style={{ color: 'rgba(255,255,255,0.88)', padding: '0.65rem 0.5rem', fontSize: '0.86rem' }}>{enrollment.classTitle}</td>
+                            <td style={{ color: 'rgba(255,255,255,0.84)', padding: '0.65rem 0.5rem', fontSize: '0.86rem' }}>
+                              <div>{enrollment.creatorName || 'Unknown Creator'}</div>
+                              {enrollment.creatorEmail ? (
+                                <a href={`mailto:${enrollment.creatorEmail}`} style={{ color: '#D92A63', textDecoration: 'none', fontSize: '0.76rem' }}>
+                                  {enrollment.creatorEmail}
+                                </a>
+                              ) : null}
+                            </td>
+                            <td style={{ color: '#FFD700', padding: '0.65rem 0.5rem', fontSize: '0.86rem' }}>₹{(Number(enrollment.classPrice) || 0).toFixed(2)}</td>
+                            <td style={{ color: 'rgba(255,255,255,0.84)', padding: '0.65rem 0.5rem', fontSize: '0.86rem' }}>{enrollment.status || enrollment.classStatus || 'active'}</td>
+                            <td style={{ color: 'rgba(255,255,255,0.72)', padding: '0.65rem 0.5rem', fontSize: '0.8rem' }}>
+                              {enrolledAt ? enrolledAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {renderCreatorModal()}
       <style jsx global>{`
         * {

@@ -34,7 +34,7 @@ if (!admin.apps.length) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, email, subject, messageId } = body;
+    const { name, email, subject, message, phone, source, userId, messageId } = body;
 
     if (!name || !email || !subject) {
       return NextResponse.json(
@@ -44,6 +44,54 @@ export async function POST(request: NextRequest) {
     }
 
     const db = admin.firestore();
+
+    const normalizedName = String(name).trim();
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedSubject = String(subject).trim();
+    const normalizedMessage = String(message || '').trim();
+    const normalizedPhone = String(phone || '').trim();
+    const normalizedSource = String(source || 'unknown').trim();
+    const normalizedUserId = String(userId || '').trim();
+
+    // Ensure contact submissions from all app surfaces are visible in admin contact list.
+    // If a messageId exists and the contact already exists (e.g., public contact-us flow), avoid duplicates.
+    let persistedMessageId: string;
+    const contactsRef = db.collection('contacts');
+    if (messageId) {
+      const messageRef = contactsRef.doc(String(messageId));
+      const messageSnap = await messageRef.get();
+      if (!messageSnap.exists) {
+        await messageRef.set({
+          name: normalizedName,
+          email: normalizedEmail,
+          phone: normalizedPhone,
+          subject: normalizedSubject,
+          message: normalizedMessage,
+          source: normalizedSource,
+          userId: normalizedUserId || null,
+          status: 'new',
+          read: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      persistedMessageId = messageRef.id;
+    } else {
+      const created = await contactsRef.add({
+        name: normalizedName,
+        email: normalizedEmail,
+        phone: normalizedPhone,
+        subject: normalizedSubject,
+        message: normalizedMessage,
+        source: normalizedSource,
+        userId: normalizedUserId || null,
+        status: 'new',
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      persistedMessageId = created.id;
+    }
     
     // Get admin user IDs (support multiple admins)
     const ADMIN_EMAILS = ['kartik@zefrix.com', 'mariamqadeem181@gmail.com'];
@@ -75,17 +123,20 @@ export async function POST(request: NextRequest) {
         userId: adminUserId,
         userRole: 'admin',
         type: 'new_contact_message',
-        title: `New Contact Message: ${subject}`,
-        message: `New message from ${name} (${email}): ${subject}`,
+        title: `New Contact Message: ${normalizedSubject}`,
+        message: `New message from ${normalizedName} (${normalizedEmail}): ${normalizedSubject}`,
         link: '/admin-dashboard?page=contact-messages',
-        relatedId: messageId || null,
+        relatedId: persistedMessageId,
         isRead: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         metadata: {
-          name,
-          email,
-          subject,
-          messageId: messageId || null,
+          name: normalizedName,
+          email: normalizedEmail,
+          subject: normalizedSubject,
+          message: normalizedMessage,
+          phone: normalizedPhone,
+          messageId: persistedMessageId,
+          source: normalizedSource,
         },
       });
     });
@@ -97,7 +148,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       message: 'Notification created successfully',
-      notificationSent: true 
+      notificationSent: true,
+      messageId: persistedMessageId,
     });
   } catch (error: any) {
     console.error('Error creating contact message notification:', error);

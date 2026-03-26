@@ -150,6 +150,9 @@ export default function ContactUsPage() {
             name: formData.name.trim(),
             email: formData.email.trim(),
             subject: formData.subject.trim(),
+            message: formData.message.trim(),
+            phone: formData.phone.trim() || '',
+            source: 'public-contact-us',
             messageId: docRef.id,
           }),
         }).then(response => {

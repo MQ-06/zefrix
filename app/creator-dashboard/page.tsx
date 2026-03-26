@@ -357,7 +357,9 @@ export default function CreatorDashboard() {
           name: contactForm.name.trim(),
           email: contactForm.email.trim(),
           subject: contactForm.subject.trim(),
-          messageId: `creator-dashboard-${user?.uid || 'guest'}-${Date.now()}`,
+          message: contactForm.message.trim(),
+          source: 'creator-dashboard',
+          userId: user?.uid || null,
         }),
       });
 

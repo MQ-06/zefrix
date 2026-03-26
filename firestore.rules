@@ -7,9 +7,9 @@ service cloud.firestore {
     match /users/{userId} {
       // Users can read and write their own document
       allow read, write: if request.auth != null && request.auth.uid == userId;
-      // Admins can read all users
-      allow read: if request.auth != null && 
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Admins can read and edit any user document
+      allow read, write: if request.auth != null && 
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       // Anyone can read creator profiles (for public instructor page)
       allow read: if resource.data.role == 'creator';
     }
