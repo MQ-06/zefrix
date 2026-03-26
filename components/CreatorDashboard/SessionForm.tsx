@@ -436,6 +436,28 @@ export default function SessionForm({
         
         const docRef = await window.addDoc(sessionsRef, sessionData);
         console.log(`✅ Created session document: ${docRef.id}`);
+
+        try {
+          await fetch('/api/notifications/session-event', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              classId,
+              className,
+              sessionId: docRef.id,
+              sessionNumber: session.sessionNumber,
+              sessionDate: sessionDateTime.toISOString(),
+              sessionTime: session.time,
+              meetingLink: session.meetLink,
+              creatorId: currentUser.uid,
+              createdBy: currentUser.email || currentUser.uid,
+            }),
+          });
+        } catch (sessionNotifError) {
+          console.warn('Session notification dispatch failed (non-blocking):', sessionNotifError);
+        }
       }
       console.log(`✅ All ${sessions.length} sessions created successfully`);
       

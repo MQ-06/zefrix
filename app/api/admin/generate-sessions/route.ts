@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import {
+  createAdminNotification,
+  createNotificationForUser,
+  createNotificationsForUsers,
+} from '@/lib/serverNotifications';
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -84,6 +89,8 @@ export async function POST(request: NextRequest) {
 
     const scheduleType = classData.scheduleType;
     const sessionsCreated: any[] = [];
+    const classTitle = classData.title || 'Batch';
+    const creatorId = classData.creatorId || '';
 
     if (scheduleType === 'one-time') {
       // Create single session for one-time class
@@ -170,6 +177,73 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Invalid schedule type' },
         { status: 400 }
       );
+    }
+
+    try {
+      const enrollmentsSnapshot = await db
+        .collection('enrollments')
+        .where('classId', '==', classId)
+        .get();
+      const studentIds = Array.from(
+        new Set(
+          enrollmentsSnapshot.docs
+            .map((doc) => String(doc.data()?.studentId || '').trim())
+            .filter(Boolean),
+        ),
+      );
+
+      for (const createdSession of sessionsCreated) {
+        const sessionDate = createdSession.sessionDate?.toDate
+          ? createdSession.sessionDate.toDate()
+          : createdSession.sessionDate;
+
+        const metadata = {
+          classId,
+          className: classTitle,
+          sessionId: createdSession.id,
+          sessionNumber: createdSession.sessionNumber,
+          sessionDate: sessionDate || null,
+          sessionTime: createdSession.sessionTime || null,
+          meetingLink: createdSession.meetingLink || null,
+          source: 'admin-generate-sessions',
+        };
+
+        const title = `Session Scheduled: ${classTitle}`;
+        const message = `Session ${createdSession.sessionNumber} for "${classTitle}" has been scheduled${createdSession.sessionTime ? ` at ${createdSession.sessionTime}` : ''}.`;
+
+        await createAdminNotification(db, {
+          type: 'admin_session_scheduled',
+          title,
+          message,
+          link: `/admin-dashboard?classId=${classId}`,
+          relatedId: classId,
+          metadata,
+        });
+
+        if (creatorId) {
+          await createNotificationForUser(db, String(creatorId), 'creator', {
+            type: 'creator_session_scheduled',
+            title,
+            message,
+            link: `/creator-dashboard?classId=${classId}`,
+            relatedId: classId,
+            metadata,
+          });
+        }
+
+        if (studentIds.length > 0) {
+          await createNotificationsForUsers(db, studentIds, 'student', {
+            type: 'session_scheduled',
+            title,
+            message,
+            link: '/student-dashboard?view=upcoming-sessions',
+            relatedId: classId,
+            metadata,
+          });
+        }
+      }
+    } catch (notificationError) {
+      console.error('Error sending generated-session notifications:', notificationError);
     }
 
     return NextResponse.json({

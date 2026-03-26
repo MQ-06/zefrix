@@ -3,6 +3,10 @@ import { sendClassApprovalEmail } from '@/lib/email';
 import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import {
+  createAdminNotification,
+  createNotificationForRole,
+} from '@/lib/serverNotifications';
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -77,6 +81,54 @@ export async function POST(request: NextRequest) {
             status: status === 'approved' ? 'approved' : 'rejected',
             rejectionReason,
         });
+
+          try {
+            const db = admin.firestore();
+
+            await createAdminNotification(db, {
+              type: status === 'approved' ? 'admin_class_approved' : 'admin_class_rejected',
+              title: status === 'approved' ? `Batch Approved: ${className}` : `Batch Rejected: ${className}`,
+              message:
+                status === 'approved'
+                  ? `Batch "${className}" is now live.`
+                  : `Batch "${className}" was rejected and sent for revision.`,
+              link: '/admin-dashboard?page=approve-batches',
+              relatedId: classId || '',
+              metadata: {
+                classId: classId || '',
+                className,
+                creatorId: finalCreatorId || null,
+                creatorEmail,
+                creatorName: creatorName || 'Creator',
+                status,
+                rejectionReason: rejectionReason || null,
+              },
+            });
+
+            if (status === 'approved') {
+              const livePayload = {
+                type: 'batch_live',
+                title: `New Batch Live: ${className}`,
+                message: `"${className}" by ${creatorName || 'a creator'} is now live for enrollment.`,
+                link: '/batches',
+                relatedId: classId || '',
+                metadata: {
+                  classId: classId || '',
+                  className,
+                  creatorId: finalCreatorId || null,
+                  creatorName: creatorName || 'Creator',
+                },
+              };
+
+              await Promise.all([
+                createNotificationForRole(db, 'student', livePayload),
+                createNotificationForRole(db, 'creator', livePayload),
+                createNotificationForRole(db, 'admin', livePayload),
+              ]);
+            }
+          } catch (fanoutError) {
+            console.error('Error creating class-approval fanout notifications:', fanoutError);
+          }
 
         return NextResponse.json({ 
             success: true, 

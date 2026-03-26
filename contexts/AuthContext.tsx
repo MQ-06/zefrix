@@ -63,6 +63,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const normalizeEmail = (email?: string | null) => (email || '').toLowerCase();
 
+  const notifyUserEvent = async (params: {
+    eventType: 'student_signup' | 'creator_signup';
+    userId: string;
+    userName: string;
+    userEmail: string;
+    userRole: 'student' | 'creator' | 'admin';
+    source: string;
+  }) => {
+    try {
+      await fetch('/api/notifications/user-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+    } catch (error) {
+      console.warn('User event notification failed (non-blocking):', error);
+    }
+  };
+
   const validatePhoneNumber = (phone: string): PhoneValidationResult => {
     if (!phone || !phone.trim()) {
       return { valid: false, error: 'Phone number is required' };
@@ -472,6 +493,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       await window.setDoc(window.doc(window.firebaseDb, 'users', cred.user.uid), userData);
+
+      await notifyUserEvent({
+        eventType: 'student_signup',
+        userId: cred.user.uid,
+        userName: name.trim(),
+        userEmail: email.trim(),
+        userRole: role,
+        source: 'auth-email-signup',
+      });
     } catch (error: any) {
       throw error;
     }
@@ -519,6 +549,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           createdAt: window.serverTimestamp(),
           lastLogin: window.serverTimestamp(),
         });
+
+        if (user.email) {
+          await notifyUserEvent({
+            eventType: 'student_signup',
+            userId: user.uid,
+            userName: user.displayName || user.email.split('@')[0] || 'User',
+            userEmail: user.email,
+            userRole: role as 'student' | 'creator' | 'admin',
+            source: 'auth-google-signup',
+          });
+        }
       } else {
         role = snap.data().role;
         await window.updateDoc(userRef, {

@@ -412,6 +412,25 @@ export default function BecomeACreatorPage() {
         lastLogin: window.serverTimestamp(),
       }, { merge: true });
 
+      try {
+        await fetch('/api/notifications/user-event', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            eventType: 'creator_signup',
+            userId: currentUser.uid,
+            userName: formData.fullname.trim() || currentUser.displayName || 'Creator',
+            userEmail: formData.email.trim(),
+            userRole: 'creator',
+            source: 'become-a-creator-form',
+          }),
+        });
+      } catch (notificationError) {
+        console.warn('Creator signup notification failed (non-blocking):', notificationError);
+      }
+
       showSuccess('Creator account created successfully!');
       await new Promise(resolve => setTimeout(resolve, 2000));
       router.push('/creator-dashboard');
@@ -485,6 +504,27 @@ export default function BecomeACreatorPage() {
         createdAt: window.serverTimestamp(),
         lastLogin: window.serverTimestamp(),
       }, { merge: true });
+
+      if (currentUser.email) {
+        try {
+          await fetch('/api/notifications/user-event', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              eventType: 'creator_signup',
+              userId: currentUser.uid,
+              userName: currentUser.displayName || currentUser.email.split('@')[0] || 'Creator',
+              userEmail: currentUser.email,
+              userRole: 'creator',
+              source: 'become-a-creator-google',
+            }),
+          });
+        } catch (notificationError) {
+          console.warn('Creator signup notification failed (non-blocking):', notificationError);
+        }
+      }
 
       showSuccess('Google signup successful! Please complete the form below to finish your creator profile.');
       setIsSubmitting(false);

@@ -628,6 +628,7 @@ export default function CreateClassForm() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            creatorId: user.uid,
             creatorName: user.displayName || user.email?.split('@')[0] || 'Creator',
             creatorEmail: user.email || '',
             className: title,

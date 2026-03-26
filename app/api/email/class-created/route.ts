@@ -3,6 +3,10 @@ import { sendClassCreatedEmail } from '@/lib/email';
 import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import {
+  createAdminNotification,
+  createNotificationForUser,
+} from '@/lib/serverNotifications';
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -35,7 +39,7 @@ if (!admin.apps.length) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { creatorName, creatorEmail, className, classId, category, price } = body;
+    const { creatorId, creatorName, creatorEmail, className, classId, category, price } = body;
 
         if (!className || !classId) {
             return NextResponse.json(
@@ -53,35 +57,48 @@ export async function POST(request: NextRequest) {
             price: price || 0,
         });
 
-        // Create notification for admin
+        // Create notification for all admins
         try {
             const db = admin.firestore();
-            // Get admin user ID (assuming admin email is in env)
-            const adminEmail = process.env.ADMIN_EMAIL || 'kartik@zefrix.com';
-            const usersSnapshot = await db.collection('users').where('email', '==', adminEmail).limit(1).get();
-            
-            if (!usersSnapshot.empty) {
-                const adminUserId = usersSnapshot.docs[0].id;
-                const notificationsRef = db.collection('notifications');
-                await notificationsRef.add({
-                    userId: adminUserId,
-                    userRole: 'admin',
-                    type: 'new_class_submitted',
-                    title: `New Class Pending Review: ${className}`,
-                    message: `New class "${className}" submitted by ${creatorName || 'a creator'} needs review.`,
-                    link: `/admin-dashboard?classId=${classId}`,
-                    relatedId: classId,
-                    isRead: false,
-                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                    metadata: {
-                        className,
-                        classId,
-                        creatorName: creatorName || 'Creator',
-                        creatorEmail: creatorEmail || '',
-                        category: category || '',
-                        price: price || 0,
-                    },
-                });
+          let resolvedCreatorId = creatorId;
+          if (!resolvedCreatorId && classId) {
+            const classDoc = await db.collection('classes').doc(classId).get();
+            if (classDoc.exists) {
+              resolvedCreatorId = classDoc.data()?.creatorId;
+            }
+          }
+
+          await createAdminNotification(db, {
+            type: 'new_class_submitted',
+            title: `New Class Pending Review: ${className}`,
+            message: `New class "${className}" submitted by ${creatorName || 'a creator'} needs review.`,
+            link: `/admin-dashboard?classId=${classId}`,
+            relatedId: classId,
+            metadata: {
+              className,
+              classId,
+              creatorId: resolvedCreatorId || null,
+              creatorName: creatorName || 'Creator',
+              creatorEmail: creatorEmail || '',
+              category: category || '',
+              price: price || 0,
+            },
+          });
+
+          if (resolvedCreatorId) {
+            await createNotificationForUser(db, String(resolvedCreatorId), 'creator', {
+              type: 'class_submission_received',
+              title: `Batch Submitted: ${className}`,
+              message: `Your batch "${className}" is submitted and pending admin review.`,
+              link: '/creator-dashboard?section=manage-classes',
+              relatedId: classId,
+              metadata: {
+                classId,
+                className,
+                category: category || '',
+                price: price || 0,
+              },
+            });
             }
         } catch (notifError) {
             console.error('Error creating admin notification:', notifError);

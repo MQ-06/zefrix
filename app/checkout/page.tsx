@@ -391,6 +391,7 @@ export default function CheckoutPage() {
                         body: JSON.stringify({
                           classId: item.id,
                           className: item.title,
+                                                    studentId: currentUser.uid,
                           studentName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Student',
                           studentEmail: currentUser.email || '',
                           enrollmentId: enrollmentDocRef.id,

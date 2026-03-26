@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { createAdminNotification } from '@/lib/serverNotifications';
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -93,62 +94,30 @@ export async function POST(request: NextRequest) {
       persistedMessageId = created.id;
     }
     
-    // Get admin user IDs (support multiple admins)
-    const ADMIN_EMAILS = ['kartik@zefrix.com', 'mariamqadeem181@gmail.com'];
-    const adminUsers = await Promise.all(
-      ADMIN_EMAILS.map(async (adminEmail) => {
-        const usersSnapshot = await db.collection('users').where('email', '==', adminEmail).limit(1).get();
-        if (!usersSnapshot.empty) {
-          return usersSnapshot.docs[0].id;
-        }
-        return null;
-      })
-    );
-
-    const validAdminIds = adminUsers.filter(id => id !== null);
-
-    if (validAdminIds.length === 0) {
-      console.warn('⚠️ No admin users found, skipping notification creation');
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Admin users not found',
-        notificationSent: false 
-      });
-    }
-
-    // Create notifications for all admin users
-    const notificationsRef = db.collection('notifications');
-    const notificationPromises = validAdminIds.map(async (adminUserId) => {
-      await notificationsRef.add({
-        userId: adminUserId,
-        userRole: 'admin',
-        type: 'new_contact_message',
-        title: `New Contact Message: ${normalizedSubject}`,
-        message: `New message from ${normalizedName} (${normalizedEmail}): ${normalizedSubject}`,
-        link: '/admin-dashboard?page=contact-messages',
-        relatedId: persistedMessageId,
-        isRead: false,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        metadata: {
-          name: normalizedName,
-          email: normalizedEmail,
-          subject: normalizedSubject,
-          message: normalizedMessage,
-          phone: normalizedPhone,
-          messageId: persistedMessageId,
-          source: normalizedSource,
-        },
-      });
+    const sentCount = await createAdminNotification(db, {
+      type: 'new_contact_message',
+      title: `New Contact Message: ${normalizedSubject}`,
+      message: `New message from ${normalizedName} (${normalizedEmail}): ${normalizedSubject}`,
+      link: '/admin-dashboard?page=contact-messages',
+      relatedId: persistedMessageId,
+      metadata: {
+        name: normalizedName,
+        email: normalizedEmail,
+        subject: normalizedSubject,
+        message: normalizedMessage,
+        phone: normalizedPhone,
+        messageId: persistedMessageId,
+        source: normalizedSource,
+      },
     });
 
-    await Promise.all(notificationPromises);
-
-    console.log(`✅ Contact message notifications created for ${validAdminIds.length} admin(s)`);
+    console.log(`✅ Contact message notifications created for ${sentCount} admin(s)`);
 
     return NextResponse.json({ 
       success: true, 
       message: 'Notification created successfully',
-      notificationSent: true,
+      notificationSent: sentCount > 0,
+      notificationsSent: sentCount,
       messageId: persistedMessageId,
     });
   } catch (error: any) {

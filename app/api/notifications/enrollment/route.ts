@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import {
+  createAdminNotification,
+  createNotificationForUser,
+} from '@/lib/serverNotifications';
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -34,7 +38,7 @@ if (!admin.apps.length) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { classId, className, studentName, studentEmail, enrollmentId } = body;
+    const { classId, className, studentId, studentName, studentEmail, enrollmentId } = body;
 
     if (!classId || !className) {
       return NextResponse.json(
@@ -58,36 +62,62 @@ export async function POST(request: NextRequest) {
     const creatorId = classData?.creatorId;
 
     if (!creatorId) {
-      console.warn('⚠️ No creatorId found in class document, skipping notification');
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Creator ID not found',
-        notificationSent: false 
+      console.warn('⚠️ No creatorId found in class document, creator-specific notification will be skipped');
+    }
+
+    const normalizedStudentName = studentName || 'A student';
+
+    if (creatorId) {
+      await createNotificationForUser(db, creatorId, 'creator', {
+        type: 'new_student_enrollment',
+        title: `New Student Enrolled: ${className}`,
+        message: `${normalizedStudentName} has enrolled in your class "${className}".`,
+        link: `/creator-dashboard?classId=${classId}`,
+        relatedId: classId,
+        metadata: {
+          classId,
+          className,
+          studentName: normalizedStudentName,
+          studentEmail: studentEmail || '',
+          enrollmentId: enrollmentId || null,
+        },
       });
     }
 
-    // Create notification for creator
-    const notificationsRef = db.collection('notifications');
-    await notificationsRef.add({
-      userId: creatorId,
-      userRole: 'creator',
-      type: 'new_student_enrollment',
-      title: `New Student Enrolled: ${className}`,
-      message: `${studentName || 'A student'} has enrolled in your class "${className}".`,
-      link: `/creator-dashboard?classId=${classId}`,
+    if (studentId) {
+      await createNotificationForUser(db, String(studentId), 'student', {
+        type: 'enrollment_confirmed',
+        title: `Enrollment Confirmed: ${className}`,
+        message: `You are enrolled in "${className}". Check your dashboard for details.`,
+        link: '/student-dashboard?view=my-enrollments',
+        relatedId: classId,
+        metadata: {
+          classId,
+          className,
+          enrollmentId: enrollmentId || null,
+          creatorId,
+        },
+      });
+    }
+
+    await createAdminNotification(db, {
+      type: 'admin_new_enrollment',
+      title: `New Enrollment: ${className}`,
+      message: `${normalizedStudentName} enrolled in "${className}".`,
+      link: '/admin-dashboard?page=enrollments',
       relatedId: classId,
-      isRead: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
       metadata: {
         classId,
         className,
-        studentName: studentName || 'Student',
+        creatorId,
+        studentId: studentId || null,
+        studentName: normalizedStudentName,
         studentEmail: studentEmail || '',
         enrollmentId: enrollmentId || null,
       },
     });
 
-    console.log(`✅ Enrollment notification created for creator: ${creatorId}, class: ${className}`);
+    console.log(`✅ Enrollment notifications processed for class: ${className}`);
 
     return NextResponse.json({ 
       success: true, 

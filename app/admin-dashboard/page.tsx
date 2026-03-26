@@ -675,6 +675,7 @@ export default function AdminDashboard() {
         setSelectedClassDetails((prev: any) => prev ? { ...prev, ...classSyncPayload } : prev);
         setPendingClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
         setApprovedClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
+
       }
 
       showSuccess('Session updated by admin');
@@ -782,6 +783,28 @@ export default function AdminDashboard() {
         setSelectedClassDetails((prev: any) => prev ? { ...prev, ...classSyncPayload } : prev);
         setPendingClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
         setApprovedClasses(prev => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
+
+        try {
+          await fetch('/api/notifications/session-event', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              classId: selectedClassDetails.classId,
+              className: selectedClassDetails.title || selectedClassDetails.className || 'Batch',
+              sessionId: docRef.id,
+              sessionNumber: sessionPayload.sessionNumber,
+              sessionDate: parsedDate.toISOString(),
+              sessionTime,
+              meetingLink: meetingLink || '',
+              creatorId: selectedClassDetails.creatorId || null,
+              createdBy: user?.email || user?.uid || 'admin',
+            }),
+          });
+        } catch (sessionNotifError) {
+          console.error('Session notification dispatch failed (non-blocking):', sessionNotifError);
+        }
       }
 
       setNewSessionForm({ dateTime: '', meetingLink: '' });
@@ -1588,6 +1611,33 @@ export default function AdminDashboard() {
         paidAt: window.serverTimestamp(),
         createdAt: window.serverTimestamp()
       });
+
+      // Notify creator that payout has been released
+      try {
+        await fetch('/api/notifications/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: payout.creatorId,
+            userRole: 'creator',
+            type: 'payout_released',
+            title: `Payout Released: INR ${Number(payout.totalEarnings || 0).toFixed(2)}`,
+            message: `Your payout of INR ${Number(payout.totalEarnings || 0).toFixed(2)} has been released by admin.`,
+            link: '/creator-dashboard',
+            relatedId: payout.creatorId,
+            metadata: {
+              amount: Number(payout.totalEarnings || 0),
+              classCount: payout.classCount || 0,
+              enrollmentCount: payout.enrollmentCount || 0,
+              releasedBy: user.email || user.uid,
+            },
+          }),
+        });
+      } catch (notificationError) {
+        console.warn('Payout notification dispatch failed (non-blocking):', notificationError);
+      }
 
       // Update local state
       setPayouts(prev => prev.map(p => 
