@@ -84,8 +84,8 @@ export default function NotificationItem({ notification, onUpdate }: Notificatio
         background: notification.isRead ? 'rgba(255, 255, 255, 0.03)' : 'rgba(217, 42, 99, 0.1)',
         borderLeft: notification.isRead ? '3px solid transparent' : '3px solid #D92A63',
         borderRadius: '8px',
-        padding: '1rem',
-        marginBottom: '0.75rem',
+        padding: '0.7rem 0.75rem',
+        marginBottom: '0.5rem',
         cursor: !notification.isRead ? 'pointer' : 'default',
         transition: 'all 0.2s',
         position: 'relative',
@@ -99,29 +99,29 @@ export default function NotificationItem({ notification, onUpdate }: Notificatio
         e.currentTarget.style.background = notification.isRead ? 'rgba(255, 255, 255, 0.03)' : 'rgba(217, 42, 99, 0.1)';
       }}
     >
-      <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-        <div style={{ fontSize: '1.5rem', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'flex-start' }}>
+        <div style={{ fontSize: '1.1rem', flexShrink: 0, lineHeight: 1 }}>
           {getNotificationIcon(notification.type)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h4 style={{
-            fontSize: '1rem',
+            fontSize: '0.9rem',
             fontWeight: notification.isRead ? '500' : '600',
             color: '#fff',
-            margin: '0 0 0.5rem 0',
+            margin: '0 0 0.3rem 0',
           }}>
             {notification.title}
           </h4>
           <p style={{
-            fontSize: '0.875rem',
+            fontSize: '0.8rem',
             color: 'rgba(255, 255, 255, 0.7)',
-            margin: '0 0 0.5rem 0',
-            lineHeight: '1.5',
+            margin: '0 0 0.25rem 0',
+            lineHeight: '1.35',
           }}>
             {notification.message}
           </p>
           <div style={{
-            fontSize: '0.75rem',
+            fontSize: '0.7rem',
             color: 'rgba(255, 255, 255, 0.5)',
           }}>
             {formatDate(notification.createdAt)}
@@ -131,10 +131,10 @@ export default function NotificationItem({ notification, onUpdate }: Notificatio
       {!notification.isRead && (
         <div style={{
           position: 'absolute',
-          top: '1rem',
-          right: '1rem',
-          width: '8px',
-          height: '8px',
+          top: '0.8rem',
+          right: '0.8rem',
+          width: '7px',
+          height: '7px',
           borderRadius: '50%',
           background: '#D92A63',
         }} />

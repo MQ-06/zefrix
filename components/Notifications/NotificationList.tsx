@@ -34,10 +34,15 @@ declare global {
 }
 
 export default function NotificationList({ userId, userRole }: NotificationListProps) {
+  const MAX_FETCH_NOTIFICATIONS = 20;
+  const INITIAL_VISIBLE_NOTIFICATIONS = 8;
+  const LOAD_MORE_STEP = 8;
+
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_NOTIFICATIONS);
 
   const fetchNotifications = async () => {
     if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !window.orderBy || !window.limit) {
@@ -51,7 +56,7 @@ export default function NotificationList({ userId, userRole }: NotificationListP
         notificationsRef,
         window.where('userId', '==', userId),
         window.orderBy('createdAt', 'desc'),
-        window.limit(50)
+        window.limit(MAX_FETCH_NOTIFICATIONS)
       );
 
       const snapshot = await window.getDocs(q);
@@ -83,7 +88,7 @@ export default function NotificationList({ userId, userRole }: NotificationListP
         notificationsRef,
         window.where('userId', '==', userId),
         window.orderBy('createdAt', 'desc'),
-        window.limit(50)
+        window.limit(MAX_FETCH_NOTIFICATIONS)
       );
 
       const unsubscribe = window.onSnapshot(q, (snapshot: any) => {
@@ -106,6 +111,10 @@ export default function NotificationList({ userId, userRole }: NotificationListP
       return () => unsubscribe();
     }
   }, [userId]);
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_NOTIFICATIONS);
+  }, [filter, userId]);
 
   const handleMarkAllAsRead = async () => {
     if (unreadCount === 0) return;
@@ -178,10 +187,16 @@ export default function NotificationList({ userId, userRole }: NotificationListP
     });
   }, [notifications, filter]);
 
+  const displayedNotifications = useMemo(() => {
+    return filteredNotifications.slice(0, visibleCount);
+  }, [filteredNotifications, visibleCount]);
+
   // Group filtered notifications by date
   const groupedNotifications = useMemo(() => {
-    return groupNotificationsByDate(filteredNotifications);
-  }, [filteredNotifications]);
+    return groupNotificationsByDate(displayedNotifications);
+  }, [displayedNotifications]);
+
+  const hasMoreNotifications = filteredNotifications.length > visibleCount;
 
   if (loading) {
     return (
@@ -192,15 +207,17 @@ export default function NotificationList({ userId, userRole }: NotificationListP
   }
 
   return (
-    <div style={{ padding: '2rem' }}>
+    <div style={{ padding: '1rem' }}>
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '2rem',
+        marginBottom: '1rem',
+        gap: '0.75rem',
+        flexWrap: 'wrap',
       }}>
         <h2 style={{
-          fontSize: '1.75rem',
+          fontSize: '1.25rem',
           fontWeight: '700',
           color: '#fff',
           margin: 0,
@@ -209,7 +226,7 @@ export default function NotificationList({ userId, userRole }: NotificationListP
           {unreadCount > 0 && (
             <span style={{
               marginLeft: '0.5rem',
-              fontSize: '1rem',
+              fontSize: '0.875rem',
               color: '#D92A63',
               fontWeight: '600',
             }}>
@@ -217,7 +234,7 @@ export default function NotificationList({ userId, userRole }: NotificationListP
             </span>
           )}
         </h2>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '0.25rem' }}>
             <button
               onClick={() => setFilter('all')}
@@ -283,7 +300,7 @@ export default function NotificationList({ userId, userRole }: NotificationListP
         <div style={{
           background: 'rgba(255, 255, 255, 0.05)',
           borderRadius: '16px',
-          padding: '3rem',
+          padding: '2rem',
           textAlign: 'center',
         }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
@@ -302,17 +319,28 @@ export default function NotificationList({ userId, userRole }: NotificationListP
           </p>
         </div>
       ) : (
-        <div>
+        <div style={{
+          maxHeight: '68vh',
+          overflowY: 'auto',
+          paddingRight: '0.25rem',
+        }}>
+          <div style={{
+            marginBottom: '0.75rem',
+            fontSize: '0.8rem',
+            color: 'rgba(255, 255, 255, 0.65)',
+          }}>
+            Showing {Math.min(displayedNotifications.length, filteredNotifications.length)} of {filteredNotifications.length}
+          </div>
           {Object.keys(groupedNotifications).map((dateKey) => (
-            <div key={dateKey} style={{ marginBottom: '2rem' }}>
+            <div key={dateKey} style={{ marginBottom: '1.25rem' }}>
               <h3 style={{
-                fontSize: '0.875rem',
+                fontSize: '0.75rem',
                 fontWeight: '600',
                 color: 'rgba(255, 255, 255, 0.6)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
-                marginBottom: '1rem',
-                paddingBottom: '0.5rem',
+                marginBottom: '0.5rem',
+                paddingBottom: '0.375rem',
                 borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
               }}>
                 {dateKey}
@@ -326,6 +354,51 @@ export default function NotificationList({ userId, userRole }: NotificationListP
               ))}
             </div>
           ))}
+
+          {(hasMoreNotifications || visibleCount > INITIAL_VISIBLE_NOTIFICATIONS) && (
+            <div style={{
+              display: 'flex',
+              gap: '0.5rem',
+              justifyContent: 'center',
+              marginTop: '0.75rem',
+              paddingBottom: '0.25rem',
+            }}>
+              {hasMoreNotifications && (
+                <button
+                  onClick={() => setVisibleCount((prev) => prev + LOAD_MORE_STEP)}
+                  style={{
+                    padding: '0.45rem 0.8rem',
+                    background: 'rgba(217, 42, 99, 0.2)',
+                    border: '1px solid rgba(217, 42, 99, 0.7)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '0.78rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  Load more
+                </button>
+              )}
+              {visibleCount > INITIAL_VISIBLE_NOTIFICATIONS && (
+                <button
+                  onClick={() => setVisibleCount(INITIAL_VISIBLE_NOTIFICATIONS)}
+                  style={{
+                    padding: '0.45rem 0.8rem',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '0.78rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  Show less
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

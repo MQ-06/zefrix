@@ -20,6 +20,9 @@ declare global {
     doc: any;
     updateDoc: any;
     getDoc: any;
+    deleteDoc: any;
+    addDoc: any;
+    serverTimestamp: any;
   }
 }
 
@@ -119,6 +122,11 @@ export default function AdminDashboard() {
   const [isStudentBatchesModalOpen, setIsStudentBatchesModalOpen] = useState(false);
   const [isEditingStudent, setIsEditingStudent] = useState(false);
   const [savingStudentDetails, setSavingStudentDetails] = useState(false);
+  const [isEditingCreator, setIsEditingCreator] = useState(false);
+  const [savingCreatorDetails, setSavingCreatorDetails] = useState(false);
+  const [processingCreatorAccount, setProcessingCreatorAccount] = useState(false);
+  const [savingCreatorPassword, setSavingCreatorPassword] = useState(false);
+  const [creatorNewPassword, setCreatorNewPassword] = useState('');
   const [studentEditForm, setStudentEditForm] = useState({
     name: '',
     email: '',
@@ -129,6 +137,24 @@ export default function AdminDashboard() {
     state: '',
     country: '',
     isProfileComplete: false,
+  });
+  const [creatorEditForm, setCreatorEditForm] = useState({
+    name: '',
+    email: '',
+    phoneNumber: '',
+    photoURL: '',
+    bio: '',
+    expertise: '',
+    skills: '',
+    creatorCategory: '',
+    subCategory: '',
+    introVideo: '',
+    instagram: '',
+    youtube: '',
+    twitter: '',
+    linkedin: '',
+    isProfileComplete: false,
+    isCreatorApproved: false,
   });
 
   // Contact messages
@@ -188,7 +214,12 @@ export default function AdminDashboard() {
     setSelectedCreator(null);
     setSelectedStudent(null);
     setIsEditingStudent(false);
+    setIsEditingCreator(false);
     setSavingStudentDetails(false);
+    setSavingCreatorDetails(false);
+    setProcessingCreatorAccount(false);
+    setSavingCreatorPassword(false);
+    setCreatorNewPassword('');
     setStudentLearningDetails([]);
     setLoadingStudentLearning(false);
   };
@@ -205,6 +236,248 @@ export default function AdminDashboard() {
       country: student?.country || '',
       isProfileComplete: !!student?.isProfileComplete,
     });
+  };
+
+  const initializeCreatorEditForm = (creator: any) => {
+    setCreatorEditForm({
+      name: creator?.name || '',
+      email: creator?.email || '',
+      phoneNumber: creator?.phoneNumber || '',
+      photoURL: creator?.photoURL || creator?.profileImage || '',
+      bio: creator?.bio || '',
+      expertise: creator?.expertise || '',
+      skills: creator?.skills || '',
+      creatorCategory: creator?.creatorCategory || '',
+      subCategory: creator?.subCategory || '',
+      introVideo: creator?.introVideo || '',
+      instagram: creator?.socialHandles?.instagram || '',
+      youtube: creator?.socialHandles?.youtube || '',
+      twitter: creator?.socialHandles?.twitter || '',
+      linkedin: creator?.socialHandles?.linkedin || '',
+      isProfileComplete: !!creator?.isProfileComplete,
+      isCreatorApproved: !!creator?.isCreatorApproved,
+    });
+  };
+
+  const getAdminIdToken = async () => {
+    const token = await window.firebaseAuth?.currentUser?.getIdToken?.();
+    if (!token) {
+      throw new Error('Authentication token missing. Please login again.');
+    }
+    return token;
+  };
+
+  const handleSaveCreatorDetails = async () => {
+    if (!selectedCreator?.uid || !window.firebaseDb || !window.doc || !window.updateDoc || !window.collection || !window.query || !window.where || !window.getDocs) {
+      showError('Unable to save creator details right now.');
+      return;
+    }
+
+    const trimmedName = creatorEditForm.name.trim();
+    const trimmedEmail = creatorEditForm.email.trim();
+    if (!trimmedName) {
+      showError('Creator name is required.');
+      return;
+    }
+    if (!trimmedEmail) {
+      showError('Creator email is required.');
+      return;
+    }
+
+    setSavingCreatorDetails(true);
+    try {
+      const photoURL = creatorEditForm.photoURL.trim();
+      const payload: any = {
+        name: trimmedName,
+        displayName: trimmedName,
+        email: trimmedEmail,
+        phoneNumber: creatorEditForm.phoneNumber.trim(),
+        photoURL,
+        profileImage: photoURL,
+        bio: creatorEditForm.bio.trim(),
+        expertise: creatorEditForm.expertise.trim(),
+        skills: creatorEditForm.skills.trim(),
+        creatorCategory: creatorEditForm.creatorCategory.trim(),
+        subCategory: creatorEditForm.subCategory.trim(),
+        introVideo: creatorEditForm.introVideo.trim(),
+        socialHandles: {
+          instagram: creatorEditForm.instagram.trim(),
+          youtube: creatorEditForm.youtube.trim(),
+          twitter: creatorEditForm.twitter.trim(),
+          linkedin: creatorEditForm.linkedin.trim(),
+        },
+        isProfileComplete: creatorEditForm.isProfileComplete,
+        isCreatorApproved: creatorEditForm.isCreatorApproved,
+        updatedAt: new Date(),
+        adminEditedAt: new Date(),
+        adminEditedBy: user?.email || user?.uid || 'admin',
+      };
+
+      const creatorRef = window.doc(window.firebaseDb, 'users', selectedCreator.uid);
+      await window.updateDoc(creatorRef, payload);
+
+      // Keep denormalized creator references in classes and payouts in sync.
+      const classesRef = window.collection(window.firebaseDb, 'classes');
+      const payoutsRef = window.collection(window.firebaseDb, 'payouts');
+
+      const [classesSnapshot, payoutsSnapshot] = await Promise.all([
+        window.getDocs(window.query(classesRef, window.where('creatorId', '==', selectedCreator.uid))),
+        window.getDocs(window.query(payoutsRef, window.where('creatorId', '==', selectedCreator.uid))),
+      ]);
+
+      const classUpdatePromises: Promise<any>[] = [];
+      classesSnapshot.forEach((doc: any) => {
+        classUpdatePromises.push(
+          window.updateDoc(window.doc(window.firebaseDb, 'classes', doc.id), {
+            creatorName: trimmedName,
+            creatorEmail: trimmedEmail,
+            updatedAt: new Date(),
+          })
+        );
+      });
+
+      const payoutUpdatePromises: Promise<any>[] = [];
+      payoutsSnapshot.forEach((doc: any) => {
+        payoutUpdatePromises.push(
+          window.updateDoc(window.doc(window.firebaseDb, 'payouts', doc.id), {
+            creatorName: trimmedName,
+            creatorEmail: trimmedEmail,
+            updatedAt: new Date(),
+          })
+        );
+      });
+
+      await Promise.all([...classUpdatePromises, ...payoutUpdatePromises]);
+
+      setRealCreators((prev) => prev.map((creator) => creator.uid === selectedCreator.uid ? { ...creator, ...payload } : creator));
+      setSelectedCreator((prev: any) => prev ? { ...prev, ...payload } : prev);
+      showSuccess('Creator details updated successfully.');
+      setIsEditingCreator(false);
+    } catch (error: any) {
+      console.error('Error saving creator details:', error);
+      showError(error?.message || 'Failed to update creator details.');
+    } finally {
+      setSavingCreatorDetails(false);
+    }
+  };
+
+  const handleToggleCreatorSuspension = async (suspend: boolean) => {
+    if (!selectedCreator?.uid) return;
+
+    setProcessingCreatorAccount(true);
+    try {
+      const idToken = await getAdminIdToken();
+      const response = await fetch('/api/admin/manage-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          action: 'suspend-user',
+          userId: selectedCreator.uid,
+          suspended: suspend,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to update account status');
+      }
+
+      const accountPatch = {
+        isSuspended: suspend,
+        accountStatus: suspend ? 'suspended' : 'active',
+        updatedAt: new Date(),
+      };
+
+      setRealCreators((prev) => prev.map((creator) => creator.uid === selectedCreator.uid ? { ...creator, ...accountPatch } : creator));
+      setSelectedCreator((prev: any) => prev ? { ...prev, ...accountPatch } : prev);
+      showSuccess(suspend ? 'Creator suspended successfully.' : 'Creator activated successfully.');
+    } catch (error: any) {
+      console.error('Error toggling creator suspension:', error);
+      showError(error?.message || 'Failed to update creator status.');
+    } finally {
+      setProcessingCreatorAccount(false);
+    }
+  };
+
+  const handleDeleteCreatorAccount = async () => {
+    if (!selectedCreator?.uid) return;
+
+    const confirmed = confirm(`Delete creator account for ${selectedCreator.name}? This will disable login and mark account as deleted.`);
+    if (!confirmed) return;
+
+    setProcessingCreatorAccount(true);
+    try {
+      const idToken = await getAdminIdToken();
+      const response = await fetch('/api/admin/manage-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          action: 'delete-user',
+          userId: selectedCreator.uid,
+          hardDelete: false,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to delete creator account');
+      }
+
+      setRealCreators((prev) => prev.filter((creator) => creator.uid !== selectedCreator.uid));
+      showSuccess('Creator account deleted (disabled) successfully.');
+      closeDetailsModal();
+    } catch (error: any) {
+      console.error('Error deleting creator account:', error);
+      showError(error?.message || 'Failed to delete creator account.');
+    } finally {
+      setProcessingCreatorAccount(false);
+    }
+  };
+
+  const handleSetCreatorPassword = async () => {
+    if (!selectedCreator?.uid) return;
+
+    const password = creatorNewPassword.trim();
+    if (password.length < 6) {
+      showError('New password must be at least 6 characters.');
+      return;
+    }
+
+    setSavingCreatorPassword(true);
+    try {
+      const idToken = await getAdminIdToken();
+      const response = await fetch('/api/admin/manage-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          action: 'set-password',
+          userId: selectedCreator.uid,
+          newPassword: password,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to reset password');
+      }
+
+      setCreatorNewPassword('');
+      showSuccess('Creator password updated successfully.');
+    } catch (error: any) {
+      console.error('Error setting creator password:', error);
+      showError(error?.message || 'Failed to update password.');
+    } finally {
+      setSavingCreatorPassword(false);
+    }
   };
 
   const toDateTimeLocalValue = (dateInput: any, timeInput?: string) => {
@@ -2181,6 +2454,9 @@ export default function AdminDashboard() {
                         onClick={() => {
                           setSelectedCreator(creator);
                           setSelectedStudent(null);
+                          setIsEditingCreator(false);
+                          setCreatorNewPassword('');
+                          initializeCreatorEditForm(creator);
                           setIsModalOpen(true);
                         }}
                       >
@@ -3514,6 +3790,231 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
+
+            {isCreator && (
+              <div className="modal-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.9rem', flexWrap: 'wrap' }}>
+                  <h3 className="modal-section-title" style={{ marginBottom: 0 }}>Creator Profile Management</h3>
+                  {!isEditingCreator ? (
+                    <button
+                      className="creator-view-btn"
+                      style={{ width: 'auto', padding: '0.45rem 0.8rem' }}
+                      onClick={() => {
+                        initializeCreatorEditForm(person);
+                        setIsEditingCreator(true);
+                      }}
+                    >
+                      <span>Edit Creator Details</span>
+                    </button>
+                  ) : null}
+                </div>
+
+                {isEditingCreator ? (
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
+                      <input
+                        type="text"
+                        value={creatorEditForm.name}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                        placeholder="Creator name"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="email"
+                        value={creatorEditForm.email}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                        placeholder="Email"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
+                      <input
+                        type="text"
+                        value={creatorEditForm.phoneNumber}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, phoneNumber: e.target.value }))}
+                        placeholder="Phone number"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="url"
+                        value={creatorEditForm.photoURL}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, photoURL: e.target.value }))}
+                        placeholder="Photo URL"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.7rem' }}>
+                      <input
+                        type="text"
+                        value={creatorEditForm.creatorCategory}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, creatorCategory: e.target.value }))}
+                        placeholder="Category"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="text"
+                        value={creatorEditForm.subCategory}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, subCategory: e.target.value }))}
+                        placeholder="Sub category"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="url"
+                        value={creatorEditForm.introVideo}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, introVideo: e.target.value }))}
+                        placeholder="Intro video URL"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                    </div>
+
+                    <textarea
+                      value={creatorEditForm.bio}
+                      onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, bio: e.target.value }))}
+                      placeholder="Bio"
+                      rows={3}
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem', resize: 'vertical' }}
+                    />
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
+                      <input
+                        type="text"
+                        value={creatorEditForm.expertise}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, expertise: e.target.value }))}
+                        placeholder="Expertise"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="text"
+                        value={creatorEditForm.skills}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, skills: e.target.value }))}
+                        placeholder="Skills"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
+                      <input
+                        type="url"
+                        value={creatorEditForm.instagram}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, instagram: e.target.value }))}
+                        placeholder="Instagram URL"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="url"
+                        value={creatorEditForm.youtube}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, youtube: e.target.value }))}
+                        placeholder="YouTube URL"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
+                      <input
+                        type="url"
+                        value={creatorEditForm.twitter}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, twitter: e.target.value }))}
+                        placeholder="Twitter URL"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                      <input
+                        type="url"
+                        value={creatorEditForm.linkedin}
+                        onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, linkedin: e.target.value }))}
+                        placeholder="LinkedIn URL"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                      <label style={{ color: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={creatorEditForm.isProfileComplete}
+                          onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, isProfileComplete: e.target.checked }))}
+                        />
+                        Profile complete
+                      </label>
+                      <label style={{ color: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={creatorEditForm.isCreatorApproved}
+                          onChange={(e) => setCreatorEditForm((prev) => ({ ...prev, isCreatorApproved: e.target.checked }))}
+                        />
+                        Creator approved
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+                      <button
+                        className="button-2"
+                        onClick={() => {
+                          setIsEditingCreator(false);
+                          initializeCreatorEditForm(person);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="creator-view-btn"
+                        style={{ width: 'auto', padding: '0.45rem 0.8rem' }}
+                        onClick={handleSaveCreatorDetails}
+                        disabled={savingCreatorDetails}
+                      >
+                        <span>{savingCreatorDetails ? 'Saving...' : 'Save Changes'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem' }}>
+                    Edit creator account fields, social links, bio, photo, and profile flags. Changes are saved permanently in Firestore.
+                  </div>
+                )}
+
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.12)', marginTop: '1rem', paddingTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+                  <h4 style={{ margin: 0, color: '#fff', fontSize: '0.95rem' }}>Account Security and Access</h4>
+
+                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <button
+                      className="button-2"
+                      onClick={() => handleToggleCreatorSuspension(!(person as any).isSuspended)}
+                      disabled={processingCreatorAccount}
+                      style={{ borderColor: '#FF9800', color: '#FF9800' }}
+                    >
+                      {(person as any).isSuspended ? 'Activate Creator' : 'Suspend Creator'}
+                    </button>
+                    <button
+                      className="button-2"
+                      onClick={handleDeleteCreatorAccount}
+                      disabled={processingCreatorAccount}
+                      style={{ borderColor: '#f44336', color: '#f44336' }}
+                    >
+                      Delete Creator Account
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.6rem' }}>
+                    <input
+                      type="text"
+                      value={creatorNewPassword}
+                      onChange={(e) => setCreatorNewPassword(e.target.value)}
+                      placeholder="Set new password (min 6 chars)"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                    />
+                    <button
+                      className="creator-view-btn"
+                      style={{ width: 'auto', padding: '0.45rem 0.8rem' }}
+                      onClick={handleSetCreatorPassword}
+                      disabled={savingCreatorPassword}
+                    >
+                      <span>{savingCreatorPassword ? 'Updating...' : 'Update Password'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {!isCreator && (
               <div className="modal-section">

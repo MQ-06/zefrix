@@ -686,7 +686,7 @@ export default function SignupLoginPage() {
           }
 
           /* Phone Input Styling */
-          .container .PhoneInput {
+          :global(.container .PhoneInput) {
             background-color: #eee;
             border: none;
             border-radius: 8px;
@@ -697,27 +697,35 @@ export default function SignupLoginPage() {
             margin: 8px 0;
           }
 
-          .container .PhoneInputCountry {
+          :global(.container .PhoneInputCountry) {
             padding: 10px 8px;
             border-right: 1px solid #ddd;
             background-color: #eee;
             border-radius: 8px 0 0 8px;
+            color: #000 !important;
           }
 
-          .container .PhoneInputCountrySelect {
+          :global(.container .PhoneInputCountrySelect) {
             border: none;
             background-color: transparent;
-            color: #000;
+            color: #000 !important;
             font-size: 13px;
             cursor: pointer;
             outline: none;
             font-family: 'Poppins', sans-serif;
           }
 
-          .container .PhoneInputInput {
+          :global(.container .PhoneInputCountryIcon),
+          :global(.container .PhoneInputCountrySelectArrow) {
+            color: #000 !important;
+          }
+
+          :global(.container .PhoneInputInput) {
             background-color: transparent !important;
             border: none !important;
-            color: #000;
+            color: #000 !important;
+            -webkit-text-fill-color: #000 !important;
+            caret-color: #000 !important;
             font-size: 13px;
             padding: 10px 15px !important;
             width: 100%;
@@ -726,11 +734,11 @@ export default function SignupLoginPage() {
             margin: 0 !important;
           }
 
-          .container .PhoneInputInput::placeholder {
+          :global(.container .PhoneInputInput::placeholder) {
             color: #999;
           }
 
-          .container .PhoneInput:focus-within {
+          :global(.container .PhoneInput:focus-within) {
             background-color: #f5f5f5;
             border: 1px solid #4e54c8;
           }
