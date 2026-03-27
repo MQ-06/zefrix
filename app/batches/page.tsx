@@ -282,8 +282,22 @@ function BatchesContent() {
     };
   }, []);
 
+  // Check if batch has already started
+  const isBatchStarted = (startISO: string) => {
+    if (!startISO) return false;
+    try {
+      const startDate = new Date(startISO);
+      const now = new Date();
+      return now >= startDate;
+    } catch (error) {
+      return false;
+    }
+  };
+
   // Convert approved classes to course format (only real classes, no dummy data)
-  const allBatches = approvedClasses.map((classItem) => {
+  const allBatches = approvedClasses
+    .filter(classItem => !isBatchStarted(classItem.startISO))
+    .map((classItem) => {
     // Fix image URL - ensure it uses correct protocol
     let imageUrl = DEFAULT_COURSE_IMAGE;
     

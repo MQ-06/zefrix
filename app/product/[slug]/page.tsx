@@ -615,7 +615,26 @@ export default function ProductPage({ params }: PageProps) {
     notFound();
   }
 
+  // Check if batch has already started
+  const isBatchStarted = () => {
+    if (!course.startISO) return false;
+    try {
+      const startDate = new Date(course.startISO);
+      const now = new Date();
+      return now >= startDate; // If today's date is on or after start date, batch has started
+    } catch (error) {
+      console.error('Error checking batch start date:', error);
+      return false;
+    }
+  };
+
   const handleAddToCart = async () => {
+    // Check if batch has already started
+    if (isBatchStarted()) {
+      showError('Sorry! This batch has already started. Enrollment is no longer available.');
+      return;
+    }
+
     // Check if user is authenticated
     if (typeof window !== 'undefined' && window.firebaseAuth) {
       const user = window.firebaseAuth.currentUser;
@@ -1150,7 +1169,7 @@ export default function ProductPage({ params }: PageProps) {
 
                 </div>
 
-                {!isEnrolled && (
+                {!isEnrolled && !isBatchStarted() && (
                   <>
                     {!user ? (
                       <div className="space-y-3">
@@ -1183,6 +1202,11 @@ export default function ProductPage({ params }: PageProps) {
                       </button>
                     )}
                   </>
+                )}
+                {isBatchStarted() && (
+                  <div className="w-full px-8 py-4 rounded-lg text-white font-semibold bg-red-600/20 border border-red-500/50 text-center">
+                    ⏱ Enrollment Closed - Batch Already Started
+                  </div>
                 )}
                 {isEnrolled && (
                   <div className="w-full px-8 py-4 rounded-lg text-white font-semibold bg-green-600/20 border border-green-500/50 text-center">

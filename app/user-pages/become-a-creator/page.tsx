@@ -441,9 +441,9 @@ export default function BecomeACreatorPage() {
         console.warn('Creator signup notification failed (non-blocking):', notificationError);
       }
 
-      showSuccess('Creator account created successfully!');
+      showSuccess('Creator account created successfully! Please book your onboarding demo call.');
       await new Promise(resolve => setTimeout(resolve, 2000));
-      router.push('/creator-dashboard');
+      router.push('/user-pages/become-a-creator/book-demo');
     } catch (err: any) {
       let errorMessage = 'Signup failed. ';
       

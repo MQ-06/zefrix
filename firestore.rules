@@ -91,8 +91,15 @@ service cloud.firestore {
       allow list: if true; // Allow public list queries for enrollment counts
       
       // Students can create enrollments for themselves
+      // But only if the batch hasn't started yet (batch start date check)
       allow create: if request.auth != null && 
-                       request.auth.uid == request.resource.data.studentId;
+                       request.auth.uid == request.resource.data.studentId &&
+                       exists(/databases/$(database)/documents/classes/$(request.resource.data.classId)) &&
+                       (
+                         // Check if batch start date hasn't passed
+                         !get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.containsKey('startISO') ||
+                         request.time < timestamp.parse(get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.startISO)
+                       );
       
       // Students can update their own enrollments (for ratings)
       allow update: if request.auth != null && 

@@ -278,7 +278,47 @@ export default function CheckoutPage() {
             const verifyData = await verifyResponse.json();
             console.log('✅ Payment verified successfully');
 
-            // Step 2: Check Firebase is initialized
+            // Step 2: Check batch start dates - prevent enrollment if batch has started
+            const batchDateErrors: string[] = [];
+            for (const item of cart) {
+                try {
+                    let classData: any = null;
+                    if (window.firebaseDb && window.doc && window.getDoc) {
+                        const classRef = window.doc(window.firebaseDb, 'classes', item.id);
+                        const classSnap = await window.getDoc(classRef);
+                        if (classSnap.exists()) {
+                            classData = classSnap.data();
+                        }
+                    }
+
+                    // Check if batch has already started
+                    if (classData?.startISO) {
+                        const startDate = new Date(classData.startISO);
+                        const now = new Date();
+                        if (now >= startDate) {
+                            batchDateErrors.push(`The batch "${item.title}" has already started and is no longer available for enrollment.`);
+                        }
+                    }
+                } catch (error: any) {
+                    console.error(`Error checking batch start date for ${item.id}:`, error);
+                    // Continue with other checks (non-blocking)
+                }
+            }
+
+            if (batchDateErrors.length > 0) {
+                const errorMsg = batchDateErrors.join('; ');
+                console.error('Batch date check failed:', errorMsg);
+                
+                // Payment was successful but batches have started - store for admin review
+                await storeFailedEnrollment(paymentId, orderId, currentUser, cart, 'batch_already_started', errorMsg);
+                
+                showError(`${errorMsg} Your payment was successful (Payment ID: ${paymentId}). Please contact support for a refund.`);
+                setIsProcessing(false);
+                clearCart();
+                return;
+            }
+
+            // Step 3: Check Firebase is initialized
             if (!window.firebaseDb || !window.collection || !window.addDoc) {
                 const errorMsg = 'Database connection error. Please refresh the page and try again.';
                 console.error('Firebase not initialized during enrollment');
@@ -292,7 +332,7 @@ export default function CheckoutPage() {
                 return;
             }
 
-            // Step 3: Check max seats before creating enrollments
+            // Step 4: Check max seats before creating enrollments
             const seatCheckErrors: string[] = [];
             for (const item of cart) {
                 try {
