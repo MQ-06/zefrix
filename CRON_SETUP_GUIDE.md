@@ -115,7 +115,7 @@ Before setting up the cron job, test the endpoint manually:
 Make sure your Resend API key is configured in `.env.local`:
 ```env
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-FROM_EMAIL=onboarding@resend.dev  # Or your verified domain email
+FROM_EMAIL=notifications@zefrixapp.com  # Or your verified domain email
 ```
 
 ---

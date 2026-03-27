@@ -57,7 +57,7 @@ declare global {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const ADMIN_EMAILS = ['kartik@zefrix.com', 'mariamqadeem181@gmail.com'];
+  const ADMIN_EMAILS = ['kartik@zefrix.com'];
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();

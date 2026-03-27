@@ -3,6 +3,7 @@ import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { createAdminNotification } from '@/lib/serverNotifications';
+import { sendAdminContactMessageEmail } from '@/lib/email';
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -109,6 +110,17 @@ export async function POST(request: NextRequest) {
         messageId: persistedMessageId,
         source: normalizedSource,
       },
+    });
+
+    sendAdminContactMessageEmail({
+      name: normalizedName,
+      email: normalizedEmail,
+      subject: normalizedSubject,
+      message: normalizedMessage,
+      phone: normalizedPhone,
+      messageId: persistedMessageId,
+    }).catch((emailError) => {
+      console.error('Error sending admin contact-message email:', emailError);
     });
 
     console.log(`✅ Contact message notifications created for ${sentCount} admin(s)`);

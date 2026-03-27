@@ -3,6 +3,7 @@ import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { createAdminNotification } from '@/lib/serverNotifications';
+import { sendAdminCreatorSignupEmail } from '@/lib/email';
 
 if (!admin.apps.length) {
   try {
@@ -81,6 +82,17 @@ export async function POST(request: NextRequest) {
         source: resolvedSource,
       },
     });
+
+    if (eventType === 'creator_signup') {
+      sendAdminCreatorSignupEmail({
+        userId: String(userId),
+        userName: resolvedName,
+        userEmail: resolvedEmail,
+        source: resolvedSource,
+      }).catch((emailError) => {
+        console.error('Error sending admin creator-signup email:', emailError);
+      });
+    }
 
     return NextResponse.json({
       success: true,

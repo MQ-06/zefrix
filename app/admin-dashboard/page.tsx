@@ -1912,6 +1912,25 @@ export default function AdminDashboard() {
         console.warn('Payout notification dispatch failed (non-blocking):', notificationError);
       }
 
+      try {
+        await fetch('/api/email/payout-released', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            creatorName: payout.name || 'Creator',
+            creatorEmail: payout.email || '',
+            amount: Number(payout.totalEarnings || 0),
+            classCount: payout.classCount || 0,
+            enrollmentCount: payout.enrollmentCount || 0,
+            releasedBy: user.email || user.uid,
+          }),
+        });
+      } catch (emailError) {
+        console.warn('Payout email dispatch failed (non-blocking):', emailError);
+      }
+
       // Update local state
       setPayouts(prev => prev.map(p => 
         p.creatorId === payout.creatorId 

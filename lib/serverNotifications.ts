@@ -13,7 +13,6 @@ export interface NotificationPayload {
 
 const FALLBACK_ADMIN_EMAILS = [
   'kartik@zefrix.com',
-  'mariamqadeem181@gmail.com',
   process.env.ADMIN_EMAIL || '',
 ].filter(Boolean);
 

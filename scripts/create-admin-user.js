@@ -92,9 +92,9 @@ async function createAdminUser(email, password, name) {
 }
 
 // Run the script
-const email = 'mariamqadeem181@gmail.com';
+const email = 'kartik@zefrix.com';
 const password = 'moonglade<journey>8';
-const name = 'Mariam Qadeem';
+const name = 'Kartik';
 
 createAdminUser(email, password, name)
   .then(() => {

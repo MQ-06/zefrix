@@ -1,10 +1,25 @@
 import { Resend } from 'resend';
+import { shouldSendEmailForEvent } from '@/lib/emailPolicy';
 
 // Initialize Resend only if API key exists (to avoid build errors)
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@zefrix.com';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'notifications@zefrixapp.com';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@zefrix.com';
+
+function getAdminEmailRecipients(): string[] {
+  const listFromEnv = (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const fallbackList = [ADMIN_EMAIL].filter(Boolean);
+  const finalList = (listFromEnv.length > 0 ? listFromEnv : fallbackList).map((email) =>
+    email.toLowerCase(),
+  );
+
+  return Array.from(new Set(finalList));
+}
 
 /**
  * Helper function to create notification (server-side only)
@@ -110,6 +125,31 @@ interface SessionReminderEmailData {
   sessionDate: string;
   sessionTime: string;
   meetingLink: string;
+}
+
+interface AdminContactMessageEmailData {
+  name: string;
+  email: string;
+  subject: string;
+  message?: string;
+  phone?: string;
+  messageId?: string;
+}
+
+interface AdminCreatorSignupEmailData {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  source?: string;
+}
+
+interface CreatorPayoutReleasedEmailData {
+  creatorName: string;
+  creatorEmail: string;
+  amount: number;
+  classCount?: number;
+  enrollmentCount?: number;
+  releasedBy?: string;
 }
 
 // Enrollment Confirmation Email
@@ -473,5 +513,167 @@ export async function sendSessionReminderEmail(data: SessionReminderEmailData) {
     console.error('Error sending session reminder email:', error);
     throw error;
   }
+}
+
+export async function sendAdminContactMessageEmail(data: AdminContactMessageEmailData) {
+  if (!shouldSendEmailForEvent('admin_contact_message')) {
+    return;
+  }
+
+  if (!resend) {
+    console.warn('Resend API key not configured. Skipping email send.');
+    return;
+  }
+
+  const recipients = getAdminEmailRecipients();
+  if (recipients.length === 0) {
+    console.warn('No admin email recipients configured. Skipping admin contact-message email.');
+    return;
+  }
+
+  const safeName = String(data.name || 'Unknown').trim();
+  const safeEmail = String(data.email || '').trim().toLowerCase();
+  const safeSubject = String(data.subject || 'No subject').trim();
+  const safeMessage = String(data.message || '').trim();
+  const safePhone = String(data.phone || '').trim();
+  const safeMessageId = String(data.messageId || '').trim();
+  const adminUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://zefrix.com'}/admin-dashboard?page=contact-messages`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>New Contact Message</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 640px; margin: 0 auto; padding: 20px;">
+        <h2 style="margin-top: 0;">New Contact Message</h2>
+        <p>A new contact request requires admin attention.</p>
+        <div style="background: #f7f7f7; padding: 16px; border-radius: 8px;">
+          <p><strong>Name:</strong> ${safeName}</p>
+          <p><strong>Email:</strong> ${safeEmail || 'N/A'}</p>
+          <p><strong>Phone:</strong> ${safePhone || 'N/A'}</p>
+          <p><strong>Subject:</strong> ${safeSubject}</p>
+          <p><strong>Message ID:</strong> ${safeMessageId || 'N/A'}</p>
+          <p><strong>Message:</strong><br>${safeMessage || 'N/A'}</p>
+        </div>
+        <p style="margin-top: 20px;"><a href="${adminUrl}" style="color: #D92A63;">Open contact messages in admin dashboard</a></p>
+      </body>
+    </html>
+  `;
+
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to: recipients,
+    subject: `Admin Alert: New Contact Message - ${safeSubject}`,
+    html,
+  });
+}
+
+export async function sendAdminCreatorSignupEmail(data: AdminCreatorSignupEmailData) {
+  if (!shouldSendEmailForEvent('admin_creator_signup')) {
+    return;
+  }
+
+  if (!resend) {
+    console.warn('Resend API key not configured. Skipping email send.');
+    return;
+  }
+
+  const recipients = getAdminEmailRecipients();
+  if (recipients.length === 0) {
+    console.warn('No admin email recipients configured. Skipping admin creator-signup email.');
+    return;
+  }
+
+  const safeName = String(data.userName || 'Creator').trim();
+  const safeEmail = String(data.userEmail || '').trim().toLowerCase();
+  const safeUserId = String(data.userId || '').trim();
+  const safeSource = String(data.source || 'unknown').trim();
+  const adminUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://zefrix.com'}/admin-dashboard?page=creators`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>New Creator Signup</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 640px; margin: 0 auto; padding: 20px;">
+        <h2 style="margin-top: 0;">New Creator Signup</h2>
+        <p>A new creator has signed up and may require review.</p>
+        <div style="background: #f7f7f7; padding: 16px; border-radius: 8px;">
+          <p><strong>Name:</strong> ${safeName}</p>
+          <p><strong>Email:</strong> ${safeEmail || 'N/A'}</p>
+          <p><strong>User ID:</strong> ${safeUserId || 'N/A'}</p>
+          <p><strong>Source:</strong> ${safeSource}</p>
+        </div>
+        <p style="margin-top: 20px;"><a href="${adminUrl}" style="color: #D92A63;">Open creators in admin dashboard</a></p>
+      </body>
+    </html>
+  `;
+
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to: recipients,
+    subject: `Admin Alert: New Creator Signup - ${safeName}`,
+    html,
+  });
+}
+
+export async function sendCreatorPayoutReleasedEmail(data: CreatorPayoutReleasedEmailData) {
+  if (!shouldSendEmailForEvent('creator_payout_released')) {
+    return;
+  }
+
+  if (!resend) {
+    console.warn('Resend API key not configured. Skipping email send.');
+    return;
+  }
+
+  const safeCreatorEmail = String(data.creatorEmail || '').trim().toLowerCase();
+  if (!safeCreatorEmail) {
+    console.warn('Creator email missing. Skipping payout release email.');
+    return;
+  }
+
+  const safeCreatorName = String(data.creatorName || 'Creator').trim();
+  const safeAmount = Number(data.amount || 0);
+  const safeClassCount = Number(data.classCount || 0);
+  const safeEnrollmentCount = Number(data.enrollmentCount || 0);
+  const safeReleasedBy = String(data.releasedBy || 'Admin').trim();
+  const creatorUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://zefrix.com'}/creator-dashboard`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payout Released</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 640px; margin: 0 auto; padding: 20px;">
+        <h2 style="margin-top: 0;">Your Payout Has Been Released</h2>
+        <p>Hello ${safeCreatorName},</p>
+        <p>Your payout has been released by admin.</p>
+        <div style="background: #f7f7f7; padding: 16px; border-radius: 8px;">
+          <p><strong>Amount:</strong> INR ${safeAmount.toFixed(2)}</p>
+          <p><strong>Classes included:</strong> ${safeClassCount}</p>
+          <p><strong>Enrollments included:</strong> ${safeEnrollmentCount}</p>
+          <p><strong>Released by:</strong> ${safeReleasedBy}</p>
+        </div>
+        <p style="margin-top: 20px;"><a href="${creatorUrl}" style="color: #D92A63;">Open creator dashboard</a></p>
+      </body>
+    </html>
+  `;
+
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to: safeCreatorEmail,
+    subject: `Payout Released: INR ${safeAmount.toFixed(2)}`,
+    html,
+  });
 }
 
