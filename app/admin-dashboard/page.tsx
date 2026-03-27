@@ -6,6 +6,7 @@ import { useNotification } from '@/contexts/NotificationContext';
 import { BookOpen, CheckCircle, Clock, Users, Calendar, Eye, Mail, X, User, CreditCard, FileText, TrendingUp } from 'lucide-react';
 import NotificationList from '@/components/Notifications/NotificationList';
 import NotificationBadge from '@/components/Notifications/NotificationBadge';
+import { getStrongPasswordHint, validateStrongPassword } from '@/lib/passwordValidation';
 
 declare global {
   interface Window {
@@ -444,8 +445,9 @@ export default function AdminDashboard() {
     if (!selectedCreator?.uid) return;
 
     const password = creatorNewPassword.trim();
-    if (password.length < 6) {
-      showError('New password must be at least 6 characters.');
+    const passwordValidation = validateStrongPassword(password);
+    if (!passwordValidation.valid) {
+      showError(passwordValidation.firstError || getStrongPasswordHint());
       return;
     }
 

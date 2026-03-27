@@ -10,6 +10,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import HydrationGuard from '@/components/HydrationGuard';
 import { isClient } from '@/app/utils/environment';
+import { getStrongPasswordHint, validateStrongPassword } from '@/lib/passwordValidation';
 import PhoneInput, { isValidPhoneNumber, parsePhoneNumber } from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 
@@ -362,8 +363,17 @@ export default function BecomeACreatorPage() {
       (provider: any) => provider.providerId === 'google.com'
     );
     
-    if (!isGoogleUser && formData.password.length < 6) {
-      showError('Password must be at least 6 characters long');
+    if (!isGoogleUser) {
+      const passwordValidation = validateStrongPassword(formData.password);
+      if (!passwordValidation.valid) {
+        showError(passwordValidation.firstError || getStrongPasswordHint());
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    if (!isGoogleUser && !formData.password.trim()) {
+      showError('Password is required');
       setIsSubmitting(false);
       return;
     }
@@ -442,7 +452,7 @@ export default function BecomeACreatorPage() {
       } else if (err.code === 'auth/invalid-email') {
         errorMessage += 'Invalid email address. Please check your email format.';
       } else if (err.code === 'auth/weak-password') {
-        errorMessage += 'Password is too weak. Please use a stronger password (at least 6 characters).';
+        errorMessage += getStrongPasswordHint();
       } else if (err.code === 'auth/operation-not-allowed') {
         errorMessage += 'Email/password accounts are not enabled. Please contact support.';
       } else if (err.message) {

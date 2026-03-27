@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { validateStrongPassword } from '@/lib/passwordValidation';
 
 interface User {
   uid: string;
@@ -452,6 +453,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (hasPhoneInput && !phoneValidation.valid) {
       throw new Error(phoneValidation.error || 'Invalid phone number');
     }
+
+    const passwordValidation = validateStrongPassword(password);
+    if (!passwordValidation.valid) {
+      throw new Error(passwordValidation.firstError || 'Password does not meet security requirements.');
+    }
+
     const normalizedPhoneNumber = hasPhoneInput ? phoneValidation.normalized : undefined;
 
     try {
@@ -598,7 +605,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await window.sendPasswordResetEmail(window.firebaseAuth, email.trim());
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'https://zefrix.com');
+      const actionCodeSettings = {
+        url: `${baseUrl.replace(/\/$/, '')}/reset-password`,
+        handleCodeInApp: false,
+      };
+
+      await window.sendPasswordResetEmail(window.firebaseAuth, email.trim(), actionCodeSettings);
     } catch (error: any) {
       throw error;
     }

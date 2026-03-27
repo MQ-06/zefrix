@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import admin from '@/lib/firebase-admin';
+import { getStrongPasswordHint, validateStrongPassword } from '@/lib/passwordValidation';
 
 type ManageUserAction = 'set-password' | 'suspend-user' | 'delete-user';
 
@@ -59,8 +60,16 @@ export async function POST(request: NextRequest) {
 
     if (action === 'set-password') {
       const newPassword = (body.newPassword || '').trim();
-      if (newPassword.length < 6) {
-        return NextResponse.json({ success: false, error: 'newPassword must be at least 6 characters' }, { status: 400 });
+      const passwordValidation = validateStrongPassword(newPassword);
+      if (!passwordValidation.valid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: passwordValidation.firstError || getStrongPasswordHint(),
+            passwordPolicy: getStrongPasswordHint(),
+          },
+          { status: 400 },
+        );
       }
 
       await admin.auth().updateUser(userId, { password: newPassword });

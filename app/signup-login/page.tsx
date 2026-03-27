@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNotification } from '@/contexts/NotificationContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { getStrongPasswordChecks, getStrongPasswordHint, validateStrongPassword } from '@/lib/passwordValidation';
 import PhoneInput, { isValidPhoneNumber, parsePhoneNumber } from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 
@@ -17,11 +18,20 @@ export default function SignupLoginPage() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [signupPassword, setSignupPassword] = useState('');
   const [signupPhoneNumber, setSignupPhoneNumber] = useState<string>('');
   const [signupPhoneError, setSignupPhoneError] = useState<string>('');
+  const [showResetSuccessBanner, setShowResetSuccessBanner] = useState(false);
   const router = useRouter();
   const { signUp, signIn, signInWithGoogle, resetPassword, user, loading } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    setShowResetSuccessBanner(params.get('reset') === 'success');
+  }, []);
 
   // Redirect if already authenticated (with delay to show notifications)
   useEffect(() => {
@@ -78,7 +88,7 @@ export default function SignupLoginPage() {
     const form = e.currentTarget;
     const name = (form.querySelector('#signup-name') as HTMLInputElement)?.value.trim();
     const email = (form.querySelector('#signup-email') as HTMLInputElement)?.value.trim();
-    const password = (form.querySelector('#signup-password') as HTMLInputElement)?.value;
+    const password = signupPassword;
 
     // Validation
     if (!name || !email || !password || !signupPhoneNumber) {
@@ -94,8 +104,9 @@ export default function SignupLoginPage() {
       return;
     }
 
-    if (password.length < 6) {
-      showError('Password must be at least 6 characters long');
+    const passwordValidation = validateStrongPassword(password);
+    if (!passwordValidation.valid) {
+      showError(passwordValidation.firstError || getStrongPasswordHint());
       setIsSubmitting(false);
       return;
     }
@@ -125,7 +136,7 @@ export default function SignupLoginPage() {
       } else if (err.code === 'auth/invalid-email') {
         errorMessage += 'Invalid email address. Please check your email format.';
       } else if (err.code === 'auth/weak-password') {
-        errorMessage += 'Password is too weak. Please use a stronger password (at least 6 characters).';
+        errorMessage += getStrongPasswordHint();
       } else if (err.code === 'auth/operation-not-allowed') {
         errorMessage += 'Email/password accounts are not enabled. Please contact support.';
       } else if (err.message) {
@@ -201,22 +212,24 @@ export default function SignupLoginPage() {
     try {
       await resetPassword(resetEmail.trim());
       setResetEmailSent(true);
-      showSuccess('Password reset email sent! Please check your inbox.');
+      showInfo('If an account exists for this email, a password reset link has been sent.');
     } catch (err: any) {
       let errorMessage = 'Failed to send reset email. ';
-      
-      if (err.code === 'auth/user-not-found') {
-        errorMessage += 'No account found with this email address.';
-      } else if (err.code === 'auth/invalid-email') {
+
+      if (err.code === 'auth/invalid-email') {
         errorMessage += 'Invalid email address.';
+      } else if (err.code === 'auth/too-many-requests') {
+        errorMessage += 'Too many requests. Please wait and try again.';
+      } else if (err.code === 'auth/network-request-failed') {
+        errorMessage += 'Network error. Please check your connection and retry.';
       } else if (err.message) {
         errorMessage += err.message;
       } else {
         errorMessage += 'Please try again or contact support.';
       }
-      
+
       showError(errorMessage);
-      console.error('Password reset error:', err);
+      console.error('Password reset request failed:', err?.code || 'unknown_error');
     } finally {
       setIsSubmitting(false);
     }
@@ -796,6 +809,8 @@ export default function SignupLoginPage() {
                   id="signup-password" 
                   placeholder="Password" 
                   required 
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
                   autoComplete="new-password" 
                 />
                 <button
@@ -807,6 +822,15 @@ export default function SignupLoginPage() {
                   <i className={showSignupPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
                 </button>
               </div>
+              {signupPassword ? (
+                <div style={{ width: '100%', marginTop: '6px', marginBottom: '2px', textAlign: 'left' }}>
+                  {getStrongPasswordChecks(signupPassword).map((check) => (
+                    <div key={check.key} style={{ fontSize: '11px', color: check.passed ? '#1f7a3e' : '#7a8094', marginBottom: '3px' }}>
+                      {check.passed ? '✓' : '•'} {check.label}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <button type="submit" id="emailSignUpBtn" disabled={isSubmitting}>
                 {isSubmitting ? 'Creating Account...' : 'Sign Up'}
               </button>
@@ -834,6 +858,21 @@ export default function SignupLoginPage() {
               </div>
               {!showForgotPassword ? (
                 <>
+                  {showResetSuccessBanner ? (
+                    <div style={{
+                      width: '100%',
+                      background: '#EAF9EF',
+                      border: '1px solid #B9E8C8',
+                      color: '#1F7A3E',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                      marginBottom: '12px',
+                      textAlign: 'left',
+                    }}>
+                      Password reset successful. You can now sign in with your new password.
+                    </div>
+                  ) : null}
                   <span style={{ color: '#666' }}>or use your email password</span>
                   <input type="email" id="login-email" placeholder="Email" required autoComplete="email" />
                   <div className="password-input-wrapper">
