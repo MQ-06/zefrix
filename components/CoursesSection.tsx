@@ -199,6 +199,11 @@ export default function CoursesSection() {
   }, []);
 
   // Map approved classes to course format (only real classes, no dummy data)
+  const getImageUrl = (videoLink?: string) => {
+    if (!videoLink || !videoLink.startsWith('http')) return DEFAULT_COURSE_IMAGE;
+    return videoLink;
+  };
+
   const featuredCourses = approvedClasses.map((classItem) => ({
     id: classItem.classId,
     slug: classItem.classId,
@@ -210,7 +215,7 @@ export default function CoursesSection() {
     instructor: classItem.creatorName || 'Creator',
     instructorId: '',
     instructorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(classItem.creatorName || 'Creator')}&background=D92A63&color=fff&size=128`,
-    image: classItem.videoLink || DEFAULT_COURSE_IMAGE,
+    image: getImageUrl(classItem.videoLink),
     price: classItem.price,
     originalPrice: classItem.price * 1.2,
     sections: classItem.numberSessions,

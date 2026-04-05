@@ -53,8 +53,8 @@ service cloud.firestore {
     
     // Batches collection
     match /batches/{batchId} {
-      // Anyone can read batches for approved classes
-      allow read: if request.auth != null;
+      // Anyone can read batches for approved classes (public product page needs this)
+      allow read: if true;
       
       // Creators can create batches for their own classes
       allow create: if request.auth != null && 

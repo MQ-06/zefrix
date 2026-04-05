@@ -209,7 +209,7 @@ export default function ProductPage({ params }: PageProps) {
             title: data.title || 'Untitled Batch',
             subtitle: data.subtitle || '',
             price: data.price || 0,
-            image: (data.videoLink && data.videoLink.trim() !== '') ? data.videoLink : DEFAULT_COURSE_IMAGE,
+            image: (data.videoLink && data.videoLink.startsWith('http')) ? data.videoLink : DEFAULT_COURSE_IMAGE,
             instructor: data.creatorName || 'Instructor',
             instructorId: data.creatorId || '',
             instructorImage: getAvatarUrl(data.creatorName || 'Instructor', 200),
@@ -263,7 +263,6 @@ export default function ProductPage({ params }: PageProps) {
       } catch (err) {
         console.error('Error fetching batch:', err);
         setCourse(null);
-      } finally {
         setLoading(false);
       }
     };
@@ -369,7 +368,7 @@ export default function ProductPage({ params }: PageProps) {
               slug: doc.id,
               title: data.title || 'Untitled Batch',
               price: data.price || 0,
-              image: data.videoLink || DEFAULT_COURSE_IMAGE,
+              image: (data.videoLink && data.videoLink.startsWith('http')) ? data.videoLink : DEFAULT_COURSE_IMAGE,
             instructor: data.creatorName || 'Instructor',
             instructorImage: getAvatarUrl(data.creatorName || 'Instructor', 128),
             sections: data.numberSessions || 1,
