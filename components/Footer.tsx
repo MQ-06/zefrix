@@ -4,22 +4,15 @@ import Link from 'next/link';
 import { Shield, CheckCircle } from 'lucide-react';
 
 export default function Footer() {
-  const marqueeItems = Array(13).fill('Join for Free');
 
   const quickLinks = [
     { href: '/', label: 'Home' },
     { href: '/batches', label: 'Live Batches' },
-    { href: '/categories', label: 'Browse Categories' },
     { href: '/creators', label: 'Expert Creators' },
     { href: '/contact-us', label: 'Contact Us' },
   ];
 
-  const learnLinks = [
-    { href: '/batches', label: 'Online Workshops' },
-    { href: '/batches', label: 'Live Skill Classes' },
-    { href: '/batches', label: 'Interactive Learning' },
-    { href: '/creators', label: 'Learn from Experts' },
-  ];
+
 
   const accountLinks = [
     { href: '/signup-login', label: 'Sign Up / Login' },
@@ -52,34 +45,10 @@ export default function Footer() {
 
   return (
     <footer className="bg-gradient-to-b from-[#1A1A2E] to-[#1A1A2E] border-t border-gray-800 relative overflow-hidden">
-      {/* Marquee at the top */}
-      <div className="footer-contact-marquee overflow-hidden py-4 border-b border-gray-800">
-        <div className="footer-contact-marquee-items flex gap-4" style={{ width: 'max-content' }}>
-          {/* First set */}
-          {marqueeItems.map((item, i) => (
-            <Link
-              key={i}
-              href="/signup-login"
-              className="footer-contact-marquee-item flex-shrink-0 px-6 py-2 border border-white/30 rounded-lg text-white font-medium text-sm hover:border-[#FF6B9D] hover:text-[#FF6B9D] transition-all duration-300 whitespace-nowrap"
-            >
-              {item}
-            </Link>
-          ))}
-          {marqueeItems.map((item, i) => (
-            <Link
-              key={`dup-${i}`}
-              href="/signup-login"
-              className="footer-contact-marquee-item flex-shrink-0 px-6 py-2 border border-white/30 rounded-lg text-white font-medium text-sm hover:border-[#FF6B9D] hover:text-[#FF6B9D] transition-all duration-300 whitespace-nowrap"
-            >
-              {item}
-            </Link>
-          ))}
-        </div>
-      </div>
 
       {/* Main Footer Content */}
       <div className="container py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-8">
           {/* Logo and Social */}
           <div className="lg:col-span-2">
             <Link href="/" className="inline-block mb-6">
@@ -130,22 +99,7 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Learn (SEO-friendly keyword-rich links) */}
-          <div>
-            <h3 className="text-white font-bold text-lg mb-6">Learn</h3>
-            <ul className="space-y-3">
-              {learnLinks.map((link, index) => (
-                <li key={`${link.href}-${index}`}>
-                  <Link
-                    href={link.href}
-                    className="text-gray-400 hover:text-[#FF6B9D] transition-colors duration-200 text-sm"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+
 
           {/* Account */}
           <div>
@@ -179,10 +133,7 @@ export default function Footer() {
                   <Shield className="w-4 h-4 text-green-400" />
                   <span className="text-gray-400 text-xs">Secure Platform</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-blue-400" />
-                  <span className="text-gray-400 text-xs">Trusted by 1000+</span>
-                </div>
+
               </div>
             </div>
 

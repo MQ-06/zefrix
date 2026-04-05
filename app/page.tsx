@@ -92,11 +92,8 @@ export default function Home() {
       )}
 
       <HeroSection />
-      <CategorySection />
       {/* <VideoSection /> */}
-      <StatsSection />
       <CoursesSection />
-      <TestimonialsSection />
       <FAQSection />
       <HowItWorksSection />
     </>

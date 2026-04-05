@@ -223,7 +223,7 @@ export default function CoursesSection() {
   }));
 
   return (
-    <section className="section-spacing-bottom">
+    <section className="section-spacing">
       <div className="container">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 mb-8 sm:mb-16">
           <div>

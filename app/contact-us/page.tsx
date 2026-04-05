@@ -243,9 +243,9 @@ export default function ContactUsPage() {
       </section>
 
       {/* Contact Form Section */}
-      <section className="contact-section section-spacing-bottom bg-gradient-to-b from-transparent via-[#1A1A2E] to-[#1A1A2E]">
+      <section className="contact-section pt-12 md:pt-16 section-spacing-bottom bg-gradient-to-b from-transparent via-[#1A1A2E] to-[#1A1A2E]">
         <div className="container">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-stretch">
             {/* Contact Form */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -349,7 +349,7 @@ export default function ContactUsPage() {
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6 }}
-              className="hidden lg:block"
+              className="hidden lg:flex"
             >
               <img
                 src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b7df_about-4.jpg"
@@ -357,7 +357,7 @@ export default function ContactUsPage() {
                 sizes="(max-width: 767px) 100vw, (max-width: 991px) 95vw, 768px"
                 srcSet="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b7df_about-4-p-500.jpg 500w, https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b7df_about-4.jpg 768w"
                 alt="About"
-                className="about-image w-full h-auto rounded-2xl object-cover"
+                className="about-image w-full h-full rounded-2xl object-cover"
               />
             </motion.div>
           </div>
@@ -389,7 +389,7 @@ export default function ContactUsPage() {
                 href="tel:+015982694756"
                 className="text-[#1A1A2E] underline hover:text-[#E91E63] transition-colors"
               >
-                +01 598 269 4756
+                +91 88549 96448
               </a>
             </motion.div>
 

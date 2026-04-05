@@ -37,8 +37,8 @@ export default function HeroSection() {
               <span className="text-primary text-xl">*</span>
             </motion.div> */}
 
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              Learn Live. Build Skills. Grow Faster.
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 leading-tight">
+              Learn Dance Live. From Real Performers.
               <motion.div 
                 className="inline-flex items-center gap-2 ml-3"
                 initial={{ opacity: 0, x: -20 }}
@@ -54,14 +54,19 @@ export default function HeroSection() {
               </motion.div>
             </h1>
 
+            <p className="text-gray-300 text-lg md:text-xl mb-6 leading-relaxed">
+              Join small live batches in Bollywood, Hip-Hop &amp; Freestyle.<br />
+              Get real-time feedback. Perform with confidence in weeks.
+            </p>
+
             <div className="space-y-3 mb-8">
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 bg-primary rounded-full"></div>
-                <p className="text-gray-300 text-base md:text-lg">Live Q&A with experts</p>
+                <p className="text-gray-300 text-base md:text-lg">Live dance sessions (not recorded)</p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 bg-primary rounded-full"></div>
-                <p className="text-gray-300 text-base md:text-lg">Small batch sizes</p>
+                <p className="text-gray-300 text-base md:text-lg">Beginner to advanced batches</p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 bg-primary rounded-full"></div>
@@ -69,47 +74,7 @@ export default function HeroSection() {
               </div>
             </div>
 
-            {/* Trust Elements - Added social proof near hero */}
-            <div className="flex items-center gap-6 mb-10 flex-wrap">
-              <div className="flex items-center gap-2">
-                <div className="flex -space-x-2">
-                  <img
-                    src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b748_avatar-2.jpg"
-                    alt="Student"
-                    className="w-8 h-8 rounded-full border-2 border-[#1A1A2E]"
-                  />
-                  <img
-                    src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b747_avatar-1.jpg"
-                    alt="Student"
-                    className="w-8 h-8 rounded-full border-2 border-[#1A1A2E]"
-                  />
-                  <img
-                    src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b74f_avatar-3.jpg"
-                    alt="Student"
-                    className="w-8 h-8 rounded-full border-2 border-[#1A1A2E]"
-                  />
-                </div>
-                <span className="text-white text-sm font-semibold">1,000+ students learning</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
-                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
-                </svg>
-                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
-                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
-                </svg>
-                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
-                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
-                </svg>
-                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
-                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
-                </svg>
-                <svg className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
-                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
-                </svg>
-                <span className="text-white text-sm font-semibold ml-1">4.8/5 rating</span>
-              </div>
-            </div>
+            
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mt-4">
               <motion.div
