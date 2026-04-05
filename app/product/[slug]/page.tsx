@@ -1125,15 +1125,7 @@ export default function ProductPage({ params }: PageProps) {
                     </div>
                   )}
 
-                  {course.subCategory && (
-                    <div className="flex items-start gap-4">
-                      <div className="flex items-center gap-2 text-gray-400 flex-shrink-0">
-                        <Tag className="w-5 h-5" />
-                        <span>Sub Category</span>
-                      </div>
-                      <span className="text-white font-semibold flex-1 break-words">{course.subCategory}</span>
-                    </div>
-                  )}
+
 
                   {course.scheduleType === 'recurring' && course.startDate ? (
                     <div className="flex items-center justify-between">

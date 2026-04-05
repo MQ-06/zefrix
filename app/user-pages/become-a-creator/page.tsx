@@ -624,33 +624,6 @@ export default function BecomeACreatorPage() {
                 ))}
               </select>
             </div>
-            <div className="form-group">
-              <label>Sub-Category (optional)</label>
-              <select
-                name="subCategory"
-                value={formData.subCategory}
-                onChange={handleInputChange}
-                disabled={!formData.category}
-              >
-                <option value="">Select Sub-Category</option>
-                {formData.category && categoryDetails
-                  .find(cat => cat.slug === formData.category)
-                  ?.subcategories.map((subcat, index) => (
-                    <option key={index} value={subcat}>
-                      {subcat}
-                    </option>
-                  ))}
-              </select>
-              {!formData.category && (
-                <div style={{ 
-                  color: '#6b7280', 
-                  fontSize: '11px', 
-                  marginTop: '4px' 
-                }}>
-                  Please select a category first
-                </div>
-              )}
-            </div>
           </div>
         );
       case 3:

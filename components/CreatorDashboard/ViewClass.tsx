@@ -315,11 +315,6 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                 </div>
                                 <div className={styles.divider}></div>
                                 <div className={styles.infoRow}>
-                                    <span className={styles.infoLabel}>Sub-Category:</span>
-                                    <span className={styles.infoValue}>{classData.subCategory}</span>
-                                </div>
-                                <div className={styles.divider}></div>
-                                <div className={styles.infoRow}>
                                     <span className={styles.infoLabel}>Price:</span>
                                     <span className={styles.infoValue}>₹{classData.price}</span>
                                 </div>
