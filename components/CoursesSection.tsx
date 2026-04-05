@@ -204,7 +204,20 @@ export default function CoursesSection() {
     return videoLink;
   };
 
-  const featuredCourses = approvedClasses.map((classItem) => ({
+  // Hide batches whose start date has already passed
+  const isBatchStarted = (classItem: any) => {
+    const dateStr = classItem.startISO || classItem.startDate || classItem.date;
+    if (!dateStr) return false;
+    try {
+      return new Date() >= new Date(dateStr);
+    } catch {
+      return false;
+    }
+  };
+
+  const featuredCourses = approvedClasses
+    .filter(classItem => !isBatchStarted(classItem))
+    .map((classItem) => ({
     id: classItem.classId,
     slug: classItem.classId,
     title: classItem.title,

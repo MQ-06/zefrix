@@ -282,8 +282,21 @@ function CoursesContent() {
     };
   }, []);
 
+  // Hide batches whose start date has already passed
+  const isBatchStarted = (classItem: ApprovedClass) => {
+    const dateStr = classItem.startISO || classItem.startDate || classItem.date;
+    if (!dateStr) return false;
+    try {
+      return new Date() >= new Date(dateStr);
+    } catch {
+      return false;
+    }
+  };
+
   // Convert approved classes to course format (only real classes, no dummy data)
-  const allCourses = approvedClasses.map((classItem) => ({
+  const allCourses = approvedClasses
+    .filter(classItem => !isBatchStarted(classItem))
+    .map((classItem) => ({
     id: classItem.classId,
     slug: classItem.classId,
     title: classItem.title,

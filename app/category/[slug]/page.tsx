@@ -323,11 +323,20 @@ export default function CategoryPage({ params }: PageProps) {
                 Available Batches
               </h2>
               <p className="text-gray-400 text-lg">
-                {approvedClasses.length} live {approvedClasses.length !== 1 ? 'classes' : 'class'} ready to join
+                {approvedClasses.filter(c => {
+                  const d = c.startISO || c.startDate || c.date;
+                  return !d || new Date() < new Date(d);
+                }).length} live classes ready to join
               </p>
             </motion.div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {approvedClasses.map((classItem) => {
+              {approvedClasses
+                .filter(classItem => {
+                  const dateStr = classItem.startISO || classItem.startDate || classItem.date;
+                  if (!dateStr) return true;
+                  try { return new Date() < new Date(dateStr); } catch { return true; }
+                })
+                .map((classItem) => {
                 // Fix image URL - ensure it uses correct protocol
                 let imageUrl = 'https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/6920a8850f07fb7c7a783e79_691111ab3e1733ebffd9b861_course-12.jpg';
                 

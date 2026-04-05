@@ -601,6 +601,12 @@ export default function CreatorProfilePage() {
     );
   }
 
+  const upcomingClasses = classes.filter(classItem => {
+    const dateStr = classItem.startISO || classItem.startDate || classItem.date;
+    if (!dateStr) return true;
+    try { return new Date() < new Date(dateStr); } catch { return true; }
+  });
+
   return (
     <>
       <div style={{
@@ -883,7 +889,7 @@ export default function CreatorProfilePage() {
                   backgroundClip: 'text',
                   lineHeight: '1.2'
                 }}>
-                  {classes.length > 0 ? `My Batches/Sessions (${classes.length})` : 'My Batches/Sessions'}
+                  {upcomingClasses.length > 0 ? `My Batches/Sessions (${upcomingClasses.length})` : 'My Batches/Sessions'}
                 </h2>
                 <p style={{ 
                   color: 'rgba(255, 255, 255, 0.6)', 
@@ -892,12 +898,12 @@ export default function CreatorProfilePage() {
                   marginBottom: 0,
                   lineHeight: '1.5'
                 }}>
-                  {classes.length > 0 
+                  {upcomingClasses.length > 0 
                     ? 'Explore all available batches and sessions' 
                     : 'No batches available yet'}
                 </p>
               </div>
-              {classes.length > 0 && (
+              {upcomingClasses.length > 0 && (
                 <div style={{
                   padding: '0.875rem 1.75rem',
                   background: 'rgba(217, 42, 99, 0.2)',
@@ -909,11 +915,11 @@ export default function CreatorProfilePage() {
                   whiteSpace: 'nowrap',
                   alignSelf: 'center'
                 }}>
-                  {classes.length} {classes.length === 1 ? 'Batch' : 'Batches'} Available
+                  {upcomingClasses.length} {upcomingClasses.length === 1 ? 'Batch' : 'Batches'} Available
                 </div>
               )}
             </div>
-            {classes.length === 0 ? (
+            {upcomingClasses.length === 0 ? (
               <div style={{
                 background: 'rgba(255, 255, 255, 0.05)',
                 borderRadius: '16px',
@@ -949,7 +955,7 @@ export default function CreatorProfilePage() {
                 gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
                 gap: '1.5rem'
               }}>
-                {classes.map((classItem) => (
+                {upcomingClasses.map((classItem) => (
                   <Link
                     key={classItem.classId}
                     href={`/product/${classItem.classId}`}

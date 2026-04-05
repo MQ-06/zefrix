@@ -282,8 +282,20 @@ function BatchesContent() {
     };
   }, []);
 
-// Convert approved classes to course format (only real classes, no dummy data)
+  // Hide batches whose start date has already passed
+  const isBatchStarted = (classItem: ApprovedClass) => {
+    const dateStr = classItem.startISO || classItem.startDate || classItem.date;
+    if (!dateStr) return false; // No date set → show it
+    try {
+      return new Date() >= new Date(dateStr);
+    } catch {
+      return false;
+    }
+  };
+
+  // Convert approved classes to course format (only real classes, no dummy data)
   const allBatches = approvedClasses
+    .filter(classItem => !isBatchStarted(classItem))
     .map((classItem) => {
     const imageUrl = (classItem.videoLink && classItem.videoLink.startsWith('http'))
       ? classItem.videoLink
