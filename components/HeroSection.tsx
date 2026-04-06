@@ -2,150 +2,153 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { Video, GraduationCap, Zap } from 'lucide-react';
 
 export default function HeroSection() {
   return (
-    <section className="hero-section pt-32 pb-16 md:pt-40 md:pb-24 relative overflow-hidden">
-      {/* Background Gradient matching batches page */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A2E] via-[#2D1B3D] to-[#E91E63]"></div>
-      
-      <div className="container relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          {/* Left Content */}
-          <motion.div
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-            className="hero-content"
-          >
-            {/* <motion.div 
-              className="flex items-center gap-2 mb-8"
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
+    <section className="relative overflow-hidden" style={{ minHeight: '100vh' }}>
+      {/* Background Video */}
+      <video
+        src="/uploads/hero_page_video.mp4"
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover z-0"
+      />
+      {/* Dark overlay */}
+      <div className="absolute inset-0 z-[1]" style={{
+        background: 'linear-gradient(to bottom, rgba(15,10,30,0.72) 0%, rgba(20,10,35,0.78) 50%, rgba(15,10,30,0.90) 100%)'
+      }} />
+      {/* Subtle pink accent on right */}
+      <div className="absolute inset-0 z-[1]" style={{
+        background: 'radial-gradient(ellipse at 80% 50%, rgba(233,30,99,0.18) 0%, transparent 60%)'
+      }} />
+
+      {/* Content */}
+      <div
+        className="relative z-10 flex flex-col items-center justify-center text-center px-4 sm:px-6"
+        style={{ minHeight: '100vh', paddingTop: '96px', paddingBottom: '64px' }}
+      >
+
+        {/* Badge */}
+        <motion.div
+          initial={{ opacity: 0, y: -16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-6"
+        >
+          <span className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 text-white/90 text-xs sm:text-sm font-medium px-4 py-2 rounded-full">
+            <span className="w-2 h-2 rounded-full bg-[#FACC15] animate-pulse inline-block"></span>
+            Live Batches Now Open
+          </span>
+        </motion.div>
+
+        {/* Headline */}
+        <motion.h1
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="font-bold text-white leading-tight mb-5 max-w-4xl"
+          style={{ fontSize: 'clamp(2.2rem, 6vw, 4rem)' }}
+        >
+          Learn Dance Live.{' '}
+          <span className="bg-gradient-to-r from-primary to-pink-400 bg-clip-text text-transparent">
+            From Real Performers.
+          </span>
+        </motion.h1>
+
+        {/* Subtext */}
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="text-gray-300 max-w-xl mb-8 leading-relaxed"
+          style={{ fontSize: 'clamp(0.95rem, 2vw, 1.15rem)' }}
+        >
+          Join small live batches in Bollywood, Hip-Hop &amp; Freestyle.
+          Get real-time feedback. Perform with confidence in weeks.
+        </motion.p>
+
+        {/* Pill tags */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="flex flex-wrap items-center justify-center gap-3 mb-10"
+        >
+          {[
+            { icon: <Video className="w-3.5 h-3.5 text-[#FACC15]" />, label: 'Live sessions only' },
+            { icon: <GraduationCap className="w-3.5 h-3.5 text-[#FACC15]" />, label: 'Beginner to Advanced' },
+            { icon: <Zap className="w-3.5 h-3.5 text-[#FACC15]" />, label: 'Real-time feedback' },
+          ].map(({ icon, label }) => (
+            <span
+              key={label}
+              className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/15 text-white/80 text-xs sm:text-sm px-4 py-2 rounded-full"
             >
-              <span className="text-primary text-xl">*</span>
-              <motion.div 
-                className="bg-primary/10 px-6 py-3 rounded-full border border-primary/20"
-                whileHover={{ scale: 1.05 }}
-                transition={{ duration: 0.2 }}
-              >
-                <span className="text-primary text-base font-medium">
-                  Get started with Zefrix
-                </span>
-              </motion.div>
-              <span className="text-primary text-xl">*</span>
-            </motion.div> */}
+              {icon}
+              {label}
+            </span>
+          ))}
+        </motion.div>
 
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 leading-tight">
-              Learn Dance Live. From Real Performers.
-              <motion.div 
-                className="inline-flex items-center gap-2 ml-3"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.6, delay: 0.8 }}
-              >
-             
-                <img
-                  src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b749_arrow-right.svg"
-                  alt="Arrow"
-                  className="w-7 h-7 ml-2"
-                />
-              </motion.div>
-            </h1>
-
-            <p className="text-gray-300 text-lg md:text-xl mb-6 leading-relaxed">
-              Join small live batches in Bollywood, Hip-Hop &amp; Freestyle.<br />
-              Get real-time feedback. Perform with confidence in weeks.
-            </p>
-
-            <div className="space-y-3 mb-8">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-primary rounded-full"></div>
-                <p className="text-gray-300 text-base md:text-lg">Live dance sessions (not recorded)</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-primary rounded-full"></div>
-                <p className="text-gray-300 text-base md:text-lg">Beginner to advanced batches</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-primary rounded-full"></div>
-                <p className="text-gray-300 text-base md:text-lg">Real-time feedback</p>
-              </div>
-            </div>
-
-            
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mt-4">
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="my-2"
-              >
-                <Link
-                  href="/batches"
-                  className="inline-block bg-gradient-to-r from-primary to-secondary px-12 py-6 rounded-lg text-white font-semibold text-lg hover:opacity-90 transition-opacity duration-200 shadow-lg"
-                >
-                  Explore Live Batches
-                </Link>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Link
-                  href="/signup-login"
-                  className="bg-transparent border-2 border-white/30 px-10 py-5 rounded-lg text-white font-semibold text-lg hover:border-white/50 hover:bg-white/5 transition-all duration-200"
-                >
-                  Join Free
-                </Link>
-              </motion.div>
-            </div>
+        {/* CTAs */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="flex flex-col sm:flex-row items-center justify-center gap-4"
+        >
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
+            <Link
+              href="/batches"
+              className="inline-block bg-gradient-to-r from-[#E91E63] to-[#f97316] text-white font-semibold rounded-xl shadow-lg hover:opacity-90 transition-opacity duration-200"
+              style={{ padding: '14px 36px', fontSize: 'clamp(0.9rem, 2vw, 1.05rem)' }}
+            >
+              Explore Live Batches
+            </Link>
           </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
+            <Link
+              href="/signup-login"
+              className="inline-block bg-white/10 backdrop-blur-sm border border-white/25 text-white font-semibold rounded-xl hover:bg-white/20 transition-all duration-200"
+              style={{ padding: '14px 36px', fontSize: 'clamp(0.9rem, 2vw, 1.05rem)' }}
+            >
+              Join Free
+            </Link>
+          </motion.div>
+        </motion.div>
 
-          {/* Right Images */}
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="hero-images relative"
-          >
-            <div className="relative">
+        {/* Social proof */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.6 }}
+          className="mt-10 flex items-center gap-3"
+        >
+          <div className="flex -space-x-2">
+            {[
+              'https://i.pravatar.cc/40?img=1',
+              'https://i.pravatar.cc/40?img=5',
+              'https://i.pravatar.cc/40?img=9',
+              'https://i.pravatar.cc/40?img=12',
+            ].map((src, i) => (
               <img
-                src="/pic.png"
-                alt="Hero Image"
-                className="w-full h-auto rounded-2xl"
+                key={i}
+                src={src}
+                alt="Student"
+                width={32}
+                height={32}
+                className="w-8 h-8 rounded-full border-2 border-white/40 object-cover"
               />
-              
-             
+            ))}
+          </div>
+          <p className="text-white/70 text-sm">
+            <span className="text-[#FACC15] font-semibold">500+</span> students already learning
+          </p>
+        </motion.div>
 
-              {/* Floating Card */}
-              <div className="absolute top-1/2 left-4 transform -translate-y-1/2 bg-white/95 backdrop-blur-sm rounded-xl p-4 shadow-2xl min-w-[200px]">
-                <h3 className="text-dark font-semibold mb-3">UI Design Pattern</h3>
-                <div className="flex items-center gap-3">
-                  <img
-                    src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b74f_avatar-3.jpg"
-                    alt="Dennis Barrett"
-                    className="w-10 h-10 rounded-full"
-                  />
-                  <div>
-                    <div className="font-medium text-dark">Annat Mishra</div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <img
-                        src="https://cdn.prod.website-files.com/691111a93e1733ebffd9b6b2/691111ab3e1733ebffd9b74e_file.svg"
-                        alt="File"
-                        className="w-4 h-4"
-                      />
-                      <span>123 Batches</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
       </div>
     </section>
   );
 }
-

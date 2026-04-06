@@ -8,7 +8,7 @@ const steps = [
     icon: Search,
     title: 'Browse and discover batches',
     description:
-      'Explore live batches and sessions across categories like Design, Music, Tech, Wellness, and Business. Filter by creator, category, or skill level to find the perfect learning experience for you.',
+      'Explore live batches and sessions across dance categories like Bollywood, Hip-Hop, Contemporary, Kathak, Freestyle, and Wedding Choreography. Filter by creator, category, or skill level to find the perfect learning experience for you.',
     bgColor: 'bg-purple-200',
     borderColor: 'border-yellow-400',
   },
