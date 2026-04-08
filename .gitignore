@@ -37,9 +37,9 @@ firebase-service-account.json
 *.tsbuildinfo
 next-env.d.ts
 
-# uploads - don't commit user-uploaded files
-/public/uploads/
-/uploads/
+# # uploads - don't commit user-uploaded files
+# /public/uploads/
+# /uploads/
 
 firebase-service-account-fixed.json
 firebase-service-account.json
