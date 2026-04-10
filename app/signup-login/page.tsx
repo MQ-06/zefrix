@@ -906,7 +906,7 @@ export default function SignupLoginPage() {
                       cursor: 'pointer',
                       alignSelf: 'flex-start',
                       marginTop: '-8px',
-                      marginBottom: '8px'
+                      marginBottom: '20px'
                     }}
                   >
                     Forgot Password?

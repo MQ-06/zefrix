@@ -623,6 +623,197 @@ export async function sendAdminCreatorSignupEmail(data: AdminCreatorSignupEmailD
   });
 }
 
+// ─── Session Live Now ───────────────────────────────────────────────────────
+
+interface SessionLiveEmailData {
+  studentName: string;
+  studentEmail: string;
+  studentId?: string;
+  className: string;
+  classId: string;
+  sessionNumber: number;
+  meetingLink: string;
+}
+
+export async function sendSessionLiveEmail(data: SessionLiveEmailData) {
+  if (!resend) {
+    console.warn('Resend not configured. Skipping session-live email.');
+    return;
+  }
+
+  const base = process.env.NEXT_PUBLIC_BASE_URL || 'https://zefrix.com';
+  const html = `
+    <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+    <body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+      <div style="background:linear-gradient(135deg,#D92A63 0%,#FF654B 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+        <h1 style="color:white;margin:0;">🔴 Class is Live Now!</h1>
+      </div>
+      <div style="background:#f9f9f9;padding:30px;border-radius:0 0 10px 10px;">
+        <p>Hi ${data.studentName},</p>
+        <p>Your class <strong>${data.className}</strong> — Session ${data.sessionNumber} has just started!</p>
+        <div style="background:white;padding:20px;border-radius:8px;margin:20px 0;border-left:4px solid #D92A63;">
+          <p style="margin:0;"><strong>Session:</strong> ${data.className} — Session ${data.sessionNumber}</p>
+          <p style="margin:8px 0 0;"><strong>Status:</strong> <span style="color:#D92A63;font-weight:bold;">LIVE NOW</span></p>
+        </div>
+        <div style="text-align:center;margin:24px 0;">
+          <a href="${data.meetingLink}" style="background:linear-gradient(135deg,#D92A63 0%,#FF654B 100%);color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">Join Class Now →</a>
+        </div>
+        <p style="color:#888;font-size:13px;">If the button doesn't work, copy this link: <a href="${data.meetingLink}" style="color:#D92A63;">${data.meetingLink}</a></p>
+        <p>Best regards,<br><strong>The Zefrix Team</strong></p>
+      </div>
+    </body></html>
+  `;
+
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to: data.studentEmail,
+    subject: `🔴 Live Now: ${data.className} — Session ${data.sessionNumber}`,
+    html,
+  });
+
+  console.log(`✅ Session-live email sent to ${data.studentEmail}`);
+
+  if (data.studentId) {
+    try {
+      await createNotification({
+        userId: data.studentId,
+        userRole: 'student',
+        type: 'session_live',
+        title: `Live Now: ${data.className}`,
+        message: `Session ${data.sessionNumber} of "${data.className}" is live! Join now.`,
+        link: `/student-dashboard`,
+        relatedId: data.classId,
+        metadata: { className: data.className, sessionNumber: data.sessionNumber, meetingLink: data.meetingLink },
+      });
+    } catch (e) {
+      console.error('Notification error (non-blocking):', e);
+    }
+  }
+}
+
+// ─── New Enrollment Alert (to Creator) ──────────────────────────────────────
+
+interface NewEnrollmentAlertEmailData {
+  creatorName: string;
+  creatorEmail: string;
+  creatorId?: string;
+  className: string;
+  classId: string;
+  studentName: string;
+  studentEmail: string;
+  totalEnrollments?: number;
+}
+
+export async function sendNewEnrollmentAlertEmail(data: NewEnrollmentAlertEmailData) {
+  if (!resend) {
+    console.warn('Resend not configured. Skipping new-enrollment-alert email.');
+    return;
+  }
+
+  const base = process.env.NEXT_PUBLIC_BASE_URL || 'https://zefrix.com';
+  const html = `
+    <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+    <body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+      <div style="background:linear-gradient(135deg,#D92A63 0%,#FF654B 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+        <h1 style="color:white;margin:0;">🎉 New Student Enrolled!</h1>
+      </div>
+      <div style="background:#f9f9f9;padding:30px;border-radius:0 0 10px 10px;">
+        <p>Hi ${data.creatorName},</p>
+        <p>Great news! A new student has enrolled in your batch.</p>
+        <div style="background:white;padding:20px;border-radius:8px;margin:20px 0;border-left:4px solid #D92A63;">
+          <p style="margin:0;"><strong>Batch:</strong> ${data.className}</p>
+          <p style="margin:8px 0 0;"><strong>Student:</strong> ${data.studentName}</p>
+          <p style="margin:8px 0 0;"><strong>Student Email:</strong> ${data.studentEmail}</p>
+          ${data.totalEnrollments ? `<p style="margin:8px 0 0;"><strong>Total Enrolled:</strong> ${data.totalEnrollments}</p>` : ''}
+        </div>
+        <div style="text-align:center;margin:24px 0;">
+          <a href="${base}/creator-dashboard" style="background:linear-gradient(135deg,#D92A63 0%,#FF654B 100%);color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">View Creator Dashboard →</a>
+        </div>
+        <p>Best regards,<br><strong>The Zefrix Team</strong></p>
+      </div>
+    </body></html>
+  `;
+
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to: data.creatorEmail,
+    subject: `New Enrollment: ${data.studentName} joined ${data.className}`,
+    html,
+  });
+
+  console.log(`✅ New-enrollment-alert email sent to creator ${data.creatorEmail}`);
+}
+
+// ─── Recording Available ─────────────────────────────────────────────────────
+
+interface RecordingAvailableEmailData {
+  studentName: string;
+  studentEmail: string;
+  studentId?: string;
+  className: string;
+  classId: string;
+  sessionNumber: number;
+  recordingLink: string;
+}
+
+export async function sendRecordingAvailableEmail(data: RecordingAvailableEmailData) {
+  if (!resend) {
+    console.warn('Resend not configured. Skipping recording-available email.');
+    return;
+  }
+
+  const base = process.env.NEXT_PUBLIC_BASE_URL || 'https://zefrix.com';
+  const html = `
+    <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+    <body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+      <div style="background:linear-gradient(135deg,#D92A63 0%,#FF654B 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+        <h1 style="color:white;margin:0;">🎬 Recording Available!</h1>
+      </div>
+      <div style="background:#f9f9f9;padding:30px;border-radius:0 0 10px 10px;">
+        <p>Hi ${data.studentName},</p>
+        <p>The recording for <strong>${data.className}</strong> — Session ${data.sessionNumber} is now available. Watch it at your own pace!</p>
+        <div style="background:white;padding:20px;border-radius:8px;margin:20px 0;border-left:4px solid #D92A63;">
+          <p style="margin:0;"><strong>Batch:</strong> ${data.className}</p>
+          <p style="margin:8px 0 0;"><strong>Session:</strong> Session ${data.sessionNumber}</p>
+        </div>
+        <div style="text-align:center;margin:24px 0;">
+          <a href="${data.recordingLink}" style="background:linear-gradient(135deg,#D92A63 0%,#FF654B 100%);color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">▶ Watch Recording</a>
+        </div>
+        <p style="color:#888;font-size:13px;">Or access it from your <a href="${base}/student-dashboard" style="color:#D92A63;">Student Dashboard</a>.</p>
+        <p>Best regards,<br><strong>The Zefrix Team</strong></p>
+      </div>
+    </body></html>
+  `;
+
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to: data.studentEmail,
+    subject: `Recording Available: ${data.className} — Session ${data.sessionNumber}`,
+    html,
+  });
+
+  console.log(`✅ Recording-available email sent to ${data.studentEmail}`);
+
+  if (data.studentId) {
+    try {
+      await createNotification({
+        userId: data.studentId,
+        userRole: 'student',
+        type: 'recording_available',
+        title: `Recording Available: ${data.className}`,
+        message: `Session ${data.sessionNumber} recording for "${data.className}" is ready to watch.`,
+        link: `/student-dashboard`,
+        relatedId: data.classId,
+        metadata: { className: data.className, sessionNumber: data.sessionNumber, recordingLink: data.recordingLink },
+      });
+    } catch (e) {
+      console.error('Notification error (non-blocking):', e);
+    }
+  }
+}
+
+// ─── Payout Released ─────────────────────────────────────────────────────────
+
 export async function sendCreatorPayoutReleasedEmail(data: CreatorPayoutReleasedEmailData) {
   if (!shouldSendEmailForEvent('creator_payout_released')) {
     return;

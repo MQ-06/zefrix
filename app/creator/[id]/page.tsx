@@ -602,7 +602,7 @@ export default function CreatorProfilePage() {
   }
 
   const upcomingClasses = classes.filter(classItem => {
-    const dateStr = classItem.startISO || classItem.startDate || classItem.date;
+    const dateStr = classItem.startISO || classItem.startDate || (classItem as any).date;
     if (!dateStr) return true;
     try { return new Date() < new Date(dateStr); } catch { return true; }
   });

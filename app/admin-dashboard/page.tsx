@@ -207,6 +207,26 @@ export default function AdminDashboard() {
   const [newSessionForm, setNewSessionForm] = useState({ dateTime: '', meetingLink: '' });
   const [addingSession, setAddingSession] = useState(false);
 
+  // Session delete & auto-generate
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [generatingSessions, setGeneratingSessions] = useState(false);
+
+  // Student account management (mirrors creator)
+  const [processingStudentAccount, setProcessingStudentAccount] = useState(false);
+  const [studentNewPassword, setStudentNewPassword] = useState('');
+  const [savingStudentPassword, setSavingStudentPassword] = useState(false);
+
+  // Bulk creator actions
+  const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(new Set());
+  const [bulkActionProcessing, setBulkActionProcessing] = useState(false);
+
+  // Creator per-class earnings breakdown
+  const [creatorEarningsBreakdown, setCreatorEarningsBreakdown] = useState<any[]>([]);
+  const [loadingEarningsBreakdown, setLoadingEarningsBreakdown] = useState(false);
+
+  // Payout undo
+  const [undoingPayout, setUndoingPayout] = useState<string | null>(null);
+
   const router = useRouter();
 
   const closeDetailsModal = () => {
@@ -221,6 +241,11 @@ export default function AdminDashboard() {
     setProcessingCreatorAccount(false);
     setSavingCreatorPassword(false);
     setCreatorNewPassword('');
+    setSavingStudentPassword(false);
+    setStudentNewPassword('');
+    setProcessingStudentAccount(false);
+    setCreatorEarningsBreakdown([]);
+    setLoadingEarningsBreakdown(false);
     setStudentLearningDetails([]);
     setLoadingStudentLearning(false);
   };
@@ -480,6 +505,329 @@ export default function AdminDashboard() {
     } finally {
       setSavingCreatorPassword(false);
     }
+  };
+
+  // ── Student account management (mirrors creator) ──────────────────────────
+  const handleToggleStudentSuspension = async (suspend: boolean) => {
+    if (!selectedStudent?.uid) return;
+    setProcessingStudentAccount(true);
+    try {
+      const idToken = await getAdminIdToken();
+      const response = await fetch('/api/admin/manage-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action: 'suspend-user', userId: selectedStudent.uid, suspended: suspend }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to update account status');
+      const patch = { isSuspended: suspend, accountStatus: suspend ? 'suspended' : 'active', updatedAt: new Date() };
+      setStudents((prev) => prev.map((s) => s.uid === selectedStudent.uid ? { ...s, ...patch } : s));
+      setSelectedStudent((prev: any) => prev ? { ...prev, ...patch } : prev);
+      showSuccess(suspend ? 'Member suspended successfully.' : 'Member activated successfully.');
+    } catch (error: any) {
+      showError(error?.message || 'Failed to update member status.');
+    } finally {
+      setProcessingStudentAccount(false);
+    }
+  };
+
+  const handleDeleteStudentAccount = async () => {
+    if (!selectedStudent?.uid) return;
+    const confirmed = confirm(`Delete member account for ${selectedStudent.name}? This will disable login and mark the account as deleted.`);
+    if (!confirmed) return;
+    setProcessingStudentAccount(true);
+    try {
+      const idToken = await getAdminIdToken();
+      const response = await fetch('/api/admin/manage-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action: 'delete-user', userId: selectedStudent.uid, hardDelete: false }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to delete member account');
+      setStudents((prev) => prev.filter((s) => s.uid !== selectedStudent.uid));
+      showSuccess('Member account deleted (disabled) successfully.');
+      closeDetailsModal();
+    } catch (error: any) {
+      showError(error?.message || 'Failed to delete member account.');
+    } finally {
+      setProcessingStudentAccount(false);
+    }
+  };
+
+  const handleSetStudentPassword = async () => {
+    if (!selectedStudent?.uid) return;
+    const password = studentNewPassword.trim();
+    const passwordValidation = validateStrongPassword(password);
+    if (!passwordValidation.valid) {
+      showError(passwordValidation.firstError || getStrongPasswordHint());
+      return;
+    }
+    setSavingStudentPassword(true);
+    try {
+      const idToken = await getAdminIdToken();
+      const response = await fetch('/api/admin/manage-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action: 'set-password', userId: selectedStudent.uid, newPassword: password }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to reset password');
+      setStudentNewPassword('');
+      showSuccess('Member password updated successfully.');
+    } catch (error: any) {
+      showError(error?.message || 'Failed to update password.');
+    } finally {
+      setSavingStudentPassword(false);
+    }
+  };
+
+  // ── Session delete ──────────────────────────────────────────────────────────
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!selectedClassDetails?.classId) return;
+    const confirmed = confirm('Delete this session? This cannot be undone.');
+    if (!confirmed) return;
+
+    if (!window.firebaseDb || !window.doc || !window.deleteDoc || !window.updateDoc) {
+      showError('Firebase not initialized');
+      return;
+    }
+
+    setDeletingSessionId(sessionId);
+    try {
+      await window.deleteDoc(window.doc(window.firebaseDb, 'sessions', sessionId));
+      const updatedSessions = classSessions.filter((s: any) => s.id !== sessionId);
+      setClassSessions(updatedSessions);
+      setSessionEditForms((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+
+      const classRef = window.doc(window.firebaseDb, 'classes', selectedClassDetails.classId);
+      const sessionMetadata = getClassSessionMetadata(updatedSessions);
+      const classSyncPayload = {
+        sessions: buildClassSessionsPayload(updatedSessions),
+        numberSessions: sessionMetadata.numberSessions,
+        startISO: sessionMetadata.startISO,
+        updatedAt: new Date(),
+        adminEditedAt: new Date(),
+        adminEditedBy: user?.email || user?.uid || 'admin',
+      };
+      await window.updateDoc(classRef, classSyncPayload);
+      setSelectedClassDetails((prev: any) => prev ? { ...prev, ...classSyncPayload } : prev);
+      setPendingClasses((prev) => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
+      setApprovedClasses((prev) => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
+      showSuccess('Session deleted.');
+    } catch (error: any) {
+      showError(`Failed to delete session: ${error.message}`);
+    } finally {
+      setDeletingSessionId(null);
+    }
+  };
+
+  // ── Auto-generate sessions ──────────────────────────────────────────────────
+  const handleAutoGenerateSessions = async () => {
+    if (!selectedClassDetails?.classId) return;
+    const confirmed = confirm('Auto-generate all sessions from the class schedule template? Existing sessions will NOT be overwritten.');
+    if (!confirmed) return;
+
+    setGeneratingSessions(true);
+    try {
+      const idToken = await getAdminIdToken();
+      const response = await fetch('/api/admin/generate-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ classId: selectedClassDetails.classId }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to generate sessions');
+      await handleViewClassDetails(selectedClassDetails.classId);
+      showSuccess(`${result.sessions?.length || 0} session(s) generated successfully.`);
+    } catch (error: any) {
+      showError(`Failed to auto-generate sessions: ${error.message}`);
+    } finally {
+      setGeneratingSessions(false);
+    }
+  };
+
+  // ── Bulk creator actions ────────────────────────────────────────────────────
+  const toggleCreatorSelection = (uid: string) => {
+    setSelectedCreatorIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid); else next.add(uid);
+      return next;
+    });
+  };
+
+  const toggleSelectAllCreators = (creatorList: Creator[]) => {
+    if (selectedCreatorIds.size === creatorList.length) {
+      setSelectedCreatorIds(new Set());
+    } else {
+      setSelectedCreatorIds(new Set(creatorList.map((c) => c.uid)));
+    }
+  };
+
+  const handleBulkSuspendCreators = async (suspend: boolean) => {
+    if (selectedCreatorIds.size === 0) return;
+    const confirmed = confirm(`${suspend ? 'Suspend' : 'Activate'} ${selectedCreatorIds.size} selected creator(s)?`);
+    if (!confirmed) return;
+    setBulkActionProcessing(true);
+    try {
+      const idToken = await getAdminIdToken();
+      const results = await Promise.allSettled(
+        Array.from(selectedCreatorIds).map((uid) =>
+          fetch('/api/admin/manage-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ action: 'suspend-user', userId: uid, suspended: suspend }),
+          })
+        )
+      );
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const patch = { isSuspended: suspend, accountStatus: suspend ? 'suspended' : 'active', updatedAt: new Date() };
+      setRealCreators((prev) => prev.map((c) => selectedCreatorIds.has(c.uid) ? { ...c, ...patch } : c));
+      setSelectedCreatorIds(new Set());
+      showSuccess(`${succeeded} creator(s) ${suspend ? 'suspended' : 'activated'}.`);
+    } catch (error: any) {
+      showError(error?.message || 'Bulk action failed.');
+    } finally {
+      setBulkActionProcessing(false);
+    }
+  };
+
+  const handleBulkDeleteCreators = async () => {
+    if (selectedCreatorIds.size === 0) return;
+    const confirmed = confirm(`Delete ${selectedCreatorIds.size} selected creator account(s)? This will disable their login access.`);
+    if (!confirmed) return;
+    setBulkActionProcessing(true);
+    try {
+      const idToken = await getAdminIdToken();
+      const results = await Promise.allSettled(
+        Array.from(selectedCreatorIds).map((uid) =>
+          fetch('/api/admin/manage-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ action: 'delete-user', userId: uid, hardDelete: false }),
+          })
+        )
+      );
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      setRealCreators((prev) => prev.filter((c) => !selectedCreatorIds.has(c.uid)));
+      setSelectedCreatorIds(new Set());
+      showSuccess(`${succeeded} creator account(s) deleted.`);
+    } catch (error: any) {
+      showError(error?.message || 'Bulk delete failed.');
+    } finally {
+      setBulkActionProcessing(false);
+    }
+  };
+
+  // ── Creator per-class earnings breakdown ────────────────────────────────────
+  const fetchCreatorEarningsBreakdown = async (creatorId: string) => {
+    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs) return;
+    setLoadingEarningsBreakdown(true);
+    try {
+      const classesRef = window.collection(window.firebaseDb, 'classes');
+      const enrollmentsRef = window.collection(window.firebaseDb, 'enrollments');
+      const [classesSnap, enrollmentsSnap] = await Promise.all([
+        window.getDocs(window.query(classesRef, window.where('creatorId', '==', creatorId))),
+        window.getDocs(window.query(enrollmentsRef)),
+      ]);
+
+      const classMap: Record<string, any> = {};
+      classesSnap.forEach((doc: any) => { classMap[doc.id] = { id: doc.id, ...doc.data(), enrollments: 0, earnings: 0 }; });
+
+      enrollmentsSnap.forEach((doc: any) => {
+        const e = doc.data();
+        if (e.classId && classMap[e.classId]) {
+          classMap[e.classId].enrollments += 1;
+          classMap[e.classId].earnings += Number(e.classPrice) || 0;
+        }
+      });
+
+      const breakdown = Object.values(classMap).sort((a: any, b: any) => b.earnings - a.earnings);
+      setCreatorEarningsBreakdown(breakdown);
+    } catch (error) {
+      console.error('Error fetching creator earnings breakdown:', error);
+    } finally {
+      setLoadingEarningsBreakdown(false);
+    }
+  };
+
+  // ── Payout undo ─────────────────────────────────────────────────────────────
+  const handleUndoMarkPayoutAsPaid = async (payout: any) => {
+    if (!window.firebaseDb || !window.collection || !window.query || !window.where || !window.getDocs || !window.deleteDoc) {
+      showError('Firebase not initialized');
+      return;
+    }
+    const confirmed = confirm(`Undo payout for ${payout.name}? This will revert their payout status back to Pending.`);
+    if (!confirmed) return;
+
+    setUndoingPayout(payout.creatorId);
+    try {
+      const payoutsRef = window.collection(window.firebaseDb, 'payouts');
+      const q = window.query(payoutsRef, window.where('creatorId', '==', payout.creatorId), window.where('status', '==', 'paid'));
+      const snap = await window.getDocs(q);
+      const deletePromises: Promise<any>[] = [];
+      snap.forEach((doc: any) => { deletePromises.push(window.deleteDoc(window.doc(window.firebaseDb, 'payouts', doc.id))); });
+      await Promise.all(deletePromises);
+      setPayouts((prev) => prev.map((p) => p.creatorId === payout.creatorId ? { ...p, status: 'pending' } : p));
+      setSelectedPayout((prev: any) => prev?.creatorId === payout.creatorId ? { ...prev, status: 'pending' } : prev);
+      showSuccess(`Payout for ${payout.name} reverted to Pending.`);
+    } catch (error: any) {
+      showError(`Failed to undo payout: ${error.message}`);
+    } finally {
+      setUndoingPayout(null);
+    }
+  };
+
+  // ── CSV export helpers ──────────────────────────────────────────────────────
+  const exportToCSV = (filename: string, rows: string[][]) => {
+    const csvContent = rows.map((r) => r.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportEnrollmentsCSV = () => {
+    const header = ['Enrollment ID', 'Student Name', 'Student Email', 'Student Phone', 'Class Name', 'Price Paid', 'Payment ID', 'Status', 'Enrolled At'];
+    const rows = enrollments.map((e) => [
+      e.id,
+      e.studentDetails?.name || e.studentName || '',
+      e.studentDetails?.email || e.studentEmail || '',
+      e.studentDetails?.phoneNumber || '',
+      e.className || '',
+      String(e.classPrice || 0),
+      e.paymentId || e.razorpayPaymentId || '',
+      e.status || 'active',
+      e.enrolledAt?.toDate ? e.enrolledAt.toDate().toISOString() : '',
+    ]);
+    exportToCSV(`enrollments_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
+    showSuccess(`Exported ${rows.length} enrollment records.`);
+  };
+
+  const exportPayoutsCSV = () => {
+    const header = ['Creator Name', 'Creator Email', 'Total Earnings (INR)', 'Classes', 'Enrollments', 'Status', 'Account Holder', 'Account Number', 'IFSC', 'Bank Name', 'UPI'];
+    const rows = payouts.map((p) => [
+      p.name,
+      p.email,
+      String(p.totalEarnings || 0),
+      String(p.classCount || 0),
+      String(p.enrollmentCount || 0),
+      p.status,
+      p.bankDetails?.accountHolderName || '',
+      p.bankDetails?.accountNumber || '',
+      p.bankDetails?.ifscCode || '',
+      p.bankDetails?.bankName || '',
+      p.bankDetails?.upiId || '',
+    ]);
+    exportToCSV(`payouts_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
+    showSuccess(`Exported ${rows.length} payout records.`);
   };
 
   const toDateTimeLocalValue = (dateInput: any, timeInput?: string) => {
@@ -782,7 +1130,7 @@ export default function AdminDashboard() {
         return aDate.getTime() - bDate.getTime();
       });
       setClassSessions(sessions);
-      const initialSessionForms: Record<string, { dateTime: string; meetingLink: string }> = {};
+      const initialSessionForms: Record<string, { dateTime: string; meetingLink: string; recordingLink: string }> = {};
       sessions.forEach((session: any) => {
         initialSessionForms[session.id] = {
           dateTime: toDateTimeLocalValue(session.sessionDate, session.sessionTime || session.startTime),
@@ -1042,7 +1390,7 @@ export default function AdminDashboard() {
         [docRef.id]: {
           dateTime: toDateTimeLocalValue(sessionPayload.sessionDate, sessionPayload.sessionTime),
           meetingLink: sessionPayload.meetingLink || '',
-          recordingLink: sessionPayload.recordingLink || ''
+          recordingLink: (sessionPayload as any).recordingLink || ''
         }
       }));
 
@@ -2372,6 +2720,24 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {selectedCreatorIds.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', background: 'rgba(217,42,99,0.12)', border: '1px solid rgba(217,42,99,0.35)', borderRadius: '10px', padding: '0.75rem 1rem', flexWrap: 'wrap' }}>
+          <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>{selectedCreatorIds.size} selected</span>
+          <button className="button-2" onClick={() => handleBulkSuspendCreators(true)} disabled={bulkActionProcessing} style={{ borderColor: '#FF9800', color: '#FF9800', padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>
+            Suspend Selected
+          </button>
+          <button className="button-2" onClick={() => handleBulkSuspendCreators(false)} disabled={bulkActionProcessing} style={{ borderColor: '#4CAF50', color: '#4CAF50', padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>
+            Activate Selected
+          </button>
+          <button className="button-2" onClick={handleBulkDeleteCreators} disabled={bulkActionProcessing} style={{ borderColor: '#f44336', color: '#f44336', padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>
+            Delete Selected
+          </button>
+          <button className="button-2" onClick={() => setSelectedCreatorIds(new Set())} style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem', marginLeft: 'auto' }}>
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {loadingCreators ? (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
           Loading creators...
@@ -2397,6 +2763,14 @@ export default function AdminDashboard() {
           <table className="creator-table">
             <thead>
               <tr>
+                <th style={{ width: '40px' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedCreatorIds.size === filteredCreators.length && filteredCreators.length > 0}
+                    onChange={() => toggleSelectAllCreators(filteredCreators)}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                  />
+                </th>
                 <th>Creator</th>
                 <th>Classes</th>
                 <th>Status</th>
@@ -2410,9 +2784,18 @@ export default function AdminDashboard() {
               {filteredCreators.map((creator) => {
                 const joinDate = creator.createdAt?.toDate ? creator.createdAt.toDate() : (creator.createdAt ? new Date(creator.createdAt) : null);
                 const formattedDate = joinDate ? joinDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
-                
+                const isSelected = selectedCreatorIds.has(creator.uid);
+
                 return (
-                  <tr key={creator.uid} className="creator-table-row">
+                  <tr key={creator.uid} className="creator-table-row" style={{ background: isSelected ? 'rgba(217,42,99,0.08)' : undefined }}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleCreatorSelection(creator.uid)}
+                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                      />
+                    </td>
                     <td>
                       <div className="creator-info-cell">
                         <div className="creator-avatar-small">
@@ -2427,6 +2810,7 @@ export default function AdminDashboard() {
                         <div className="creator-details">
                           <div className="creator-name-row">{creator.name}</div>
                           <div className="creator-email-row">{creator.email}</div>
+                          {(creator as any).isSuspended && <div style={{ color: '#f44336', fontSize: '0.72rem', fontWeight: 600 }}>SUSPENDED</div>}
                         </div>
                       </div>
                     </td>
@@ -2476,7 +2860,7 @@ export default function AdminDashboard() {
                       </div>
                     </td>
                     <td>
-                      <button 
+                      <button
                         className="creator-view-btn"
                         onClick={() => {
                           setSelectedCreator(creator);
@@ -2485,6 +2869,7 @@ export default function AdminDashboard() {
                           setCreatorNewPassword('');
                           initializeCreatorEditForm(creator);
                           setIsModalOpen(true);
+                          fetchCreatorEarningsBreakdown(creator.uid);
                         }}
                       >
                         <Eye size={16} />
@@ -3013,7 +3398,17 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <h3 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.25rem' }}>Sessions ({classSessions.length})</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ color: '#fff', fontSize: '1.25rem', margin: 0 }}>Sessions ({classSessions.length})</h3>
+                    <button
+                      className="class-action-btn"
+                      onClick={handleAutoGenerateSessions}
+                      disabled={generatingSessions}
+                      style={{ width: 'auto', background: 'linear-gradient(135deg, #6C63FF 0%, #5a52d5 100%)' }}
+                    >
+                      {generatingSessions ? 'Generating...' : 'Auto-Generate Sessions'}
+                    </button>
+                  </div>
                   {classSessions.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                       {classSessions.map((session, idx) => (
@@ -3023,8 +3418,15 @@ export default function AdminDashboard() {
                           borderRadius: '8px',
                           border: '1px solid rgba(255, 255, 255, 0.1)'
                         }}>
-                          <div style={{ color: '#fff', marginBottom: '0.5rem', fontWeight: '600' }}>
-                            Session {idx + 1}
+                          <div style={{ color: '#fff', marginBottom: '0.5rem', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Session {idx + 1}</span>
+                            <button
+                              onClick={() => handleDeleteSession(session.id)}
+                              disabled={deletingSessionId === session.id}
+                              style={{ background: 'none', border: '1px solid #f44336', borderRadius: '6px', color: '#f44336', padding: '0.2rem 0.55rem', cursor: 'pointer', fontSize: '0.78rem' }}
+                            >
+                              {deletingSessionId === session.id ? 'Deleting...' : 'Delete'}
+                            </button>
                           </div>
                           <div style={{ display: 'grid', gap: '0.6rem' }}>
                             <input
@@ -3370,11 +3772,22 @@ export default function AdminDashboard() {
           <h2>Creator Payouts</h2>
           <p>Manage manual payouts to creators</p>
         </div>
-        <div className="payouts-total-summary">
-          <div className="payouts-total-amount">
-            ₹{payouts.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.totalEarnings, 0).toFixed(2)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          {payouts.length > 0 && (
+            <button
+              className="button-dark"
+              onClick={exportPayoutsCSV}
+              style={{ padding: '0.6rem 1.2rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              Export CSV
+            </button>
+          )}
+          <div className="payouts-total-summary">
+            <div className="payouts-total-amount">
+              ₹{payouts.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.totalEarnings, 0).toFixed(2)}
+            </div>
+            <div className="payouts-total-label">Total Pending</div>
           </div>
-          <div className="payouts-total-label">Total Pending</div>
         </div>
       </div>
 
@@ -3468,8 +3881,8 @@ export default function AdminDashboard() {
                                 handleMarkPayoutAsPaid(payout);
                               }
                             }}
-                            style={{ 
-                              padding: '0.5rem 1rem', 
+                            style={{
+                              padding: '0.5rem 1rem',
                               fontSize: '0.875rem',
                               background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)'
                             }}
@@ -3478,15 +3891,14 @@ export default function AdminDashboard() {
                             {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
                           </button>
                         ) : (
-                          <span style={{ 
-                            padding: '0.5rem 1rem', 
-                            fontSize: '0.875rem',
-                            color: '#4CAF50',
-                            fontWeight: '600',
-                            textAlign: 'center'
-                          }}>
-                            Paid
-                          </span>
+                          <button
+                            className="button-2"
+                            onClick={() => handleUndoMarkPayoutAsPaid(payout)}
+                            disabled={undoingPayout === payout.creatorId}
+                            style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', borderColor: '#FF9800', color: '#FF9800' }}
+                          >
+                            {undoingPayout === payout.creatorId ? 'Reverting...' : 'Undo Paid'}
+                          </button>
                         )}
                       </div>
                     </td>
@@ -3550,7 +3962,7 @@ export default function AdminDashboard() {
                   >
                     {payout.status === 'paid' ? 'View / Edit Details' : 'View Details'}
                   </button>
-                  {payout.status !== 'paid' && (
+                  {payout.status !== 'paid' ? (
                     <button
                       className="button-dark payout-card-btn payout-card-btn-primary"
                       onClick={() => {
@@ -3561,6 +3973,15 @@ export default function AdminDashboard() {
                       disabled={processingPayout === payout.creatorId}
                     >
                       {processingPayout === payout.creatorId ? 'Processing...' : 'Mark as Paid'}
+                    </button>
+                  ) : (
+                    <button
+                      className="button-2 payout-card-btn"
+                      onClick={() => handleUndoMarkPayoutAsPaid(payout)}
+                      disabled={undoingPayout === payout.creatorId}
+                      style={{ borderColor: '#FF9800', color: '#FF9800' }}
+                    >
+                      {undoingPayout === payout.creatorId ? 'Reverting...' : 'Undo Paid'}
                     </button>
                   )}
                 </div>
@@ -3588,19 +4009,28 @@ export default function AdminDashboard() {
             <p>Track member enrollments and payments</p>
           </div>
           {enrollments.length > 0 && (
-            <div className="enrollments-summary">
-              <div className="summary-item">
-                <TrendingUp size={20} className="summary-icon" />
-                <div>
-                  <div className="summary-value">{enrollments.length}</div>
-                  <div className="summary-label">Total Enrollments</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <button
+                className="button-dark"
+                onClick={exportEnrollmentsCSV}
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.875rem' }}
+              >
+                Export CSV
+              </button>
+              <div className="enrollments-summary">
+                <div className="summary-item">
+                  <TrendingUp size={20} className="summary-icon" />
+                  <div>
+                    <div className="summary-value">{enrollments.length}</div>
+                    <div className="summary-label">Total Enrollments</div>
+                  </div>
                 </div>
-              </div>
-              <div className="summary-item">
-                <CreditCard size={20} className="summary-icon earnings-icon" />
-                <div>
-                  <div className="summary-value earnings">₹{totalRevenue.toFixed(2)}</div>
-                  <div className="summary-label">Total Revenue</div>
+                <div className="summary-item">
+                  <CreditCard size={20} className="summary-icon earnings-icon" />
+                  <div>
+                    <div className="summary-value earnings">₹{totalRevenue.toFixed(2)}</div>
+                    <div className="summary-label">Total Revenue</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4189,6 +4619,45 @@ export default function AdminDashboard() {
                     Edit member account fields and save to update Firestore and related enrollment records.
                   </div>
                 )}
+
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.12)', marginTop: '1rem', paddingTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+                  <h4 style={{ margin: 0, color: '#fff', fontSize: '0.95rem' }}>Account Security and Access</h4>
+                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <button
+                      className="button-2"
+                      onClick={() => handleToggleStudentSuspension(!(person as any).isSuspended)}
+                      disabled={processingStudentAccount}
+                      style={{ borderColor: '#FF9800', color: '#FF9800' }}
+                    >
+                      {(person as any).isSuspended ? 'Activate Member' : 'Suspend Member'}
+                    </button>
+                    <button
+                      className="button-2"
+                      onClick={handleDeleteStudentAccount}
+                      disabled={processingStudentAccount}
+                      style={{ borderColor: '#f44336', color: '#f44336' }}
+                    >
+                      Delete Member Account
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.6rem' }}>
+                    <input
+                      type="text"
+                      value={studentNewPassword}
+                      onChange={(e) => setStudentNewPassword(e.target.value)}
+                      placeholder="Set new password (min 6 chars)"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.62rem 0.74rem' }}
+                    />
+                    <button
+                      className="creator-view-btn"
+                      style={{ width: 'auto', padding: '0.45rem 0.8rem' }}
+                      onClick={handleSetStudentPassword}
+                      disabled={savingStudentPassword}
+                    >
+                      <span>{savingStudentPassword ? 'Updating...' : 'Update Password'}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -4332,6 +4801,42 @@ export default function AdminDashboard() {
                       <div className="modal-metric-value earnings">₹{(person.totalEarnings || 0).toFixed(2)}</div>
                     </div>
                   </div>
+                </div>
+
+                <div className="modal-section">
+                  <h3 className="modal-section-title">Earnings Breakdown by Class</h3>
+                  {loadingEarningsBreakdown ? (
+                    <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.88rem' }}>Loading breakdown...</div>
+                  ) : creatorEarningsBreakdown.length === 0 ? (
+                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.88rem' }}>No classes found.</div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+                            <th style={{ textAlign: 'left', color: 'rgba(255,255,255,0.75)', padding: '0.5rem 0.4rem', fontWeight: 600 }}>Class</th>
+                            <th style={{ textAlign: 'left', color: 'rgba(255,255,255,0.75)', padding: '0.5rem 0.4rem', fontWeight: 600 }}>Status</th>
+                            <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.75)', padding: '0.5rem 0.4rem', fontWeight: 600 }}>Enrollments</th>
+                            <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.75)', padding: '0.5rem 0.4rem', fontWeight: 600 }}>Earnings</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {creatorEarningsBreakdown.map((cls: any) => (
+                            <tr key={cls.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                              <td style={{ color: '#fff', padding: '0.5rem 0.4rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.title || 'Untitled'}</td>
+                              <td style={{ padding: '0.5rem 0.4rem' }}>
+                                <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', borderRadius: '4px', background: cls.status === 'approved' ? 'rgba(76,175,80,0.2)' : cls.status === 'pending' ? 'rgba(255,152,0,0.2)' : 'rgba(255,255,255,0.1)', color: cls.status === 'approved' ? '#4CAF50' : cls.status === 'pending' ? '#FF9800' : '#aaa' }}>
+                                  {cls.status || 'unknown'}
+                                </span>
+                              </td>
+                              <td style={{ color: 'rgba(255,255,255,0.88)', padding: '0.5rem 0.4rem', textAlign: 'right' }}>{cls.enrollments}</td>
+                              <td style={{ color: '#FFD700', padding: '0.5rem 0.4rem', textAlign: 'right', fontWeight: 600 }}>₹{(cls.earnings || 0).toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -7359,9 +7864,11 @@ export default function AdminDashboard() {
                 )}
               </div>
 
-              <div className="payout-instruction">
-                <p>Please process payment via bank transfer and then click "Mark as Paid".</p>
-              </div>
+              {selectedPayout.status !== 'paid' && (
+                <div className="payout-instruction">
+                  <p>Please process payment via bank transfer and then click "Mark as Paid".</p>
+                </div>
+              )}
 
               <div className="payout-modal-actions">
                 <button
@@ -7370,18 +7877,32 @@ export default function AdminDashboard() {
                 >
                   Close
                 </button>
-                <button
-                  className="payout-modal-btn payout-btn-primary"
-                  onClick={() => {
-                    if (confirm(`Mark payout of ₹${selectedPayout.totalEarnings.toFixed(2)} as paid for ${selectedPayout.name}?`)) {
-                      handleMarkPayoutAsPaid(selectedPayout);
+                {selectedPayout.status !== 'paid' ? (
+                  <button
+                    className="payout-modal-btn payout-btn-primary"
+                    onClick={() => {
+                      if (confirm(`Mark payout of ₹${selectedPayout.totalEarnings.toFixed(2)} as paid for ${selectedPayout.name}?`)) {
+                        handleMarkPayoutAsPaid(selectedPayout);
+                        setSelectedPayout(null);
+                      }
+                    }}
+                    disabled={processingPayout === selectedPayout.creatorId}
+                  >
+                    {processingPayout === selectedPayout.creatorId ? 'Processing...' : 'Mark as Paid'}
+                  </button>
+                ) : (
+                  <button
+                    className="payout-modal-btn"
+                    style={{ background: 'rgba(255,152,0,0.15)', border: '1px solid #FF9800', color: '#FF9800' }}
+                    onClick={() => {
+                      handleUndoMarkPayoutAsPaid(selectedPayout);
                       setSelectedPayout(null);
-                    }
-                  }}
-                  disabled={processingPayout === selectedPayout.creatorId}
-                >
-                  {processingPayout === selectedPayout.creatorId ? 'Processing...' : 'Mark as Paid'}
-                </button>
+                    }}
+                    disabled={undoingPayout === selectedPayout.creatorId}
+                  >
+                    {undoingPayout === selectedPayout.creatorId ? 'Reverting...' : 'Undo Paid'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

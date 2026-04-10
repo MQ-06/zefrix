@@ -228,6 +228,20 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
             setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, recordingLink: link } : s));
             setRecordingInputs(prev => ({ ...prev, [sessionId]: '' }));
             showSuccess('Recording link saved successfully!');
+
+            // Notify enrolled students via email (non-blocking)
+            const session = sessions.find(s => s.id === sessionId);
+            fetch('/api/email/recording-available', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    classId,
+                    sessionId,
+                    sessionNumber: session?.sessionNumber || 1,
+                    className: classData?.title || '',
+                    recordingLink: link,
+                }),
+            }).catch((err) => console.error('Failed to send recording-available emails (non-blocking):', err));
         } catch (error: any) {
             console.error('Recording save error:', error);
             showError(error.message || 'Failed to save recording link');

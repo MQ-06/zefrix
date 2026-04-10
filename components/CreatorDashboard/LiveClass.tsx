@@ -95,6 +95,19 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
         status: 'live',
         startedAt: window.serverTimestamp ? window.serverTimestamp() : new Date()
       });
+
+      // Send "session live" email to all enrolled students (non-blocking)
+      fetch('/api/email/session-live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classId,
+          sessionId,
+          className,
+          sessionNumber: sessionNumber || 1,
+          meetingLink,
+        }),
+      }).catch((err) => console.error('Failed to send session-live emails (non-blocking):', err));
     } catch (error) {
       console.error('Error marking session as live:', error);
     }
