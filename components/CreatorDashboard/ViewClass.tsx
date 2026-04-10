@@ -78,6 +78,8 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
     const [sessions, setSessions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'students'>('overview');
+    const [recordingInputs, setRecordingInputs] = useState<{ [sessionId: string]: string }>({});
+    const [savingRecording, setSavingRecording] = useState<string | null>(null);
 
     useEffect(() => {
         let classUnsubscribe: (() => void) | null = null;
@@ -206,30 +208,31 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
         return status.charAt(0).toUpperCase() + status.slice(1);
     };
 
-    const handleUploadRecording = async (sessionId: string, file: File) => {
+    const handleSaveRecordingLink = async (sessionId: string) => {
+        const link = (recordingInputs[sessionId] || '').trim();
+        if (!link) {
+            showError('Please enter a recording link');
+            return;
+        }
         if (!window.firebaseDb || !window.doc || !window.updateDoc) {
             showError('Firebase not ready');
             return;
         }
-
+        setSavingRecording(sessionId);
         try {
-            const { uploadVideo, getClassRecordingPath, validateFile } = await import('@/lib/utils/serverStorage');
-            const validation = validateFile(file, 'video');
-            if (!validation.valid) {
-                showError(validation.error || 'Invalid file');
-                return;
-            }
-            const path = getClassRecordingPath(classId, sessionId, file.name);
-            const downloadURL = await uploadVideo(file, path);
             const sessionRef = window.doc(window.firebaseDb, 'sessions', sessionId);
             await window.updateDoc(sessionRef, {
-                recordingLink: downloadURL,
+                recordingLink: link,
                 recordingUploadedAt: new Date()
             });
-            showSuccess('Recording uploaded successfully!');
+            setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, recordingLink: link } : s));
+            setRecordingInputs(prev => ({ ...prev, [sessionId]: '' }));
+            showSuccess('Recording link saved successfully!');
         } catch (error: any) {
-            console.error('Recording upload error:', error);
-            showError(error.message || 'Failed to upload recording');
+            console.error('Recording save error:', error);
+            showError(error.message || 'Failed to save recording link');
+        } finally {
+            setSavingRecording(null);
         }
     };
 
@@ -575,40 +578,56 @@ export default function ViewClass({ classId, onBack, onEdit, onStartLiveClass }:
                                                 {isCompleted && (
                                                     <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(33, 150, 243, 0.1)', borderRadius: '8px' }}>
                                                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.9)' }}>
-                                                            Upload Recording:
+                                                            Recording Link:
                                                         </label>
-                                                        <input
-                                                            type="file"
-                                                            accept="video/*"
-                                                            onChange={(e) => {
-                                                                const file = e.target.files?.[0];
-                                                                if (file) {
-                                                                    handleUploadRecording(session.id, file);
-                                                                }
-                                                            }}
-                                                            style={{ 
-                                                                width: '100%',
-                                                                padding: '0.5rem',
-                                                                background: 'rgba(255, 255, 255, 0.1)',
-                                                                border: '1px solid rgba(255, 255, 255, 0.2)',
-                                                                borderRadius: '6px',
-                                                                color: '#fff',
-                                                                fontSize: '0.875rem'
-                                                            }}
-                                                        />
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <input
+                                                                type="url"
+                                                                placeholder={session.recordingLink || 'Paste recording URL...'}
+                                                                value={recordingInputs[session.id] || ''}
+                                                                onChange={(e) => setRecordingInputs(prev => ({ ...prev, [session.id]: e.target.value }))}
+                                                                style={{
+                                                                    flex: 1,
+                                                                    padding: '0.5rem 0.75rem',
+                                                                    background: 'rgba(255, 255, 255, 0.1)',
+                                                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                                    borderRadius: '6px',
+                                                                    color: '#fff',
+                                                                    fontSize: '0.875rem'
+                                                                }}
+                                                            />
+                                                            <button
+                                                                onClick={() => handleSaveRecordingLink(session.id)}
+                                                                disabled={savingRecording === session.id}
+                                                                style={{
+                                                                    padding: '0.5rem 1rem',
+                                                                    background: 'linear-gradient(135deg, #D92A63 0%, #FF654B 100%)',
+                                                                    color: '#fff',
+                                                                    border: 'none',
+                                                                    borderRadius: '6px',
+                                                                    fontSize: '0.875rem',
+                                                                    fontWeight: '600',
+                                                                    cursor: savingRecording === session.id ? 'not-allowed' : 'pointer',
+                                                                    whiteSpace: 'nowrap',
+                                                                    opacity: savingRecording === session.id ? 0.7 : 1
+                                                                }}
+                                                            >
+                                                                {savingRecording === session.id ? 'Saving...' : 'Save'}
+                                                            </button>
+                                                        </div>
                                                         {session.recordingLink && (
                                                             <div style={{ marginTop: '0.5rem' }}>
-                                                                <a 
-                                                                    href={session.recordingLink} 
-                                                                    target="_blank" 
+                                                                <a
+                                                                    href={session.recordingLink}
+                                                                    target="_blank"
                                                                     rel="noopener noreferrer"
-                                                                    style={{ 
+                                                                    style={{
                                                                         color: '#2196F3',
                                                                         textDecoration: 'none',
                                                                         fontSize: '0.875rem'
                                                                     }}
                                                                 >
-                                                                    View Recording
+                                                                    View Current Recording →
                                                                 </a>
                                                             </div>
                                                         )}

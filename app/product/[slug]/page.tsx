@@ -358,11 +358,21 @@ export default function ProductPage({ params }: PageProps) {
         const q = window.query(classesRef, window.where('status', '==', 'approved'));
         const querySnapshot = await window.getDocs(q);
 
+        const now = new Date();
         const classes: any[] = [];
         querySnapshot.forEach((doc: any) => {
           // Exclude the current class
           if (doc.id !== params.slug) {
             const data = doc.data();
+
+            // Exclude batches whose start date has already passed
+            if (data.startISO) {
+              try {
+                const startDate = new Date(data.startISO);
+                if (!isNaN(startDate.getTime()) && startDate < now) return;
+              } catch (_) {}
+            }
+
             classes.push({
               id: doc.id,
               slug: doc.id,

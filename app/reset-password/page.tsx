@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -209,16 +209,21 @@ export default function ResetPasswordPage() {
     }
   };
 
+  const TEXT: React.CSSProperties = { color: '#1d2442', margin: '0 0 14px', lineHeight: '1.6', fontSize: '14px' };
+  const LABEL: React.CSSProperties = { display: 'block', fontSize: '13px', color: '#1d2442', fontWeight: 600, marginBottom: '4px' };
+  const INPUT: React.CSSProperties = { display: 'block', width: '100%', border: '1px solid #c8d0ea', borderRadius: '10px', padding: '12px', fontSize: '14px', color: '#1d2442', outline: 'none', background: '#fff' };
+  const BTN: React.CSSProperties = { display: 'block', width: '100%', marginTop: '8px', border: 'none', borderRadius: '10px', background: '#4e54c8', color: '#fff', padding: '12px 14px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' };
+
   const renderBody = () => {
     if (status === 'checking') {
-      return <p className="reset-text">{message}</p>;
+      return <p style={TEXT}>{message}</p>;
     }
 
     if (status === 'invalid' || status === 'expired') {
       return (
         <>
-          <p className="reset-text">{message}</p>
-          <button className="reset-btn" onClick={() => router.push('/signup-login')}>
+          <p style={TEXT}>{message}</p>
+          <button style={BTN} onClick={() => router.push('/signup-login')}>
             Request New Reset Link
           </button>
         </>
@@ -226,19 +231,22 @@ export default function ResetPasswordPage() {
     }
 
     if (status === 'success') {
-      return <p className="reset-text success">{message}</p>;
+      return <p className="reset-pw-success" style={{ fontWeight: 600, margin: '0 0 14px', lineHeight: '1.6', fontSize: '14px' }}>{message}</p>;
     }
 
     return (
-      <form onSubmit={handleSubmit} className="reset-form">
-        <p className="reset-text">Password reset for {emailHint}.</p>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <p style={TEXT}>Password reset for {emailHint}.</p>
 
-        <label htmlFor="new-password" className="reset-label">New password</label>
+        {/* Hidden username field satisfies browser accessibility requirement */}
+        <input type="text" name="username" autoComplete="username" value={emailHint} readOnly style={{ display: 'none' }} aria-hidden="true" />
+
+        <label htmlFor="new-password" style={LABEL}>New password</label>
         <input
           id="new-password"
           type="password"
           autoComplete="new-password"
-          className="reset-input"
+          style={INPUT}
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           required
@@ -246,30 +254,30 @@ export default function ResetPasswordPage() {
         />
 
         {newPassword ? (
-          <div className="password-helper" aria-live="polite">
+          <div style={{ margin: '2px 0 4px', display: 'grid', gap: '4px' }} aria-live="polite">
             {getStrongPasswordChecks(newPassword).map((check) => (
-              <div key={check.key} className={`password-rule ${check.passed ? 'passed' : ''}`}>
+              <div key={check.key} style={{ fontSize: '12px', color: check.passed ? '#1f7a3e' : '#6c738e' }}>
                 {check.passed ? '✓' : '•'} {check.label}
               </div>
             ))}
           </div>
         ) : null}
 
-        <label htmlFor="confirm-password" className="reset-label">Confirm new password</label>
+        <label htmlFor="confirm-password" style={LABEL}>Confirm new password</label>
         <input
           id="confirm-password"
           type="password"
           autoComplete="new-password"
-          className="reset-input"
+          style={INPUT}
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
           minLength={8}
         />
 
-        {submitError ? <p className="reset-error">{submitError}</p> : null}
+        {submitError ? <p className="reset-pw-error" style={{ margin: '4px 0 0', fontSize: '13px' }}>{submitError}</p> : null}
 
-        <button className="reset-btn" type="submit" disabled={isSubmitting}>
+        <button style={{ ...BTN, opacity: isSubmitting ? 0.65 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }} type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Updating password...' : 'Update Password'}
         </button>
       </form>
@@ -279,11 +287,11 @@ export default function ResetPasswordPage() {
   return (
     <>
       <Header />
-      <main className="reset-page">
-        <section className="reset-card">
-          <h1>Reset Your Password</h1>
+      <main className="reset-pw-page">
+        <div className="reset-pw-card">
+          <h1 style={{ margin: '0 0 18px', fontSize: '28px', lineHeight: '1.25', color: '#18203a' }}>Reset Your Password</h1>
           {renderBody()}
-        </section>
+        </div>
       </main>
       <Footer />
 

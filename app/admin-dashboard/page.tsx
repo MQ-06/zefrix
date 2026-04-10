@@ -202,7 +202,7 @@ export default function AdminDashboard() {
     demoVideoLink: ''
   });
   const [savingClassEdits, setSavingClassEdits] = useState(false);
-  const [sessionEditForms, setSessionEditForms] = useState<Record<string, { dateTime: string; meetingLink: string }>>({});
+  const [sessionEditForms, setSessionEditForms] = useState<Record<string, { dateTime: string; meetingLink: string; recordingLink: string }>>({});
   const [savingSessionId, setSavingSessionId] = useState<string | null>(null);
   const [newSessionForm, setNewSessionForm] = useState({ dateTime: '', meetingLink: '' });
   const [addingSession, setAddingSession] = useState(false);
@@ -786,7 +786,8 @@ export default function AdminDashboard() {
       sessions.forEach((session: any) => {
         initialSessionForms[session.id] = {
           dateTime: toDateTimeLocalValue(session.sessionDate, session.sessionTime || session.startTime),
-          meetingLink: session.meetingLink || session.meetLink || ''
+          meetingLink: session.meetingLink || session.meetLink || '',
+          recordingLink: session.recordingLink || ''
         };
       });
       setSessionEditForms(initialSessionForms);
@@ -912,7 +913,8 @@ export default function AdminDashboard() {
       const sessionRef = window.doc(window.firebaseDb, 'sessions', sessionId);
       const sessionTime = extractSessionTime(parsedDate);
       const meetingLink = form.meetingLink.trim();
-      const payload = {
+      const recordingLink = (form.recordingLink || '').trim();
+      const payload: Record<string, any> = {
         sessionDate: parsedDate,
         sessionTime,
         startTime: sessionTime,
@@ -922,6 +924,9 @@ export default function AdminDashboard() {
         adminEditedAt: new Date(),
         adminEditedBy: user?.email || user?.uid || 'admin'
       };
+      if (recordingLink) {
+        payload.recordingLink = recordingLink;
+      }
 
       await window.updateDoc(sessionRef, payload);
 
@@ -1036,7 +1041,8 @@ export default function AdminDashboard() {
         ...prev,
         [docRef.id]: {
           dateTime: toDateTimeLocalValue(sessionPayload.sessionDate, sessionPayload.sessionTime),
-          meetingLink: sessionPayload.meetingLink || ''
+          meetingLink: sessionPayload.meetingLink || '',
+          recordingLink: sessionPayload.recordingLink || ''
         }
       }));
 
@@ -3029,7 +3035,7 @@ export default function AdminDashboard() {
                                 setSessionEditForms(prev => ({
                                   ...prev,
                                   [session.id]: {
-                                    ...(prev[session.id] || { dateTime: '', meetingLink: '' }),
+                                    ...(prev[session.id] || { dateTime: '', meetingLink: '', recordingLink: '' }),
                                     dateTime: value
                                   }
                                 }));
@@ -3044,12 +3050,28 @@ export default function AdminDashboard() {
                                 setSessionEditForms(prev => ({
                                   ...prev,
                                   [session.id]: {
-                                    ...(prev[session.id] || { dateTime: '', meetingLink: '' }),
+                                    ...(prev[session.id] || { dateTime: '', meetingLink: '', recordingLink: '' }),
                                     meetingLink: value
                                   }
                                 }));
                               }}
                               placeholder="Google Meet link"
+                              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem' }}
+                            />
+                            <input
+                              type="url"
+                              value={sessionEditForms[session.id]?.recordingLink || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setSessionEditForms(prev => ({
+                                  ...prev,
+                                  [session.id]: {
+                                    ...(prev[session.id] || { dateTime: '', meetingLink: '', recordingLink: '' }),
+                                    recordingLink: value
+                                  }
+                                }));
+                              }}
+                              placeholder={session.recordingLink || 'Recording link (optional)'}
                               style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#fff', padding: '0.6rem 0.75rem' }}
                             />
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
@@ -3073,6 +3095,16 @@ export default function AdminDashboard() {
                                 style={{ color: '#D92A63', textDecoration: 'none', fontSize: '0.82rem' }}
                               >
                                 Open meeting link →
+                              </a>
+                            )}
+                            {(sessionEditForms[session.id]?.recordingLink || session.recordingLink) && (
+                              <a
+                                href={sessionEditForms[session.id]?.recordingLink || session.recordingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#2196F3', textDecoration: 'none', fontSize: '0.82rem' }}
+                              >
+                                View recording →
                               </a>
                             )}
                           </div>
