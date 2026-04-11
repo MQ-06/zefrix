@@ -84,7 +84,7 @@ interface Stats {
   pendingClasses: number;
 }
 
-type AdminPage = 'dashboard' | 'creators' | 'students' | 'approve-batches' | 'contact-messages' | 'payouts' | 'enrollments' | 'notifications';
+type AdminPage = 'dashboard' | 'creators' | 'students' | 'approve-batches' | 'contact-messages' | 'payouts' | 'enrollments' | 'notifications' | 'broadcast';
 
 export default function AdminDashboard() {
   const { showSuccess, showError, showInfo } = useNotification();
@@ -162,10 +162,29 @@ export default function AdminDashboard() {
   const [contactMessages, setContactMessages] = useState<any[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [selectedContactMessage, setSelectedContactMessage] = useState<any | null>(null);
+  const [contactReplyText, setContactReplyText] = useState('');
+  const [resolvingContact, setResolvingContact] = useState(false);
+  const [contactStatusFilter, setContactStatusFilter] = useState<'all' | 'open' | 'in-progress' | 'resolved'>('all');
 
   // Enrollments
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [loadingEnrollments, setLoadingEnrollments] = useState(false);
+  const [enrollmentSearch, setEnrollmentSearch] = useState('');
+  const [enrollmentClassFilter, setEnrollmentClassFilter] = useState('');
+  const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState('');
+  const [enrollmentDateFrom, setEnrollmentDateFrom] = useState('');
+  const [enrollmentDateTo, setEnrollmentDateTo] = useState('');
+  const [cancellingEnrollmentId, setCancellingEnrollmentId] = useState<string | null>(null);
+  const [editingAttendanceSessionId, setEditingAttendanceSessionId] = useState<string | null>(null);
+  const [sessionAttendanceEdit, setSessionAttendanceEdit] = useState<Record<string, boolean>>({});
+  const [savingAttendance, setSavingAttendance] = useState(false);
+  // Broadcast
+  const [broadcastTarget, setBroadcastTarget] = useState<'all-students' | 'all-creators' | 'all-users' | 'specific-user'>('all-students');
+  const [broadcastUserId, setBroadcastUserId] = useState('');
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastLink, setBroadcastLink] = useState('');
+  const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
   // Payouts
   const [payouts, setPayouts] = useState<any[]>([]);
@@ -619,6 +638,21 @@ export default function AdminDashboard() {
       setPendingClasses((prev) => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
       setApprovedClasses((prev) => prev.map((item: any) => item.classId === selectedClassDetails.classId ? { ...item, ...classSyncPayload } : item));
       showSuccess('Session deleted.');
+
+      // Notify enrolled students about the cancellation (non-blocking)
+      const deletedSession = classSessions.find((s: any) => s.id === sessionId);
+      fetch('/api/email/session-cancelled', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classId: selectedClassDetails.classId,
+          sessionId,
+          sessionNumber: deletedSession?.sessionNumber || deletedSession?.number || null,
+          className: selectedClassDetails.title || selectedClassDetails.className || '',
+          sessionDate: deletedSession?.date || deletedSession?.scheduledDate || '',
+          sessionTime: deletedSession?.time || deletedSession?.startTime || '',
+        }),
+      }).catch((err) => console.error('Session cancelled notification error (non-blocking):', err));
     } catch (error: any) {
       showError(`Failed to delete session: ${error.message}`);
     } finally {
@@ -775,6 +809,20 @@ export default function AdminDashboard() {
       setPayouts((prev) => prev.map((p) => p.creatorId === payout.creatorId ? { ...p, status: 'pending' } : p));
       setSelectedPayout((prev: any) => prev?.creatorId === payout.creatorId ? { ...prev, status: 'pending' } : prev);
       showSuccess(`Payout for ${payout.name} reverted to Pending.`);
+
+      // Notify the creator in-app (non-blocking)
+      fetch('/api/notifications/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: payout.creatorId,
+          userRole: 'creator',
+          type: 'payout_reverted',
+          title: 'Payout Status Updated',
+          message: `Your payout of ₹${payout.totalEarnings?.toFixed(2) || '0.00'} has been moved back to Pending by admin. Please contact support if you have questions.`,
+          link: '/creator-dashboard',
+        }),
+      }).catch((err) => console.error('Payout undo notification error (non-blocking):', err));
     } catch (error: any) {
       showError(`Failed to undo payout: ${error.message}`);
     } finally {
@@ -828,6 +876,141 @@ export default function AdminDashboard() {
     ]);
     exportToCSV(`payouts_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
     showSuccess(`Exported ${rows.length} payout records.`);
+  };
+
+  const formattedDate = (d: Date) =>
+    d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  // ── Cancel enrollment ───────────────────────────────────────────────────────
+  const handleCancelEnrollment = async (enrollment: any) => {
+    const reason = prompt(`Cancel enrollment for ${enrollment.studentName || 'this student'} in "${enrollment.className}"?\n\nEnter a reason (optional):`);
+    if (reason === null) return; // user hit cancel on prompt
+
+    setCancellingEnrollmentId(enrollment.id);
+    try {
+      const res = await fetch('/api/admin/cancel-enrollment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enrollmentId: enrollment.id, reason: reason || 'Cancelled by admin' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setEnrollments((prev) => prev.map((e) => e.id === enrollment.id ? { ...e, status: 'cancelled' } : e));
+      showSuccess(`Enrollment cancelled. Student and creator notified.`);
+    } catch (err: any) {
+      showError(`Failed to cancel enrollment: ${err.message}`);
+    } finally {
+      setCancellingEnrollmentId(null);
+    }
+  };
+
+  // ── Broadcast notification ──────────────────────────────────────────────────
+  const handleSendBroadcast = async () => {
+    if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
+      showError('Title and message are required.');
+      return;
+    }
+    if (broadcastTarget === 'specific-user' && !broadcastUserId.trim()) {
+      showError('User ID or email is required for specific-user target.');
+      return;
+    }
+    setSendingBroadcast(true);
+    try {
+      const res = await fetch('/api/admin/broadcast-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: broadcastTarget,
+          userId: broadcastUserId.trim() || undefined,
+          title: broadcastTitle.trim(),
+          message: broadcastMessage.trim(),
+          link: broadcastLink.trim() || undefined,
+          sentBy: user?.email || 'admin',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      showSuccess(`Broadcast sent to ${data.sent} user${data.sent !== 1 ? 's' : ''}.`);
+      setBroadcastTitle('');
+      setBroadcastMessage('');
+      setBroadcastLink('');
+      setBroadcastUserId('');
+    } catch (err: any) {
+      showError(`Broadcast failed: ${err.message}`);
+    } finally {
+      setSendingBroadcast(false);
+    }
+  };
+
+  // ── Save post-class attendance edit ────────────────────────────────────────
+  const handleSaveAttendanceEdit = async (session: any) => {
+    if (!window.firebaseDb || !window.doc || !window.updateDoc || !window.getDoc) {
+      showError('Firebase not initialized');
+      return;
+    }
+    setSavingAttendance(true);
+    try {
+      const enrollmentsSnap = await window.getDocs(
+        window.query(window.collection(window.firebaseDb, 'enrollments'), window.where('classId', '==', session.classId))
+      );
+
+      const updates: Promise<any>[] = [];
+      const presentIds: string[] = [];
+      const absentIds: string[] = [];
+
+      enrollmentsSnap.forEach((edoc: any) => {
+        const e = edoc.data();
+        const isPresent = sessionAttendanceEdit[e.studentId] ?? false;
+        if (isPresent) presentIds.push(e.studentId); else absentIds.push(e.studentId);
+
+        const existingAttendance = e.sessionAttendance || {};
+        existingAttendance[session.id] = {
+          ...(existingAttendance[session.id] || {}),
+          attended: isPresent,
+          editedByAdmin: true,
+          editedAt: new Date(),
+          sessionNumber: session.sessionNumber || 1,
+        };
+
+        const totalSessions = Object.keys(existingAttendance).length;
+        const attendedSessions = Object.values(existingAttendance).filter((s: any) => s.attended).length;
+
+        updates.push(
+          window.updateDoc(window.doc(window.firebaseDb, 'enrollments', edoc.id), {
+            sessionAttendance: existingAttendance,
+            attendedSessions,
+            totalSessions,
+            attendanceRate: totalSessions > 0 ? (attendedSessions / totalSessions) * 100 : 0,
+          })
+        );
+      });
+
+      // Update the session document too
+      updates.push(
+        window.updateDoc(window.doc(window.firebaseDb, 'sessions', session.id), {
+          attendance: {
+            totalEnrolled: enrollmentsSnap.size,
+            present: presentIds.length,
+            absent: absentIds.length,
+            attendanceRate: enrollmentsSnap.size > 0 ? (presentIds.length / enrollmentsSnap.size) * 100 : 0,
+          },
+          attendedStudents: presentIds,
+          absentStudents: absentIds,
+          attendedCount: presentIds.length,
+          adminAttendanceEdit: true,
+          adminEditedAt: new Date(),
+        })
+      );
+
+      await Promise.all(updates);
+      setEditingAttendanceSessionId(null);
+      setSessionAttendanceEdit({});
+      showSuccess(`Attendance updated for ${enrollmentsSnap.size} students.`);
+    } catch (err: any) {
+      showError(`Failed to save attendance: ${err.message}`);
+    } finally {
+      setSavingAttendance(false);
+    }
   };
 
   const toDateTimeLocalValue = (dateInput: any, timeInput?: string) => {
@@ -1307,6 +1490,33 @@ export default function AdminDashboard() {
       }
 
       showSuccess('Session updated by admin');
+
+      // Detect date/time change and notify enrolled students (non-blocking)
+      const originalSession = classSessions.find((s: any) => s.id === sessionId);
+      if (originalSession) {
+        const originalDate = originalSession.sessionDate
+          ? (originalSession.sessionDate.toDate ? originalSession.sessionDate.toDate() : new Date(originalSession.sessionDate))
+          : null;
+        const dateChanged = originalDate && Math.abs(parsedDate.getTime() - originalDate.getTime()) > 60 * 1000;
+        const meetingChanged = (originalSession.meetingLink || '') !== meetingLink;
+
+        if (dateChanged || meetingChanged) {
+          fetch('/api/email/session-rescheduled', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              classId: selectedClassDetails?.classId || '',
+              sessionId,
+              sessionNumber: originalSession.sessionNumber || originalSession.number || null,
+              className: selectedClassDetails?.title || selectedClassDetails?.className || '',
+              newDate: formattedDate(parsedDate),
+              newTime: sessionTime,
+              oldDate: originalDate ? formattedDate(originalDate) : '',
+              meetingLink,
+            }),
+          }).catch((err) => console.error('Session reschedule notification error (non-blocking):', err));
+        }
+      }
     } catch (error: any) {
       console.error('Error updating session:', error);
       showError(`Failed to update session: ${error.message}`);
@@ -3509,6 +3719,69 @@ export default function AdminDashboard() {
                                 View recording →
                               </a>
                             )}
+
+                            {/* Post-class attendance editing for completed sessions */}
+                            {session.status === 'completed' && (
+                              <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.75rem' }}>
+                                {editingAttendanceSessionId !== session.id ? (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>
+                                      Attendance: {session.attendance?.present ?? session.attendedCount ?? '?'}/{session.attendance?.totalEnrolled ?? '?'} present
+                                    </div>
+                                    <button
+                                      onClick={async () => {
+                                        // Pre-load existing attendance into edit state
+                                        const initial: Record<string, boolean> = {};
+                                        (session.attendedStudents || []).forEach((sid: string) => { initial[sid] = true; });
+                                        (session.absentStudents || []).forEach((sid: string) => { initial[sid] = false; });
+                                        setSessionAttendanceEdit(initial);
+                                        setEditingAttendanceSessionId(session.id);
+                                      }}
+                                      style={{ padding: '0.25rem 0.65rem', background: 'rgba(33,150,243,0.15)', border: '1px solid rgba(33,150,243,0.4)', borderRadius: '6px', color: '#64B5F6', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                                    >
+                                      Edit Attendance
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div style={{ color: '#64B5F6', fontWeight: 600, fontSize: '0.82rem', marginBottom: '0.5rem' }}>Edit Attendance</div>
+                                    {/* We need enrollments for this class — fetch from classSessions context */}
+                                    {(enrollments.filter((e: any) => e.classId === session.classId && e.status !== 'cancelled')).length === 0 ? (
+                                      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>No active enrollments for this class.</div>
+                                    ) : (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.6rem' }}>
+                                        {enrollments.filter((e: any) => e.classId === session.classId && e.status !== 'cancelled').map((e: any) => (
+                                          <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem', color: '#fff' }}>
+                                            <input
+                                              type="checkbox"
+                                              checked={sessionAttendanceEdit[e.studentId] ?? false}
+                                              onChange={(ev) => setSessionAttendanceEdit(prev => ({ ...prev, [e.studentId]: ev.target.checked }))}
+                                              style={{ accentColor: '#4CAF50', width: 16, height: 16 }}
+                                            />
+                                            {e.studentName || e.studentDetails?.name || e.studentEmail || e.studentId}
+                                          </label>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                      <button
+                                        onClick={() => handleSaveAttendanceEdit(session)}
+                                        disabled={savingAttendance}
+                                        style={{ padding: '0.35rem 0.85rem', background: 'rgba(76,175,80,0.2)', border: '1px solid rgba(76,175,80,0.5)', borderRadius: '7px', color: '#4CAF50', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}
+                                      >
+                                        {savingAttendance ? 'Saving...' : 'Save'}
+                                      </button>
+                                      <button
+                                        onClick={() => { setEditingAttendanceSessionId(null); setSessionAttendanceEdit({}); }}
+                                        style={{ padding: '0.35rem 0.85rem', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '7px', color: 'rgba(255,255,255,0.7)', fontSize: '0.78rem', cursor: 'pointer' }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -3593,12 +3866,38 @@ export default function AdminDashboard() {
   );
 
   // Render Contact Messages Page
-  const renderContactMessages = () => (
+  const renderContactMessages = () => {
+    const filteredContactMessages = contactStatusFilter === 'all'
+      ? contactMessages
+      : contactMessages.filter((m) => (m.status || 'open') === contactStatusFilter);
+
+    return (
     <div>
       <div className="dashboard-header">
         <div className="welcome-section">
           <h2>Contact Messages</h2>
           <p>View and manage customer inquiries</p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {(['all', 'open', 'in-progress', 'resolved'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setContactStatusFilter(f)}
+              style={{
+                padding: '0.4rem 0.9rem',
+                borderRadius: '20px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                background: contactStatusFilter === f ? 'rgba(217,42,99,0.3)' : 'rgba(255,255,255,0.07)',
+                border: contactStatusFilter === f ? '1px solid rgba(217,42,99,0.6)' : '1px solid rgba(255,255,255,0.15)',
+                color: '#fff',
+                textTransform: 'capitalize'
+              }}
+            >
+              {f === 'all' ? `All (${contactMessages.length})` : `${f.replace('-', ' ')} (${contactMessages.filter((m) => (m.status || 'open') === f).length})`}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -3611,6 +3910,10 @@ export default function AdminDashboard() {
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📬</div>
           <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>No contact messages yet</div>
           <div style={{ color: 'rgba(255,255,255,0.6)' }}>Messages from the contact form will appear here</div>
+        </div>
+      ) : filteredContactMessages.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
+          No messages with this status.
         </div>
       ) : (
         <div style={{
@@ -3626,16 +3929,20 @@ export default function AdminDashboard() {
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Name</th>
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Email</th>
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Subject</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Status</th>
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Date</th>
                   <th style={{ padding: '1rem', textAlign: 'left', color: '#fff', fontWeight: '600' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {contactMessages.map((message, index) => (
+                {filteredContactMessages.map((message, index) => {
+                  const msgStatus = message.status || 'open';
+                  const statusColor = msgStatus === 'resolved' ? '#4CAF50' : msgStatus === 'in-progress' ? '#FF9800' : '#64B5F6';
+                  return (
                   <tr
                     key={message.id}
                     style={{
-                      borderBottom: index < contactMessages.length - 1 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
+                      borderBottom: index < filteredContactMessages.length - 1 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
                       transition: 'background 0.2s'
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
@@ -3652,6 +3959,21 @@ export default function AdminDashboard() {
                     <td style={{ padding: '1rem', color: 'rgba(255, 255, 255, 0.9)' }}>
                       {message.subject}
                     </td>
+                    <td style={{ padding: '1rem' }}>
+                      <span style={{
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: '20px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        background: `${statusColor}22`,
+                        color: statusColor,
+                        border: `1px solid ${statusColor}66`,
+                        textTransform: 'capitalize',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {msgStatus.replace('-', ' ')}
+                      </span>
+                    </td>
                     <td style={{ padding: '1rem', color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                       {message.createdAt ? new Date(message.createdAt.toDate()).toLocaleDateString('en-US', {
                         month: 'short',
@@ -3663,7 +3985,7 @@ export default function AdminDashboard() {
                     </td>
                     <td style={{ padding: '1rem' }}>
                       <button
-                        onClick={() => setSelectedContactMessage(message)}
+                        onClick={() => { setSelectedContactMessage(message); setContactReplyText(''); }}
                         style={{
                           background: 'rgba(217, 42, 99, 0.18)',
                           border: '1px solid rgba(217, 42, 99, 0.5)',
@@ -3679,7 +4001,8 @@ export default function AdminDashboard() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -3730,7 +4053,21 @@ export default function AdminDashboard() {
             </div>
 
             <div style={{ display: 'grid', gap: '0.7rem' }}>
-              <div style={{ color: 'rgba(255,255,255,0.82)' }}><strong style={{ color: '#fff' }}>Name:</strong> {selectedContactMessage.name || '-'}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ color: 'rgba(255,255,255,0.82)' }}><strong style={{ color: '#fff' }}>Name:</strong> {selectedContactMessage.name || '-'}</div>
+                <span style={{
+                  padding: '0.25rem 0.7rem',
+                  borderRadius: '20px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  background: selectedContactMessage.status === 'resolved' ? 'rgba(76,175,80,0.2)' : selectedContactMessage.status === 'in-progress' ? 'rgba(255,152,0,0.2)' : 'rgba(33,150,243,0.2)',
+                  color: selectedContactMessage.status === 'resolved' ? '#4CAF50' : selectedContactMessage.status === 'in-progress' ? '#FF9800' : '#64B5F6',
+                  border: `1px solid ${selectedContactMessage.status === 'resolved' ? 'rgba(76,175,80,0.5)' : selectedContactMessage.status === 'in-progress' ? 'rgba(255,152,0,0.5)' : 'rgba(33,150,243,0.5)'}`,
+                  textTransform: 'uppercase'
+                }}>
+                  {selectedContactMessage.status || 'open'}
+                </span>
+              </div>
               <div style={{ color: 'rgba(255,255,255,0.82)' }}><strong style={{ color: '#fff' }}>Email:</strong> {selectedContactMessage.email || '-'}</div>
               <div style={{ color: 'rgba(255,255,255,0.82)' }}><strong style={{ color: '#fff' }}>Phone:</strong> {selectedContactMessage.phone || '-'}</div>
               <div style={{ color: 'rgba(255,255,255,0.82)' }}><strong style={{ color: '#fff' }}>Subject:</strong> {selectedContactMessage.subject || '-'}</div>
@@ -3757,12 +4094,112 @@ export default function AdminDashboard() {
                   {selectedContactMessage.message || 'No message provided'}
                 </div>
               </div>
+
+              {selectedContactMessage.adminReply && (
+                <div style={{
+                  background: 'rgba(217,42,99,0.08)',
+                  border: '1px solid rgba(217,42,99,0.3)',
+                  borderRadius: '10px',
+                  padding: '0.9rem'
+                }}>
+                  <div style={{ color: '#D92A63', fontWeight: 700, marginBottom: '0.4rem' }}>Admin Reply</div>
+                  <div style={{ color: 'rgba(255,255,255,0.85)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                    {selectedContactMessage.adminReply}
+                  </div>
+                </div>
+              )}
+
+              {/* Reply + Status Actions */}
+              <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>Reply to User</div>
+                <textarea
+                  value={contactReplyText}
+                  onChange={(e) => setContactReplyText(e.target.value)}
+                  placeholder="Type your reply here (optional — will be emailed to the user)..."
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(255,255,255,0.07)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    padding: '0.75rem',
+                    fontSize: '0.875rem',
+                    resize: 'vertical',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={async () => {
+                      setResolvingContact(true);
+                      try {
+                        const res = await fetch('/api/admin/resolve-contact', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            contactId: selectedContactMessage.id,
+                            status: 'in-progress',
+                            adminReply: contactReplyText || null,
+                            contactEmail: selectedContactMessage.email,
+                            contactName: selectedContactMessage.name,
+                            subject: selectedContactMessage.subject,
+                          }),
+                        });
+                        if (res.ok) {
+                          setContactMessages((prev) => prev.map((m) => m.id === selectedContactMessage.id ? { ...m, status: 'in-progress', adminReply: contactReplyText || m.adminReply } : m));
+                          setSelectedContactMessage((prev: any) => ({ ...prev, status: 'in-progress', adminReply: contactReplyText || prev.adminReply }));
+                          setContactReplyText('');
+                          showSuccess('Marked as In Progress' + (contactReplyText ? ' and reply sent.' : '.'));
+                        }
+                      } catch (err) { showError('Failed to update status'); }
+                      finally { setResolvingContact(false); }
+                    }}
+                    disabled={resolvingContact}
+                    style={{ padding: '0.5rem 1rem', background: 'rgba(255,152,0,0.2)', border: '1px solid rgba(255,152,0,0.5)', color: '#FF9800', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }}
+                  >
+                    {resolvingContact ? 'Saving...' : 'Mark In Progress'}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setResolvingContact(true);
+                      try {
+                        const res = await fetch('/api/admin/resolve-contact', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            contactId: selectedContactMessage.id,
+                            status: 'resolved',
+                            adminReply: contactReplyText || null,
+                            contactEmail: selectedContactMessage.email,
+                            contactName: selectedContactMessage.name,
+                            subject: selectedContactMessage.subject,
+                          }),
+                        });
+                        if (res.ok) {
+                          setContactMessages((prev) => prev.map((m) => m.id === selectedContactMessage.id ? { ...m, status: 'resolved', adminReply: contactReplyText || m.adminReply } : m));
+                          setSelectedContactMessage((prev: any) => ({ ...prev, status: 'resolved', adminReply: contactReplyText || prev.adminReply }));
+                          setContactReplyText('');
+                          showSuccess('Resolved' + (contactReplyText ? ' and reply sent.' : '.'));
+                        }
+                      } catch (err) { showError('Failed to update status'); }
+                      finally { setResolvingContact(false); }
+                    }}
+                    disabled={resolvingContact}
+                    style={{ padding: '0.5rem 1rem', background: 'rgba(76,175,80,0.2)', border: '1px solid rgba(76,175,80,0.5)', color: '#4CAF50', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }}
+                  >
+                    {resolvingContact ? 'Saving...' : 'Resolve' + (contactReplyText ? ' & Send Reply' : '')}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
     </div>
   );
+  };
 
   // Render Payouts Page
   const renderPayouts = () => (
@@ -3999,8 +4436,25 @@ export default function AdminDashboard() {
 
   // Render Enrollments Page
   const renderEnrollments = () => {
-    const totalRevenue = enrollments.reduce((sum, e) => sum + (e.classPrice || 0), 0);
-    
+    // ── Filter logic ─────────────────────────────────────────────────────────
+    const filteredEnrollments = enrollments.filter((e) => {
+      const nameEmail = `${e.studentName || ''} ${e.studentEmail || ''} ${e.studentDetails?.name || ''} ${e.studentDetails?.email || ''}`.toLowerCase();
+      if (enrollmentSearch && !nameEmail.includes(enrollmentSearch.toLowerCase())) return false;
+      if (enrollmentClassFilter && !(e.className || '').toLowerCase().includes(enrollmentClassFilter.toLowerCase())) return false;
+      if (enrollmentStatusFilter && e.status !== enrollmentStatusFilter) return false;
+      if (enrollmentDateFrom) {
+        const eDate = e.enrolledAt?.toDate ? e.enrolledAt.toDate() : (e.enrolledAt ? new Date(e.enrolledAt) : null);
+        if (!eDate || eDate < new Date(enrollmentDateFrom)) return false;
+      }
+      if (enrollmentDateTo) {
+        const eDate = e.enrolledAt?.toDate ? e.enrolledAt.toDate() : (e.enrolledAt ? new Date(e.enrolledAt) : null);
+        if (!eDate || eDate > new Date(enrollmentDateTo + 'T23:59:59')) return false;
+      }
+      return true;
+    });
+
+    const totalRevenue = filteredEnrollments.reduce((sum, e) => sum + (e.classPrice || 0), 0);
+
     return (
       <div>
         <div className="dashboard-header">
@@ -4021,15 +4475,15 @@ export default function AdminDashboard() {
                 <div className="summary-item">
                   <TrendingUp size={20} className="summary-icon" />
                   <div>
-                    <div className="summary-value">{enrollments.length}</div>
-                    <div className="summary-label">Total Enrollments</div>
+                    <div className="summary-value">{filteredEnrollments.length}</div>
+                    <div className="summary-label">{filteredEnrollments.length === enrollments.length ? 'Total Enrollments' : `Filtered / ${enrollments.length} total`}</div>
                   </div>
                 </div>
                 <div className="summary-item">
                   <CreditCard size={20} className="summary-icon earnings-icon" />
                   <div>
                     <div className="summary-value earnings">₹{totalRevenue.toFixed(2)}</div>
-                    <div className="summary-label">Total Revenue</div>
+                    <div className="summary-label">Revenue (filtered)</div>
                   </div>
                 </div>
               </div>
@@ -4037,11 +4491,63 @@ export default function AdminDashboard() {
           )}
         </div>
 
+        {/* Filter bar */}
+        {enrollments.length > 0 && (
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem', alignItems: 'center' }}>
+            <input
+              type="text"
+              value={enrollmentSearch}
+              onChange={(e) => setEnrollmentSearch(e.target.value)}
+              placeholder="Search by name or email..."
+              style={{ flex: '1 1 180px', minWidth: 160, padding: '0.55rem 0.85rem', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '8px', color: '#fff', fontSize: '0.875rem', outline: 'none' }}
+            />
+            <input
+              type="text"
+              value={enrollmentClassFilter}
+              onChange={(e) => setEnrollmentClassFilter(e.target.value)}
+              placeholder="Filter by batch name..."
+              style={{ flex: '1 1 160px', minWidth: 140, padding: '0.55rem 0.85rem', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '8px', color: '#fff', fontSize: '0.875rem', outline: 'none' }}
+            />
+            <select
+              value={enrollmentStatusFilter}
+              onChange={(e) => setEnrollmentStatusFilter(e.target.value)}
+              style={{ padding: '0.55rem 0.85rem', background: 'rgba(30,30,60,0.95)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '8px', color: '#fff', fontSize: '0.875rem', outline: 'none' }}
+            >
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="pending">Pending</option>
+            </select>
+            <input
+              type="date"
+              value={enrollmentDateFrom}
+              onChange={(e) => setEnrollmentDateFrom(e.target.value)}
+              title="From date"
+              style={{ padding: '0.55rem 0.85rem', background: 'rgba(30,30,60,0.95)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '8px', color: '#fff', fontSize: '0.875rem', outline: 'none' }}
+            />
+            <input
+              type="date"
+              value={enrollmentDateTo}
+              onChange={(e) => setEnrollmentDateTo(e.target.value)}
+              title="To date"
+              style={{ padding: '0.55rem 0.85rem', background: 'rgba(30,30,60,0.95)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '8px', color: '#fff', fontSize: '0.875rem', outline: 'none' }}
+            />
+            {(enrollmentSearch || enrollmentClassFilter || enrollmentStatusFilter || enrollmentDateFrom || enrollmentDateTo) && (
+              <button
+                onClick={() => { setEnrollmentSearch(''); setEnrollmentClassFilter(''); setEnrollmentStatusFilter(''); setEnrollmentDateFrom(''); setEnrollmentDateTo(''); }}
+                style={{ padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', cursor: 'pointer' }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+
         {loadingEnrollments ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
             Loading enrollments...
           </div>
-        ) : enrollments.length > 0 ? (
+        ) : filteredEnrollments.length > 0 ? (
           <div className="enrollments-table-wrapper">
             <table className="enrollments-table">
               <thead>
@@ -4067,19 +4573,21 @@ export default function AdminDashboard() {
                     <Calendar size={16} className="table-header-icon" />
                     Date
                   </th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {enrollments.map((enrollment) => {
-                  const enrollDate = enrollment.enrolledAt 
+                {filteredEnrollments.map((enrollment) => {
+                  const enrollDate = enrollment.enrolledAt
                     ? new Date(enrollment.enrolledAt.toMillis ? enrollment.enrolledAt.toMillis() : enrollment.enrolledAt)
                     : null;
-                  const formattedDate = enrollDate 
+                  const dateLabel = enrollDate
                     ? enrollDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                     : 'N/A';
-                  
+                  const isCancelled = enrollment.status === 'cancelled';
+
                   return (
-                    <tr key={enrollment.id} className="enrollment-row">
+                    <tr key={enrollment.id} className="enrollment-row" style={{ opacity: isCancelled ? 0.6 : 1 }}>
                       <td>
                         <div className="enrollment-student-cell">
                           <div className="student-avatar-small">
@@ -4122,7 +4630,20 @@ export default function AdminDashboard() {
                         </span>
                       </td>
                       <td>
-                        <div className="enrollment-date-cell">{formattedDate}</div>
+                        <div className="enrollment-date-cell">{dateLabel}</div>
+                      </td>
+                      <td>
+                        {!isCancelled ? (
+                          <button
+                            onClick={() => handleCancelEnrollment(enrollment)}
+                            disabled={cancellingEnrollmentId === enrollment.id}
+                            style={{ padding: '0.35rem 0.75rem', background: 'rgba(244,67,54,0.18)', border: '1px solid rgba(244,67,54,0.5)', color: '#F44336', borderRadius: '7px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
+                          >
+                            {cancellingEnrollmentId === enrollment.id ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>Cancelled</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -4130,11 +4651,15 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : enrollments.length === 0 ? (
           <div className="empty-state">
             <FileText size={48} className="empty-icon" />
             <h3>No enrollments found</h3>
             <p>Enrollments will appear here once students purchase batches.</p>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.5)' }}>
+            No enrollments match the current filters.
           </div>
         )}
       </div>
@@ -4142,6 +4667,109 @@ export default function AdminDashboard() {
   };
 
   // Render current page
+  const renderBroadcast = () => (
+    <div>
+      <div className="dashboard-header">
+        <div className="welcome-section">
+          <h2>Broadcast Notification</h2>
+          <p>Send a custom in-app notification to users</p>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 600, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+        {/* Target */}
+        <div>
+          <div style={{ color: '#fff', fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.9rem' }}>Send To</div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {(['all-students', 'all-creators', 'all-users', 'specific-user'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setBroadcastTarget(t)}
+                style={{
+                  padding: '0.45rem 1rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                  background: broadcastTarget === t ? 'rgba(217,42,99,0.3)' : 'rgba(255,255,255,0.07)',
+                  border: broadcastTarget === t ? '1px solid rgba(217,42,99,0.6)' : '1px solid rgba(255,255,255,0.15)',
+                  color: '#fff', textTransform: 'capitalize'
+                }}
+              >
+                {t.replace(/-/g, ' ')}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Specific user ID */}
+        {broadcastTarget === 'specific-user' && (
+          <div>
+            <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', marginBottom: '0.4rem' }}>User ID (from Firestore)</label>
+            <input
+              type="text"
+              value={broadcastUserId}
+              onChange={(e) => setBroadcastUserId(e.target.value)}
+              placeholder="Paste the user's UID..."
+              style={{ width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '9px', color: '#fff', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+        )}
+
+        {/* Title */}
+        <div>
+          <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', marginBottom: '0.4rem' }}>Notification Title *</label>
+          <input
+            type="text"
+            value={broadcastTitle}
+            onChange={(e) => setBroadcastTitle(e.target.value)}
+            placeholder="e.g. Platform Maintenance on Sunday"
+            maxLength={120}
+            style={{ width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '9px', color: '#fff', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        {/* Message */}
+        <div>
+          <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', marginBottom: '0.4rem' }}>Message *</label>
+          <textarea
+            value={broadcastMessage}
+            onChange={(e) => setBroadcastMessage(e.target.value)}
+            rows={4}
+            placeholder="Write your message here..."
+            maxLength={500}
+            style={{ width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '9px', color: '#fff', fontSize: '0.875rem', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+          />
+          <div style={{ textAlign: 'right', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.25rem' }}>{broadcastMessage.length}/500</div>
+        </div>
+
+        {/* Link */}
+        <div>
+          <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', marginBottom: '0.4rem' }}>Link <span style={{ opacity: 0.6 }}>(optional — e.g. /student-dashboard)</span></label>
+          <input
+            type="text"
+            value={broadcastLink}
+            onChange={(e) => setBroadcastLink(e.target.value)}
+            placeholder="/student-dashboard or https://..."
+            style={{ width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '9px', color: '#fff', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <button
+          onClick={handleSendBroadcast}
+          disabled={sendingBroadcast || !broadcastTitle.trim() || !broadcastMessage.trim()}
+          style={{
+            padding: '0.85rem 2rem',
+            background: (sendingBroadcast || !broadcastTitle.trim() || !broadcastMessage.trim()) ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg,#D92A63 0%,#FF654B 100%)',
+            border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 700, fontSize: '1rem',
+            cursor: (sendingBroadcast || !broadcastTitle.trim() || !broadcastMessage.trim()) ? 'not-allowed' : 'pointer',
+            opacity: (sendingBroadcast || !broadcastTitle.trim() || !broadcastMessage.trim()) ? 0.6 : 1,
+            alignSelf: 'flex-start',
+            transition: 'opacity 0.2s'
+          }}
+        >
+          {sendingBroadcast ? 'Sending...' : 'Send Broadcast'}
+        </button>
+      </div>
+    </div>
+  );
+
   const renderCurrentPage = () => {
     switch (activePage) {
       case 'dashboard':
@@ -4160,6 +4788,8 @@ export default function AdminDashboard() {
         return renderPayouts();
       case 'enrollments':
         return renderEnrollments();
+      case 'broadcast':
+        return renderBroadcast();
       default:
         return renderDashboard();
     }
@@ -7671,6 +8301,10 @@ export default function AdminDashboard() {
             <a onClick={() => handleNavClick('enrollments')} className={`sidebar-nav-item ${activePage === 'enrollments' ? 'active' : ''}`}>
               <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
               <div>Enrollments</div>
+            </a>
+            <a onClick={() => handleNavClick('broadcast')} className={`sidebar-nav-item ${activePage === 'broadcast' ? 'active' : ''}`}>
+              <img src="https://cdn.prod.website-files.com/6923f28a8b0eed43d400c88f/69240445896e5738fe2f22f1_icon-19.svg" alt="" />
+              <div>Broadcast</div>
             </a>
           </nav>
           <div className="sidebar-footer">

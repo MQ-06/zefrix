@@ -80,6 +80,20 @@ export async function POST(request: NextRequest) {
       totalEnrollments,
     });
 
+    // In-app notification to creator
+    await db.collection('notifications').add({
+      userId: creatorId,
+      userRole: 'creator',
+      type: 'new_enrollment',
+      title: `New Student Enrolled — ${className}`,
+      message: `${studentName} has enrolled in your batch "${className}". Total enrollments: ${totalEnrollments}.`,
+      link: '/creator-dashboard',
+      relatedId: classId,
+      isRead: false,
+      metadata: { classId, className, studentName, studentEmail: studentEmail || '', totalEnrollments },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     return NextResponse.json({ success: true, message: 'Enrollment alert sent to creator' });
   } catch (error: any) {
     console.error('Error sending new-enrollment alert email:', error);

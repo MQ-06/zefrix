@@ -137,6 +137,7 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                 description: formData.get('description') as string,
                 price: parseFloat(formData.get('price') as string),
                 videoLink: finalVideoLink,
+                demoVideoLink: (formData.get('demoVideoLink') as string)?.trim() || '',
                 updatedAt: new Date(),
             };
 
@@ -337,6 +338,23 @@ export default function EditClassForm({ classId, onCancel, onSuccess }: EditClas
                                                 {getEditRestrictionReason('description', isApproved)}
                                             </small>
                                         )}
+                </div>
+
+                <div className="creator-form-group">
+                    <label htmlFor="demoVideoLink" className="creator-field-label">
+                        Demo Video URL <span style={{ fontWeight: 400, opacity: 0.7 }}>(optional)</span>
+                    </label>
+                    <input
+                        type="url"
+                        id="demoVideoLink"
+                        name="demoVideoLink"
+                        className="creator-form-input"
+                        defaultValue={classData?.demoVideoLink || ''}
+                        placeholder="YouTube, Vimeo, or direct video URL — shown to students on your batch page"
+                    />
+                    <small style={{ display: 'block', marginTop: '0.35rem', color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem' }}>
+                        Paste a YouTube or Vimeo link so prospective students can preview your teaching style.
+                    </small>
                 </div>
 
                 <div className="creator-form-group">

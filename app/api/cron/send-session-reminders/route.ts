@@ -99,38 +99,43 @@ export async function GET(request: NextRequest) {
       throw new Error('Firestore not initialized');
     }
 
-    // Calculate time window: 23-25 hours from now (1-hour window to catch sessions)
     const now = new Date();
-    const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000); // 23 hours from now
-    const windowEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000); // 25 hours from now
 
-    console.log('🔍 Time window:', {
-      start: windowStart.toISOString(),
-      end: windowEnd.toISOString(),
-    });
+    // ── Window 1: 24h student reminders (23–25 hours from now) ──────────────
+    const studentWindowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
+    const studentWindowEnd   = new Date(now.getTime() + 25 * 60 * 60 * 1000);
 
-    // Convert to Firestore Timestamps
-    const startTimestamp = admin.firestore.Timestamp.fromDate(windowStart);
-    const endTimestamp = admin.firestore.Timestamp.fromDate(windowEnd);
+    // ── Window 2: 30-min creator reminders (25–65 min from now) ─────────────
+    // Wide window so we never miss a session when the cron fires up to an hour late
+    const creatorWindowStart = new Date(now.getTime() + 25 * 60 * 1000);
+    const creatorWindowEnd   = new Date(now.getTime() + 65 * 60 * 1000);
 
-    // Query upcoming sessions in the time window
+    console.log('🔍 Student 24h window:', { start: studentWindowStart.toISOString(), end: studentWindowEnd.toISOString() });
+    console.log('🔍 Creator 30m window:', { start: creatorWindowStart.toISOString(), end: creatorWindowEnd.toISOString() });
+
+    // Combine both windows into a single broad query to minimise Firestore reads
+    const broadStart = admin.firestore.Timestamp.fromDate(creatorWindowStart); // earliest
+    const broadEnd   = admin.firestore.Timestamp.fromDate(studentWindowEnd);   // latest
+
+    const studentStart = admin.firestore.Timestamp.fromDate(studentWindowStart);
+    const studentEnd   = admin.firestore.Timestamp.fromDate(studentWindowEnd);
+    const creatorStart = admin.firestore.Timestamp.fromDate(creatorWindowStart);
+    const creatorEnd   = admin.firestore.Timestamp.fromDate(creatorWindowEnd);
+
     const sessionsRef = db.collection('sessions');
-    
-    // Note: Firestore doesn't support multiple != queries, so we'll filter cancelled sessions in code
     const sessionsQuery = sessionsRef
-      .where('sessionDate', '>=', startTimestamp)
-      .where('sessionDate', '<=', endTimestamp);
+      .where('sessionDate', '>=', broadStart)
+      .where('sessionDate', '<=', broadEnd);
 
     const sessionsSnapshot = await sessionsQuery.get();
-    console.log(`📊 Found ${sessionsSnapshot.size} sessions in time window`);
+    console.log(`📊 Found ${sessionsSnapshot.size} sessions across both windows`);
 
     sessionsChecked = sessionsSnapshot.size;
 
     if (sessionsSnapshot.empty) {
-      console.log('✅ No sessions found in time window');
       return NextResponse.json({
         success: true,
-        message: 'No sessions found in time window',
+        message: 'No sessions found in any window',
         sessionsChecked: 0,
         remindersSent: 0,
         remindersSkipped: 0,
@@ -139,6 +144,13 @@ export async function GET(request: NextRequest) {
         timestamp: new Date().toISOString(),
       });
     }
+
+    // ── helper: is this session in a given Timestamp window? ─────────────────
+    const inWindow = (sessionDate: admin.firestore.Timestamp, lo: admin.firestore.Timestamp, hi: admin.firestore.Timestamp) =>
+      sessionDate.toMillis() >= lo.toMillis() && sessionDate.toMillis() <= hi.toMillis();
+
+    // ── keep legacy variable for student path ────────────────────────────────
+    const startTimestamp = studentStart;
 
     // Process each session
     for (const sessionDoc of sessionsSnapshot.docs) {
@@ -151,125 +163,166 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        // Skip sessions without meeting link
-        if (!session.meetingLink) {
-          console.log(`⏭️ Skipping session without meeting link: ${session.id}`);
-          continue;
-        }
-
-        // Skip sessions without valid date
         if (!session.sessionDate) {
           console.log(`⏭️ Skipping session without date: ${session.id}`);
           continue;
         }
 
-        console.log(`📅 Processing session: ${session.className} - Session ${session.sessionNumber || 'N/A'}`);
+        const sessionDate = session.sessionDate as admin.firestore.Timestamp;
+        const formattedDate = formatDateForEmail(sessionDate);
+        const formattedTime = formatTimeForEmail(session.sessionTime || '');
+        const sessionLabel = `${session.className || 'Class'} — Session ${session.sessionNumber || ''}`;
+        const remindersRef = db.collection('session_reminders');
 
-        // Get all active enrollments for this class
-        const enrollmentsRef = db.collection('enrollments');
-        const enrollmentsQuery = enrollmentsRef
-          .where('classId', '==', session.classId)
-          .where('status', '==', 'active');
+        // ── A. Student 24h reminder ──────────────────────────────────────────
+        if (inWindow(sessionDate, studentStart, studentEnd) && session.meetingLink) {
+          const enrollmentsSnap = await db.collection('enrollments')
+            .where('classId', '==', session.classId)
+            .where('status', '==', 'active')
+            .get();
 
-        const enrollmentsSnapshot = await enrollmentsQuery.get();
-        console.log(`👥 Found ${enrollmentsSnapshot.size} active enrollments for class ${session.classId}`);
-
-        if (enrollmentsSnapshot.empty) {
-          console.log(`⏭️ No active enrollments for session ${session.id}`);
-          continue;
-        }
-
-        // Process each enrolled student
-        for (const enrollmentDoc of enrollmentsSnapshot.docs) {
-          try {
-            const enrollment = enrollmentDoc.data();
-
-            // Validate enrollment data
-            if (!enrollment.studentEmail || !enrollment.studentName) {
-              console.warn(`⚠️ Enrollment ${enrollmentDoc.id} missing email or name`);
-              continue;
-            }
-
-            // Check if reminder already sent for this session+student combination
-            const remindersRef = db.collection('session_reminders');
-            const existingReminderQuery = remindersRef
-              .where('sessionId', '==', session.id)
-              .where('studentId', '==', enrollment.studentId)
-              .where('status', '==', 'sent')
-              .limit(1);
-
-            const existingReminderSnapshot = await existingReminderQuery.get();
-
-            if (!existingReminderSnapshot.empty) {
-              console.log(`⏭️ Reminder already sent to ${enrollment.studentEmail} for session ${session.id}`);
-              remindersSkipped++;
-              continue;
-            }
-
-            // Prepare email data
-            const sessionDate = session.sessionDate as admin.firestore.Timestamp;
-            const formattedDate = formatDateForEmail(sessionDate);
-            const formattedTime = formatTimeForEmail(session.sessionTime || '');
-
-            console.log(`📧 Sending reminder to ${enrollment.studentEmail} for session ${session.id}`);
-
-            // Send reminder email
-            await sendSessionReminderEmail({
-              studentName: enrollment.studentName,
-              studentEmail: enrollment.studentEmail,
-              studentId: enrollment.studentId,
-              className: session.className || enrollment.className || 'Class',
-              classId: session.classId,
-              sessionDate: formattedDate,
-              sessionTime: formattedTime,
-              meetingLink: session.meetingLink,
-            });
-
-            // Record reminder in database
-            await remindersRef.add({
-              sessionId: session.id,
-              classId: session.classId,
-              studentId: enrollment.studentId,
-              studentEmail: enrollment.studentEmail,
-              studentName: enrollment.studentName,
-              sessionDate: sessionDate,
-              reminderSentAt: admin.firestore.FieldValue.serverTimestamp(),
-              reminderScheduledFor: startTimestamp, // When this reminder was scheduled for
-              status: 'sent',
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-
-            remindersSent++;
-            console.log(`✅ Reminder sent to ${enrollment.studentEmail}`);
-
-          } catch (studentError: any) {
-            errors++;
-            const errorMsg = `Error processing student ${enrollmentDoc.id}: ${studentError.message}`;
-            console.error(`❌ ${errorMsg}`);
-            errorDetails.push(errorMsg);
-
-            // Log failed reminder attempt
+          for (const enrollmentDoc of enrollmentsSnap.docs) {
             try {
-              const remindersRef = db.collection('session_reminders');
               const enrollment = enrollmentDoc.data();
-              const sessionDate = session.sessionDate as admin.firestore.Timestamp;
+              if (!enrollment.studentEmail || !enrollment.studentName) continue;
+
+              // Dedup check
+              const alreadySent = await remindersRef
+                .where('sessionId', '==', session.id)
+                .where('studentId', '==', enrollment.studentId)
+                .where('type', '==', '24h')
+                .where('status', '==', 'sent')
+                .limit(1)
+                .get();
+
+              if (!alreadySent.empty) { remindersSkipped++; continue; }
+
+              await sendSessionReminderEmail({
+                studentName: enrollment.studentName,
+                studentEmail: enrollment.studentEmail,
+                studentId: enrollment.studentId,
+                className: session.className || 'Class',
+                classId: session.classId,
+                sessionDate: formattedDate,
+                sessionTime: formattedTime,
+                meetingLink: session.meetingLink,
+              });
 
               await remindersRef.add({
                 sessionId: session.id,
                 classId: session.classId,
                 studentId: enrollment.studentId,
-                studentEmail: enrollment.studentEmail || 'unknown',
-                studentName: enrollment.studentName || 'Unknown',
-                sessionDate: sessionDate,
+                studentEmail: enrollment.studentEmail,
+                studentName: enrollment.studentName,
+                sessionDate,
+                type: '24h',
                 reminderSentAt: admin.firestore.FieldValue.serverTimestamp(),
                 reminderScheduledFor: startTimestamp,
-                status: 'failed',
-                errorMessage: studentError.message,
+                status: 'sent',
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
               });
-            } catch (logError) {
-              console.error('Failed to log reminder error:', logError);
+
+              remindersSent++;
+              console.log(`✅ 24h reminder → ${enrollment.studentEmail}`);
+            } catch (err: any) {
+              errors++;
+              errorDetails.push(`Student 24h reminder ${enrollmentDoc.id}: ${err.message}`);
             }
+          }
+        }
+
+        // ── B. Creator 30-min in-app + email reminder ────────────────────────
+        if (inWindow(sessionDate, creatorStart, creatorEnd) && session.creatorId) {
+          try {
+            // Dedup check
+            const alreadySentCreator = await remindersRef
+              .where('sessionId', '==', session.id)
+              .where('studentId', '==', session.creatorId)
+              .where('type', '==', '30m_creator')
+              .where('status', '==', 'sent')
+              .limit(1)
+              .get();
+
+            if (!alreadySentCreator.empty) {
+              console.log(`⏭️ Creator 30m reminder already sent for session ${session.id}`);
+              remindersSkipped++;
+            } else {
+              // In-app notification to creator
+              await db.collection('notifications').add({
+                userId: session.creatorId,
+                userRole: 'creator',
+                type: 'session_starting_soon',
+                title: `Session Starting in ~30 Minutes`,
+                message: `Your session "${sessionLabel}" starts at ${formattedTime} today. Get ready and start the session from your dashboard.`,
+                link: '/creator-dashboard',
+                relatedId: session.classId,
+                isRead: false,
+                metadata: {
+                  sessionId: session.id,
+                  classId: session.classId,
+                  sessionNumber: session.sessionNumber,
+                  sessionDate: formattedDate,
+                  sessionTime: formattedTime,
+                  meetingLink: session.meetingLink || '',
+                },
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+
+              // Optional email to creator if they have one
+              if (session.creatorEmail) {
+                const { Resend } = await import('resend');
+                const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+                const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://zefrix.com';
+
+                if (resend) {
+                  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:linear-gradient(135deg,#D92A63 0%,#FF654B 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+    <h1 style="color:white;margin:0;">⏰ Session Starting Soon!</h1>
+  </div>
+  <div style="background:#f9f9f9;padding:30px;border-radius:0 0 10px 10px;">
+    <p>Hi ${session.creatorName || 'Creator'},</p>
+    <p>Your session is starting in approximately <strong>30 minutes</strong>.</p>
+    <div style="background:white;padding:20px;border-radius:8px;margin:20px 0;border-left:4px solid #D92A63;">
+      <p style="margin:0;"><strong>Batch:</strong> ${session.className || 'Class'}</p>
+      <p style="margin:8px 0 0;"><strong>Session:</strong> ${session.sessionNumber || ''}</p>
+      <p style="margin:8px 0 0;"><strong>Time:</strong> ${formattedTime}</p>
+      ${session.meetingLink ? `<p style="margin:8px 0 0;"><strong>Meeting Link:</strong> <a href="${session.meetingLink}" style="color:#D92A63;">${session.meetingLink}</a></p>` : ''}
+    </div>
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${BASE_URL}/creator-dashboard" style="background:linear-gradient(135deg,#D92A63 0%,#FF654B 100%);color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Go to Dashboard →</a>
+    </div>
+    <p>Best regards,<br><strong>The Zefrix Team</strong></p>
+  </div>
+</body></html>`;
+
+                  await resend.emails.send({
+                    from: process.env.FROM_EMAIL || 'notifications@zefrixapp.com',
+                    to: session.creatorEmail,
+                    subject: `⏰ Session starting in 30 min — ${session.className || 'Class'}`,
+                    html,
+                  }).catch((e: any) => console.error('Creator reminder email error:', e));
+                }
+              }
+
+              await remindersRef.add({
+                sessionId: session.id,
+                classId: session.classId,
+                studentId: session.creatorId, // reuse field for creator id
+                sessionDate,
+                type: '30m_creator',
+                reminderSentAt: admin.firestore.FieldValue.serverTimestamp(),
+                status: 'sent',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+
+              remindersSent++;
+              console.log(`✅ 30m creator reminder → ${session.creatorId}`);
+            }
+          } catch (err: any) {
+            errors++;
+            errorDetails.push(`Creator 30m reminder session ${session.id}: ${err.message}`);
           }
         }
 

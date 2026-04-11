@@ -232,6 +232,7 @@ export default function ProductPage({ params }: PageProps) {
             days: data.days || [],
             category: data.category || '',
             subCategory: data.subCategory || data.subcategory || '',
+            demoVideoLink: data.demoVideoLink || data.demoVideo || data.demoUrl || '',
           };
 
           setCourse(baseCourse);
@@ -797,6 +798,46 @@ export default function ProductPage({ params }: PageProps) {
               <div className="bg-white/5 backdrop-blur-lg rounded-xl p-8 border border-white/10">
                 {activeTab === 'overview' && (
                   <div className="space-y-6">
+                    {course.demoVideoLink && (() => {
+                      // Normalise any YouTube / YouTube-shorts / youtu.be URL into an embed URL
+                      const raw: string = course.demoVideoLink;
+                      let embedUrl = raw;
+                      const ytMatch = raw.match(
+                        /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/
+                      );
+                      if (ytMatch) {
+                        embedUrl = `https://www.youtube.com/embed/${ytMatch[1]}?rel=0&modestbranding=1`;
+                      } else if (raw.includes('vimeo.com')) {
+                        const vimeoId = raw.match(/vimeo\.com\/(\d+)/)?.[1];
+                        if (vimeoId) embedUrl = `https://player.vimeo.com/video/${vimeoId}`;
+                      }
+                      const isEmbed = embedUrl !== raw || embedUrl.includes('/embed/') || embedUrl.includes('player.vimeo');
+                      return (
+                        <div>
+                          <h2 className="text-2xl font-bold text-white mb-4">Demo Video</h2>
+                          {isEmbed ? (
+                            <div className="relative w-full rounded-xl overflow-hidden border border-white/10" style={{ paddingTop: '56.25%' }}>
+                              <iframe
+                                src={embedUrl}
+                                className="absolute inset-0 w-full h-full"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                title="Demo Video"
+                              />
+                            </div>
+                          ) : (
+                            <video
+                              src={raw}
+                              controls
+                              className="w-full rounded-xl border border-white/10"
+                              style={{ maxHeight: '400px' }}
+                            >
+                              Your browser does not support the video tag.
+                            </video>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {course.description && (
                       <div>
                         <h2 className="text-2xl font-bold text-white mb-4">Batch Description</h2>

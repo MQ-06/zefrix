@@ -394,6 +394,7 @@ export default function CreateClassForm() {
       const whatStudentsWillLearn = (formData.get('learn') as string)?.trim();
       const level = (formData.get('level') as string)?.trim();
       const videoLink = (formData.get('videoLink') as string)?.trim() || '';
+      const demoVideoLink = (formData.get('demoVideoLink') as string)?.trim() || '';
       const price = parseFloat(formData.get('price') as string);
       const maxSeatsInput = formData.get('maxSeats') as string;
       const maxSeats = maxSeatsInput && maxSeatsInput.trim() ? parseInt(maxSeatsInput.trim()) : null;
@@ -582,6 +583,7 @@ export default function CreateClassForm() {
         whatStudentsWillLearn: whatStudentsWillLearn,
         level: level,
         videoLink: finalVideoLink || videoLink,
+        demoVideoLink: demoVideoLink,
         price: price,
         scheduleType: scheduleType as 'one-time' | 'recurring',
         startISO: startISO,
@@ -798,6 +800,17 @@ export default function CreateClassForm() {
             className="creator-form-input"
             placeholder="e.g., Beginner, Intermediate, Advanced"
             required
+          />
+        </div>
+
+        <div className="creator-form-group">
+          <label htmlFor="demoVideoLink" className="creator-field-label">Demo Video URL <span style={{ fontWeight: 400, opacity: 0.7 }}>(optional)</span></label>
+          <input
+            type="url"
+            id="demoVideoLink"
+            name="demoVideoLink"
+            className="creator-form-input"
+            placeholder="YouTube, Vimeo, or direct video URL — shown to students on your batch page"
           />
         </div>
       </div>

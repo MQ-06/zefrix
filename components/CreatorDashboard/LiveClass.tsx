@@ -255,6 +255,27 @@ export default function LiveClass({ classId, sessionId, sessionNumber, meetingLi
 
       setIsLive(false);
       showSuccess(`Class ended! ${presentStudentIds.length}/${students.length} students marked as present.`);
+
+      // Send attendance notifications to students + creator summary (non-blocking)
+      fetch('/api/email/attendance-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classId,
+          sessionId,
+          sessionNumber: sessionNumber || 1,
+          className,
+          creatorId: currentUser.uid,
+          presentStudentIds,
+          absentStudentIds,
+          students: students.map((s) => ({
+            studentId: s.studentId,
+            name: s.name,
+            email: s.email,
+          })),
+        }),
+      }).catch((err) => console.error('Attendance summary notification error (non-blocking):', err));
+
       onEndClass();
     } catch (error: any) {
       console.error('Error ending class:', error);
